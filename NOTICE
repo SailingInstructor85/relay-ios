@@ -1,0 +1,7 @@
+Relay for iPhone is a port of the Relay Android client (https://github.com/chart21/relay, MIT, see LICENSE).
+
+Third-party parts (Swift Package Manager):
+  - Citadel (orlandos-nl/Citadel), MIT
+  - swift-nio-ssh (fork used by Citadel), Apache-2.0
+  - swift-nio, swift-crypto, swift-log, swift-atomics, swift-collections, swift-system, swift-asn1 (Apple), Apache-2.0
+  - BigInt (attaswift), MIT

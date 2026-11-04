@@ -1,0 +1,7 @@
+.build/
+RelayCore/.build/
+build/
+*.xcodeproj/
+Payload/
+*.ipa
+.swiftpm/

@@ -1,0 +1,44 @@
+name: Relay
+options:
+  bundleIdPrefix: dev.relay
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+packages:
+  RelayCore:
+    path: RelayCore
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: ""
+targets:
+  Relay:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/Sources
+      - path: App/Resources
+    dependencies:
+      - package: RelayCore
+        product: RelayCore
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Relay
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSLocalNetworkUsageDescription: Relay verbindet sich per SSH mit deinem Desktop im lokalen Netz.
+        NSPhotoLibraryUsageDescription: Fotos können an eine Sitzung auf dem Desktop geschickt werden.
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.developer-tools
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.relay.ios
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
