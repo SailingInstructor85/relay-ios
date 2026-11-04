@@ -18,4 +18,4 @@ Entscheidungen: Auswahl direkt im Chat entfällt (`textSelection` kollidiert mit
 
 Risiken: App-Code kompiliert in CI, ist aber nicht auf dem Gerät getestet. Langes Drücken auf eine Zeile kann beim Scrollen selten auslösen. Zoom-Gesten (Pinch plus Ziehen) sind ungetestet. HEIC und SVG hängen von der Gateway-Antwort ab (SVG als Text).
 
-Commits: siehe unten. CI-Lauf Code: 41935202511 grün (core-tests, ipa).
+Commits: 68108ff (Code), 01a1d13 (Doku). CI-Lauf Code: 41935202511 grün (core-tests, ipa).
