@@ -1,0 +1,374 @@
+# Funktionsvergleich Android und iOS (Relay)
+
+Stand: 2026-11-05. Grundlage: `~/relay` (Upstream chart21/relay, PROTOCOL.md v2, Gateway `notifyd`, Android-App mit 114 Kotlin-Dateien ohne Tests) gegen `~/relay-ios` (Version 0.2.0, 13 App-Dateien, 5 RelayCore-Dateien). Gelesen wurden PROTOCOL.md, die README (Abschnitt "All features"), alle Kotlin-Dateien (Kopfkommentare, rpc-Aufrufe, Einstellungen, UI-Texte) und `gateway/src/notifyd/daemon.py` samt `config.py`, `usage.py`, `cloud.py`, `summary.py`, `cleanup.py`.
+
+## 0. Lesehilfe
+
+Klassen:
+
+- **K** (Kern): läuft mit Martins schlichtem Gateway (Konten c1 claude, x1 codex, Overview-Agent, sonst nichts) und ist auf iOS mit einer kostenlosen Apple-ID per SideStore umsetzbar (keine App Extensions, keine bezahlten Entitlements).
+- **I** (Infrastruktur): braucht Zusatzinfrastruktur auf PC oder Pi, die Martin nicht hat. Pro Eintrag steht, welche.
+- **X**: unter iOS nicht möglich oder braucht App Extension bzw. bezahlten Entwickler-Account. Pro Eintrag steht, was genau fehlt.
+
+iOS-Status: **vorhanden**, **teilweise**, **fehlt**.
+
+Konventionen: rpc-Namen und Parameter stammen aus PROTOCOL.md. Android-Dateien liegen unter `~/relay/android/app/src/main/java/dev/relay/app/` und stehen ohne Pfad. iOS-Dateien: `A:` = `~/relay-ios/App/Sources/`, `C:` = `~/relay-ios/RelayCore/Sources/RelayCore/`.
+
+## 1. Wichtige Befunde vorweg
+
+1. **Claude-Limits brauchen einen Helfer, den Martin nicht hat.** `usage.py` lädt für Claude-Konten das Skript `~/.config/notifyd/claude-pool` (`NOTIFYD_CLAUDE_POOL`). Es existiert nicht. Folge: rpc `usage` liefert für c1 nur `{"error": "usage helper unavailable (...)"}` ohne `windows`. Codex (x1) funktioniert, weil die Limits aus den Codex-Logs kommen. Betroffen sind damit auch `forecast`, `usage_split` und `renew` (alle auf Claude-Fenstern aufgebaut). Nicht betroffen sind `extras` (Cloud-Guthaben, Extra Usage) und `cloud_sessions`: `cloud.py` liest den OAuth-Token direkt aus der Claude-Anmeldung des Hauptkontos (`<home>/.credentials.json`) und ruft `api.anthropic.com` auf. Ob das bei Martins Claude-Version noch klappt, ist ungeprüft (inoffizielle Endpunkte). Die iOS-Nutzungsansicht muss den Fehlerfall sauber zeigen (tut sie teilweise: `error` wird angezeigt).
+2. **Drei Gateway-rpc stehen nicht in PROTOCOL.md**, werden aber von Android benutzt: `clean_warm` (ohne Parameter, Antwort `{}`), `clean_dictation` (`text`, `before`, `session_key` -> `{"text","cleaned","warm","ms"}`), `phone_request_status`. Außerdem gibt es `session_settings`, `new_session`, `dispatch`, `session_digest` im Gateway, die Android nicht aufruft.
+3. **`attach <target>`** (Terminal per PTY) wird von der Android-App gar nicht benutzt, nur `serve`, `apk`, `voice`, `interview`, `tunnel`. Ein echtes Terminal ist also kein Paritätsziel.
+4. **`power_off` und `standby`** laufen im Gateway über `sudo -n systemctl poweroff|suspend`. Ohne NOPASSWD-Regel passiert nichts (Fehler nur im Journal). Das ist eine Systemänderung, die Martin freigeben muss. Ohne Pi (Wake-on-LAN) kommt der PC danach per Handy nicht zurück.
+5. **Benachrichtigungen bei geschlossener App** gibt es unter iOS ohne Apple-Push nicht. Die App nutzt `BGAppRefresh`. Das ist eine bekannte Grenze (siehe X-Liste), kein offener Punkt.
+6. Martins Config setzt `skip_permissions: false` und `auto_trust: false`. Das ändert nichts an den rpc, aber `needs_input` mit Berechtigungsabfragen kommt dadurch häufig. Die Menükarten (`menu` kind `picker` mit `box`) sind deshalb für ihn wichtiger als für Standard-Nutzer.
+
+## 2. Funktionsmatrix
+
+Spalten: Nr, Funktion, was sie tut, rpc und Events (Parameter), Android-Quellen, iOS-Status, Klasse. Der Zusatz "Infra" nennt bei I und X den Grund.
+
+### 2.1 Verbindung, Grundgerüst
+
+| Nr | Funktion | Beschreibung | rpc / Events | Android-Quellen | iOS | Kl. |
+|---|---|---|---|---|---|---|
+| A1 | SSH-Kanal `serve`, Handshake, Replay | Ed25519-Schlüssel, Host-Key-Pin (TOFU), JSON-Zeilen, `hello` mit `since_seq`, `pinned`, danach `hello_ok`, Events mit `replay:true` | `hello {since_seq, client, version:2, pinned:[keys]}`, `hello_ok`, `ping` | GatewayClient.kt, Identity.kt, Protocol.kt, NetworkMonitor.kt | vorhanden (C: Gateway.swift, Identity.swift; A: AppModel.swift, Keychain.swift) | K |
+| A2 | Verbindungsbanner, "Stand von" | Banner unter der Leiste, Alter der Liste offline, Wiederverbinden erst bei Netz | Events/Verbindungszustand | Common.kt (ConnectionBanner), Relay.kt (`syncedAt`) | teilweise (Stand-vor-Text im Triage-Streifen bei Offline; Banner war schon da) | K |
+| A3 | Ping vor Eingabe | Bei 20 s stiller Verbindung vor neuer Eingabe `ping` (6 s), keine Antwort = Verbindung kappen und neu | `ping` | GatewayClient.kt (`checkLink`) | fehlt | K |
+| A4 | Offline-Sitzungsliste | Letzte Liste wird gespeichert und grau ("zuletzt bekannt") gezeigt | lokal, `list_sessions` | Relay.kt (`store.snapshot`), Db.kt | vorhanden (A: AppModel.swift, Datei sessions-cache.json, Zeilen grau, "Stand vor X Min.") | K |
+| A5 | App-Fehlerlog zum Gateway | Fehler und Abstürze an den PC | `app_log {entries:[{ts,level,tag,message,stack,app_version}]}` (<=200) | AppLog.kt | fehlt | K (optional) |
+| A6 | Face-ID-Sperre | Android sperrt das Öffnen eines Chats einmal pro App-Start; iOS sperrt die ganze App | lokal | Biometrics.kt, SessionScreen.kt (`SessionLock`) | vorhanden (A: Background.swift `LockView`) | K |
+| A7 | Selbst-Update | Gateway bietet APK an, App lädt per SSH `apk`, prüft SHA-256, installiert | `hello_ok.app`, `app_update`, `apk`-Kanal | Updater.kt | vorhanden auf andere Art: SideStore-Quelle (`source.json`) | X (Android-spezifisch, iOS braucht es nicht) |
+| A8 | Dauerverbindung im Hintergrund | Foreground-Service hält SSH offen, Benachrichtigungen sofort | `serve`-Dauerlink | RelayService.kt, Notifier.kt | teilweise: BGAppRefresh alle 15 bis 60 min (A: Background.swift) | X (iOS erlaubt keinen Dauerdienst; Apple-Push bräuchte Server und Push-Entitlement) |
+| A9 | Desktop schläft ("Goodbye") | Gateway meldet vor Suspend `desktop_sleep`, App hört auf zu verbinden, Banner "Desktop schläft" | Event `desktop_sleep {at}` | Standby.kt, Relay.kt | fehlt | K (nur der Teil "Event beachten, nicht hämmern"; der Rest ist I, siehe I-Liste) |
+| A10 | Netzstatus und VPN-Hinweis | Erkennt VPN, sagt "kein Weg zum PC" statt "offline" | lokal (NWPathMonitor) | NetworkMonitor.kt, Common.kt | teilweise (Monitor da, Hinweistexte nicht) | K |
+
+### 2.2 Sitzungsliste (Übersicht)
+
+| Nr | Funktion | Beschreibung | rpc / Events | Android-Quellen | iOS | Kl. |
+|---|---|---|---|---|---|---|
+| B1 | Liste mit Gruppen, Sortierung, Anheften | Wartend, arbeitend, bereit, beendet; Pins halten Sitzungen offen (nie hibernated) | `list_sessions {include_dormant, limit=100, include_background}`, `set_pinned {keys}`; Events `session_started/state/ended` | SessionsScreen.kt, Sessions.kt, Relay.kt | vorhanden (A: SessionsView.swift, AppModel.swift) | K |
+| B2 | Zustandspunkte (StateDot) | Form statt nur Farbe: Spinner = arbeitet, roter Ring mit Punkt = braucht Eingabe, gefüllter Punkt = bereit, hohler Ring = beendet; offline grau "zuletzt bekannt" | lokal | SessionsScreen.kt (`StateDot`), Common.kt (`StateChip`) | vorhanden (A: RelayApp.swift `StateDot`; `StateBadge` bleibt im Chat-Kopf) | K |
+| B3 | Fuzzy-Suche mit Hervorhebung | fzf-artig über Titel, Ordner, Alias; getroffene Buchstaben fett | lokal; `find_dirs` serverseitig für Ordner | Fuzzy.kt, SessionSearch.kt | vorhanden (C: Fuzzy.swift mit Test, fette Treffer im Titel) | K |
+| B4 | Sitzungssuche in Gesprächen | Beim Tippen (nach Pause) werden alle Gespräche der letzten Tage durchsucht, ein Treffer pro Sitzung | `search_transcripts {query, days=7}` -> `{hits:[{session_key,tool,alias,role,snippet,ts}]}` (max 20) | SessionSearch.kt (`ContentSearch`), AppSearch.kt | fehlt | K |
+| B5 | App-weite Suche | Eine Suche über Sitzungen, Jarvis-Verlauf, Gespräche (Team, Aufgaben, Routinen entfallen ohne Team) | `search_transcripts` | AppSearch.kt | fehlt | K (Teilmenge; Team-Teile sind I) |
+| B6 | Triage-Streifen | Eine Zeile unter dem Titel: wer braucht dich (Tipp öffnet die nächste), RAM "10.4G", "CPU 63%", Claude-Konten 5h und Woche | `memory {summary:true}`, `usage`, abgeleitet aus Sitzungen | TriageStrip.kt, Triage.kt | vorhanden (A: SessionsView.swift `TriageStrip`, C: Triage.swift mit Test) | K |
+| B7 | "Weiter (n)" Warteschlange | Im Chat: nächste Sitzung, die wartet (Fragen zuerst, älteste zuerst, dann Ungelesene) | lokal | Triage.kt, SessionScreen.kt | vorhanden (Chat-Kopf, `Triage.queue`) | K |
+| B8 | Alle gelesen, Ungelesen-Punkte | "Mark all read", Punkt bei Ungelesen, `session_seen` markiert gelesen | Event `session_seen {session_key, answer_ts, how}`, `hello_ok.sessions[].seen_at` | Relay.kt, Digest.kt (`caughtUp`) | vorhanden (Menü "Alle gelesen", `session_seen`, `seen_at` bei hello_ok) | K |
+| B9 | Schließen per Wischen mit Rückgängig | Zeile verschwindet, Snackbar "Rückgängig" 6 s, Aktion läuft erst danach; arbeitende Sitzung: erst Nachfrage, dann Escape, dann `close` | `close {key, mb?, stop?}` -> `{closed:{...stopped}}` | SessionClose.kt | vorhanden (6 s Rückgängig, Bestätigung bei busy, Hintergrundzeit) | K |
+| B10 | Erledigt (Wischen nach rechts) | Löscht `asks`, Sitzung zählt nicht mehr als wartend | `session_done {key}` -> `{cleared}` | TeamUi.kt, Triage.kt | vorhanden | K |
+| B11 | Live/Zuletzt-Filter, Hintergrundläufe | Umschalter zwischen laufenden und allen (auch geschlossenen); Hintergrundläufe (`claude -p`) ausblendbar | `list_sessions {include_dormant:true, include_background:true}` | SessionsScreen.kt, Sessions.kt (`SessionFilter`) | vorhanden (Segment Laufend/Zuletzt, Schalter Hintergrundläufe) | K |
+| B12 | Töten und Umbenennen | "Kill session" (tmux killen), "Rename" tippt `/rename <name>` in die Sitzung | `kill {key}` -> `{}`; `send {key, text:"/rename x", enter:true, force:true}` | SessionsScreen.kt, ChatScreen.kt (`ChatIo.text`) | vorhanden (Kontextmenü: Umbenennen, Töten) | K |
+| B13 | Tags an der Zeile | Konto-Alias, Kontext-Füllstand (`context.level`), "hibernated", Remote-Control-Hinweis | `session.context {tokens,window,pct,level,model?}`, `hibernated`, `remote_url` | SessionsScreen.kt (`ContextTag`, `AccountTag`, `HibernatedTag`) | vorhanden (Alias, Kontext, ruht, geschlossen mit Grund) | K |
+| B14 | Projekt-Avatare | Emoji und Farbe je Projektordner aus der Config, sonst Initialen und Hash-Farbe | `hello_ok.config.avatars`, `avatar_colors`, `avatar_topics` (alle optional, fehlen bei Martin) | SessionsScreen.kt (`Avatars`, `SessionAvatar`) | vorhanden (C: Avatars.swift mit Test, Config-Blöcke gecacht) | K (Initialen-Fallback läuft ohne Config) |
+| B15 | "In Claude-App öffnen" | `remote_url` der Remote-Control-Sitzung | `session.remote_url` | SessionsScreen.kt (`openRemote`) | vorhanden (Link im Chatmenü) | K |
+| B16 | Claude-Cloud-Sitzungen | Liste der claude.ai/code Sitzungen der letzten 30 Tage; "waiting" zählt unter "braucht dich" | `cloud_sessions {refresh?}` -> `{sessions:[{id,alias,title,repo,branch,state,question,detail,cost_usd,model,created_at,last_at,unread,url}],checked_at,error?}`; Event `cloud_sessions` | Cloud.kt, AccountsScreen.kt, TeamUi.kt | teilweise (Event `cloud_sessions` und wartende Einträge in "Wartet auf dich"; Nutzungsansicht gehört zu WP5) | K (nutzt OAuth-Token des Hauptkontos, siehe Befund 1; Fehler anzeigen) |
+
+### 2.3 Chat
+
+| Nr | Funktion | Beschreibung | rpc / Events | Android-Quellen | iOS | Kl. |
+|---|---|---|---|---|---|---|
+| C1 | Transkript, Nachladen, Live-Anhänge | Seitenweise rückwärts, Werkzeugaufrufe zu einer Zeile, `watch` für Live | `transcript {key, before?, limit=50, from?}`, `watch/unwatch {key}`, Event `transcript_append` | ChatScreen.kt, TranscriptScreen.kt, ChatText.kt | vorhanden (A: ChatView.swift) | K |
+| C2 | Markdown mit Tabellen | Überschriften, Listen, Zitate, Codeblöcke und GFM-Tabellen scrollbar | lokal | ChatMarkdown.kt, ChatText.kt (`Segments`) | teilweise (A: `MarkdownText` nur Inline-Markdown und Codeblöcke, keine Tabellen, Listen, Überschriften) | K |
+| C3 | Nachrichtenmenü | Lange drücken: Kopieren, Text auswählen, Links der Nachricht, Dateien, Vorlesen | lokal | ChatFiles.kt (`messageMenu`, `MessageMenuSheet`) | fehlt (nur `textSelection`) | K |
+| C4 | Link-Behandlung | Markdown-Links, `<url>`, nackte URLs; Ziele werden aufgelöst: Web, Dateipfad (absolut, `~/`, relativ zum Sitzungsordner, `:zeile` abgeschnitten) | `file_info` für Pfade | FileLogic.kt (`Links`, `LinkTargets`), FileActions.kt | fehlt | K |
+| C5 | Datei-Chips und Dateiansicht | Dateien der Nachricht (`files[]`), Thumbnails, Vollbild: Bild mit Zoom, PDF, Text, Markdown; Teilen, Speichern, "Öffnen mit", Pfad kopieren; Cache nach Pfad und mtime | `file_info {path}` -> `{path,name,size,mime,mtime,kind}`; `file_get {path, offset=0, length=524288, thumb?}` -> `{data_b64,offset,size,eof,mime,name,mtime,thumb?}` | ChatFiles.kt, FileViewer.kt, FileActions.kt, FileLogic.kt (`FileKinds`, `ZoomMath`), RemoteFiles.kt | teilweise (A: ChatView.swift zeigt nur Namen als Label, kein Abruf) | K |
+| C6 | Suche im Gespräch | Treffer mit Snippet, Sprung an die Stelle | `transcript_search {key, query>=2, roles?, limit=100}`, `transcript {from, before}` | ChatSearch.kt | vorhanden | K |
+| C7 | Slash-Chips je Tool, Slash-Vorschläge | Chips pro Tool einstellbar (claude `/compact /clear /model /usage /resume /cost`, codex `/model /status /compact /new`, agy `/model /help`); beim Tippen von `/` Vorschlagsliste je Tool | `send {key, text, enter:true}` | SlashChips.kt, ChatText.kt (`SlashCommands`), SettingsScreen.kt | teilweise (A: feste Chips für alle Tools, keine Einstellung, keine Vorschläge) | K |
+| C8 | Schnellantworten | Chips "Weiter", "Ja", "Status?" (einstellbar, `|`-getrennt, max 8), erste auch als Aktion an "fertig"-Mitteilung | `send` | SlashChips.kt (`QuickReplies`), ChatScreen.kt (`QuickReplyRow`), Notifier.kt | fehlt | K |
+| C9 | Outbox | Nachricht wird sofort auf Platte gelegt, ein Worker sendet der Reihe nach mit Wiederholung (20 s verdoppelnd bis 300 s), `client_id` macht Doppelsenden harmlos; Zeilenstatus, "Wiederholen", "Bearbeiten" | `send {..., client_id}` (letzte 300 im Gateway-Speicher) | Outbox.kt, ChatScreen.kt, ChatText.kt | fehlt (A: `send` einmal, Fehler = Fehlerbanner) | K |
+| C10 | Antwortkarten für Fragen | AskUserQuestion als Formular: mehrere Fragen, Mehrfachauswahl, "Etwas anderes", ein Schritt `steps`, abgesichert mit `expect_question` | `send {key, steps:[...], expect_question}`; `session.question {questions[],count,multi,...}` | Answers.kt, ChatScreen.kt | teilweise (A: `QuestionCard` zeigt nur Text, Antwort geht über Menükarte nach `screen`; kein Mehrfragen-Formular) | K |
+| C11 | Menü- und Panelkarten | Picker, Listen, Settings, Panels (/usage, /status ...) als native Karte; `expect_menu` | `screen {key|target, lines, escapes, menu:true}`, `send {keys|steps, expect_menu}` | Answers.kt, Panels.kt, ChatScreen.kt | vorhanden (A: ScreenView.swift `MenuCard`) | K |
+| C12 | Arbeitsstatus | Spinner-Zeile ("Computing... 4m 49s"), Vorschau der entstehenden Antwort, laufende Subagenten/Shells, Stop-Knopf | `running {key}` (1,5 s beim Arbeiten, 3 s bei Hintergrund, sonst 30 s) | Running.kt, ChatScreen.kt (`WorkingRow`) | teilweise (A: Statuszeile ja, keine Liste, keine Vorschau, Esc nur als Chip) | K |
+| C13 | Anhänge | Foto, Kamera, Datei, Zwischenablage-Bild, Videos; große Fotos werden verkleinert (lange Kante 2048 px, JPEG-Qualität 85, GIF nie) | `upload_begin {name,size}`, `upload_chunk {upload_id,seq,data_b64 <=512 KiB}`, `upload_end {upload_id}` -> `{path,size}` (max 50 MB, 30 Tage) | Attach.kt, AttachUi.kt, Share.kt | teilweise (Foto, Datei da; Kamera, Zwischenablage, Verkleinern fehlen) | K |
+| C14 | Kontextanzeige im Kopf | "opus 5.5 · low effort · 120k ctx", Warnfarbe bei large/full | `transcript` (neueste Seite) `.context {tokens,model,effort?}`; `session.context` | Protocol.kt (`ContextText`), SessionScreen.kt | teilweise (A: Kontext-Menüzeile, keine Kopfzeile) | K |
+| C15 | Modell und Effort wechseln | Tipp auf den Titel: opus/sonnet/haiku und low/medium/high/xhigh/max, nur wenn idle; sendet `/model` bzw. `/effort` | `send {text:"/model sonnet", enter:true}` | SessionScreen.kt (`ModelEffortMenu`) | fehlt | K |
+| C16 | Zusammenfassungskarte | "Summarize" im Menü: 1 bis 3 gesprochene Sätze, Karte unten im Chat, Vorlesen | `speak_summary {key, name, lang}` -> `{text, how}` (Haiku, Hauptkonto, 90 s Timeout) | Summary.kt | fehlt | K (läuft ohne Pool-Helfer auf c1, kostet Token) |
+| C17 | Vorlesen einer Nachricht | Lautsprecher-Knopf je Nachricht oder in Zusammenfassung | lokal (TTS) | ChatFiles.kt, Speech.kt | fehlt | K |
+| C18 | Diktat im Textfeld | Mikrofon im Eingabefeld: `pc` (Claude-Diktat auf dem PC) oder lokal; Ergebnis optional aufgeräumt | `transcribe {audio_b64 WAV 16k, engine?}`, `stt_warm`, `clean_warm`, `clean_dictation {text, before, session_key}` | ComposeBar.kt, Voice.kt, VoiceCleanup.kt | fehlt (Mikrofon nur in Jarvis) | K (lokal mit SFSpeechRecognizer; `clean_dictation` optional, kostet Token; PC-Engines nur wenn Whisper/Parakeet installiert, sonst I) |
+| C19 | Absenden-Taste auf Tastatur | Return sendet kurze Zeilen | lokal | ComposeBar.kt | fehlt (Mehrzeiler) | K (optional) |
+| C20 | Stop und Session-Menü | Stop (Escape), Schließen, Zusammenfassen, In Claude öffnen | `send {keys:["Escape"]}`, `close {stop:true}` | SessionScreen.kt | teilweise (Menü ja, ohne Zusammenfassung) | K |
+
+### 2.4 Neue Sitzung
+
+| Nr | Funktion | Beschreibung | rpc / Events | Android-Quellen | iOS | Kl. |
+|---|---|---|---|---|---|---|
+| D1 | Neue Sitzung | Konto (auch `auto`), Ordner (zuletzt, Suche, Blättern, anlegen), Name, erste Nachricht | `accounts`, `recent_dirs {limit=30}`, `find_dirs {query,limit=50,wait_s=20}`, `list_dirs {path,show_hidden}`, `mkdir {path}`, `launch {alias,cwd,prompt?,name?}` -> `{tmux_session,target}` | NewSessionScreen.kt, FolderSearch.kt | vorhanden (A: NewSessionView.swift) | K |
+| D2 | Favoriten-Ordner, letztes Konto | Ordner merken, letztes Konto vorauswählen | lokal | Settings.kt (`favDirs`, `lastAlias`) | fehlt | K |
+| D3 | Wieder öffnen | Beendete oder geschlossene Sitzung per `--resume` in neuem tmux | `reopen {key}` -> `{tmux_session,target,alias}` | Relay.kt | vorhanden | K |
+| D4 | Übernehmen auf anderes Konto | Nur im Gateway (`takeover`), Android ruft es nicht auf | `takeover {key, alias, force?}` | (nicht in Android) | fehlt | K, aber sinnlos mit nur einem Claude-Konto; nicht umsetzen |
+
+### 2.5 Mitteilungen, Ruhezeiten, Hinweise
+
+| Nr | Funktion | Beschreibung | rpc / Events | Android-Quellen | iOS | Kl. |
+|---|---|---|---|---|---|---|
+| E1 | "Fertig", "Braucht Eingabe", "Fragt dich" | Mitteilung je Zustandswechsel, `asks` klingelt immer | `session_state {prev_state,state,origin,quiet,tasks,asks,desk,message}` | Notifier.kt, Digest.kt, Relay.kt | vorhanden (A: AppModel.swift `onStateChange`) | K |
+| E2 | "Beendet"-Mitteilung | Sitzung endet ohne `by_user` und war am Leben | `session_ended {by_user}` | Digest.kt (`Kind.ENDED`), Relay.kt | fehlt | K |
+| E3 | Aktionen an der Mitteilung | Antworten (Text), Erledigt, Stumm, Schnellantwort, Freigeben; Aktionen mit Eingabe brauchen entsperrtes Gerät (`actionAuth`) | `send`, `session_done`, `confirm` | ActionReceiver.kt, Notifier.kt | teilweise (Antworten, Erledigt, Stumm da; Schnellantwort, Freigeben, actionAuth nicht) | K |
+| E4 | Richtlinie "fertig" | `sound` / `silent` / `off` | lokal | Settings.kt (`notifyReady`), Digest.kt | fehlt (nur Schalter an/aus) | K |
+| E5 | Richtlinie "braucht Eingabe" | `popup` / `silent` | lokal | `notifyInput` | fehlt | K |
+| E6 | Selbststart-Züge des Agenten | `tasks` (still, solange Hintergrundaufgaben laufen) / `same` / `silent` | `origin:"auto"`, `tasks` | `notifyAuto`, Digest.kt (`quietAuto`) | teilweise (fest: still bei `auto` und `tasks>0`, nicht einstellbar) | K |
+| E7 | Ruhezeiten | "fertig" und "beendet" still zwischen Von und Bis (über Mitternacht), Fragen klingeln immer | lokal | Digest.kt (`QuietHours`), SettingsScreen.kt | fehlt | K |
+| E8 | "Still, wenn ich am PC bin" | Gateway markiert `desk`; Standard an | `session_state.desk` | `quietAtDesk`, Digest.kt (`atDesk`) | teilweise (fest: `desk` unterdrückt "fertig" immer, nicht einstellbar; Fragen klingeln bei iOS immer) | K |
+| E9 | Digest beim Replay | Eine Sammelmitteilung statt vieler | Events mit `replay:true` | Digest.kt (`Digest.build`) | vorhanden (bis 3 einzeln, sonst Sammel) | K |
+| E10 | Gelesen markiert Mitteilungen weg | `session_seen`, Chat im Vordergrund, `origin:"user"` bei `busy` räumt auf | `session_seen`, `session_state` | Relay.kt, Notifier.kt | teilweise (Chat offen und `origin:user` da; `session_seen` fehlt) | K |
+| E11 | Stummschalten je Sitzung | Liste der stummen Schlüssel | lokal | Settings.kt (`muted`) | vorhanden | K |
+| E12 | Hinweise vom Desktop (`notice`) | Mitteilung je `tag` ersetzt sich; Tipp öffnet Detailseite mit Link-Buttons; 14 Tage Verlauf (max 100); ältere als 24 h beim Replay nicht gezeigt | Event `notice {title,text,source,tag?,handoff?,member?}` | NoticeScreen.kt, Digest.kt (`NoticeLogic`) | teilweise (A: einfache Mitteilung, kein Verlauf, keine Detailseite, `tag` ignoriert, Replay-Altersgrenze fehlt) | K |
+| E13 | Freigaben (Approvals) | Agent will etwas freigeben lassen (`notifyd phone approve --kind mail|invite|post|order|payment`): Streifen "Freigeben?", Sheet mit Text, Approve/Deny; gleiche Anfragen gebündelt | Event `send_request {request_id,kind,executor,app?,conversation?,text,summary,requested_by,expires_at}`, rpc `send_result {request_id, ok, error?}`, Event `send_resolved {request_id,ok,error?}` | BridgeUi.kt, BridgeCore.kt, Bridge.kt | fehlt | K für `executor:"desktop"`. `kind:"message"` (`executor:"phone"`, Antwort in WhatsApp usw.) ist X |
+| E14 | Jarvis-Bestätigungen | `needs_confirmation`, Antwort | Events `needs_confirmation {action_id,description}`, `confirmation_resolved {action_id,result}`; rpc `confirm {action_id, ok}` -> `{result}` | Relay.kt, BridgeUi.kt | teilweise (A: nur Mitteilung "Bestätigung nötig", kein Bestätigen) | K |
+| E15 | Standortanfrage | Gateway fordert einmal Standort an | Event `location_request {request_id,reason,expires_at}`; `inbox_put {kind:"location"}`, rpc `location_result {request_id,ok,lat?,lon?,accuracy_m?,ts?,error?}` | BridgeCore.kt, BridgeReaders.kt | fehlt | K nur bei geöffneter App (CoreLocation "beim Verwenden"); im Hintergrund X. Niedrige Priorität |
+
+### 2.6 Jarvis und Stimme
+
+| Nr | Funktion | Beschreibung | rpc / Events | Android-Quellen | iOS | Kl. |
+|---|---|---|---|---|---|---|
+| F1 | Jarvis-Text | Chat mit dem Overview-Agenten, Antwort streamt | `ask {text, stream:true, source:"text"|"voice", show?}` -> `{text,sessions,timing}`, `rpc_progress {delta}` | Assistant.kt, AssistantScreen.kt | vorhanden (A: JarvisView.swift) | K |
+| F2 | Jarvis-Verlauf auf dem Gerät | Verlauf bleibt erhalten, "Chat löschen" | lokal | AssistantScreen.kt, Db.kt | fehlt (nur im Speicher) | K |
+| F3 | Sprache hin, Sprachausgabe, Gesprächsmodus | Erkennung auf dem Gerät, Satzweise Ausgabe, danach wieder hören | `ask`, `jarvis_warm`, `voice_vocab` | Voice.kt, Speech.kt, SpeechText.kt, Conversation.kt | vorhanden (A: Voice.swift, JarvisView.swift) | K |
+| F4 | Stoppwörter im Gesprächsmodus | "stop", "stopp", "ende", "beenden", "danke", "tschüss", "thanks", "bye" (höchstens 3 Wörter); Gespräch endet auch nach 2 stillen Zügen | lokal | SpeechText.kt (`StopWords`), Conversation.kt | fehlt | K |
+| F5 | Vokabular zeigen und beibringen | "Erkennung korrigieren": Begriff oder "gehört => gemeint" an den PC, Liste neu laden | `voice_vocab` -> `{terms[],corrections[[heard,meant]]}`, `voice_vocab_add {meant, heard?}` -> `{added}` | VoiceTeach.kt, SpeechVocab.kt, AssistantScreen.kt | teilweise (Laden und Bias da, Beibringen fehlt) | K |
+| F6 | Stimmenwahl | Engine, Stimme je Sprache (offline), Tempo, Sprache auto/de/en je Satz | lokal | VoicePicker.kt, Voices.kt, Speech.kt, SettingsScreen.kt | teilweise (A: nur Erkennungssprache im Jarvis-Menü; kein Stimmenpicker, kein Tempo, keine Satz-Spracherkennung) | K |
+| F7 | Fertige Sitzungen vorlesen | Bei Headset oder Gesprächsmodus liest Jarvis fertige Sitzungen als Kurzfassung vor | `speak_summary {key,name,lang}` | Summary.kt, Relay.kt (`readFinished`) | fehlt | K |
+| F8 | Dauer-Wake-Word "Hey Jarvis" | On-Device-Modell (ONNX, openWakeWord), Energie-Gate, "Hören wenn" | lokal | WakeWord.kt, RelayService.kt, Settings | fehlt, Siri-Kurzbefehl und Aktionstaste als Ersatz (A: Shortcuts.swift) | X (iOS erlaubt kein dauerhaftes Mikrofon im Hintergrund; Foreground-only wäre möglich, aber ohne Nutzen neben Siri; Modelle CC BY-NC-SA) |
+| F9 | Jarvis Live (Gemini) | Mikrofon-PCM über SSH-Kanal `voice`, Gemini antwortet mit eigener Stimme | `voice`-Kanal, `hello_ok.config.voice:"live"` | LiveVoice.kt | fehlt | I (Infra: `~/.config/notifyd/jarvis-live` plus `creative/glasses/demo/jarvis.py` auf 127.0.0.1:8793, Gemini-Zugang) |
+| F10 | Wake-Koordination PC und Laptops | Ein "Hey Jarvis" antwortet nur ein Gerät | `wake_claim {device}`, `wake_release {device}`, `speak {text}` | Assistant.kt (`WakeClaim`) | fehlt | I (Infra: `tools/wake-listen.py` auf Desktop und Laptops, Kokoro und Piper für `speak`) |
+| F11 | Sprachlatenz-Log | Zeiten je Sprachzug an den PC | `voice_timing {trigger,stt,stages}` | Assistant.kt, PhoneStats.kt, Standby.kt | fehlt | K (optional, Telemetrie) |
+| F12 | Dictation-Engines auf dem PC | Whisper, Parakeet, Claude-Diktat | `transcribe`, `stt_warm {engine?}` | Voice.kt | nicht nötig (iOS erkennt lokal) | I (Infra: `uv sync --extra voice` mit faster-whisper bzw. Parakeet auf dem PC). Nicht im Backlog |
+| F13 | Interview per Handy | Handy als Mikrofon und Lautsprecher des Trainers | `start_interview {mode,display,speaker,restart}`, `stop_interview`, Event `interview_call {mode,audio|url}`, SSH-Kanal `interview` | Interview.kt | fehlt | I (Infra: `interview.command`, `interview.viewers` in config.yaml, Trainer-Programm, i3, VNC) |
+
+### 2.7 Konten, Nutzung, RAM, Einstellungen
+
+| Nr | Funktion | Beschreibung | rpc / Events | Android-Quellen | iOS | Kl. |
+|---|---|---|---|---|---|---|
+| G1 | Nutzung und Limits | 5h und Woche je Konto, Reset, Plan, `gone` | `usage {refresh?, renew?}` -> `{accounts:[{alias,tool,label,plan,windows:[{name,pct,resets_at,forecast?}],error,gone?,checked_at}]}` | AccountsScreen.kt | vorhanden (A: InfoViews.swift `UsageView`) | K für Codex; Claude-Fenster I (Infra: `claude-pool` Helfer, siehe Befund 1) |
+| G2 | Prognose | "leer um HH:MM", ungenutzter Rest bis Reset | `windows[].forecast {rate_pct_h,basis,unused_at_reset_pct,runs_out_at?}` | AccountsScreen.kt | teilweise (`runs_out_at` da, `unused_at_reset_pct` nicht) | I (Claude-Prognose braucht `usage-history.jsonl` aus Claude-Fenstern, also `claude-pool`); UI bleibt tolerant |
+| G3 | Konto-Aufteilung nach Projekt | Woche, Vorwoche, 5h je Projekt, Top-3-Sitzungen | `usage_split {alias}` -> `{alias,tool,label,available,note,generated,periods:[...]}` | AccountSplit.kt | fehlt | I (Claude-Fenster plus Team-Roster für Projektnamen; Codex `available:false`) |
+| G4 | Extras und Cloud-Guthaben | Cloud-Credit, Extra Usage, Nutzung nach Produkt | `usage` -> Konto `extras {as_of,cloud_credit?,extra_usage?,by_product?,scoped?,error?}` | AccountsScreen.kt, Cloud.kt | fehlt | K (siehe Befund 1) |
+| G5 | Login erneuern | `renew` ruft Haiku kurz auf | `usage {renew: alias}` | AccountsScreen.kt ("Refresh login") | fehlt | I (Pool-Helfer) |
+| G6 | Konto-Pillen | Triage-Streifen, siehe B6 | `usage` | Triage.kt | fehlt | K für Codex, Claude erst mit Pool-Helfer |
+| G7 | RAM-Monitor | RAM, Swap, CPU, Last, Sitzungen mit MB, Schließen, "Geschlossen" mit Grund, Wieder öffnen; alle 10 s; Warnung unter 2 GB frei | `memory {summary?}` -> `{total_mb,available_mb,swap_total_mb,swap_used_mb,cpu_pct,load1,cpus,sessions[],others[],closed[]}`, `close`, `reopen` | Memory.kt, MemoryScreen.kt | vorhanden (A: InfoViews.swift `MemoryView`); teilweise bei Feinheiten (10-s-Aktualisierung, Warnung, Hibernate-Text "idle 23 h") | K |
+| G8 | Overview-Agent einstellen | Konto, Modell, Effort des Jarvis-Agenten | `get_config` -> `{overview:{alias,model,effort},poll_fallback_s}`, `set_config {overview_alias?, overview_model?, overview_effort?}` | SettingsScreen.kt | fehlt | K |
+| G9 | Desktop ausschalten | Liste dessen, was endet, dann explizit "Ausschalten" | `power_status` -> `{sessions,busy[],tasks,uptime_s,reopen}`, `power_off {confirm:true, dry_run?}` -> `{ok,at,dry_run}` | DesktopPower.kt | fehlt | K, aber mit NOPASSWD-Regel für `systemctl poweroff` (Systemänderung, Martin muss freigeben); zurückholen braucht Pi oder WoL |
+| G10 | Standby | `standby {confirm:true}` suspendiert; Pi weckt wieder | `standby`, Event `desktop_sleep` | DesktopPower.kt, Standby.kt | fehlt | I (Infra: Pi mit `/usr/local/bin/wake-desktop`, `config.pi`, Sleep-Hook; sudoers für `systemctl suspend`) |
+| G11 | Ruhige Einstellungen | Host, Port, Benutzer, Schlüssel kopieren, Host-Key zurücksetzen | lokal | SettingsScreen.kt | vorhanden (A: SetupView.swift) | K |
+| G12 | Digest "Was war los" | Gateway-rpc `digest`, Android ruft ihn nicht auf; Jarvis nutzt ihn | `digest {hours=12}` -> `{title,text,data:{finished[],waiting[],closed[],usage[],memory}}` | (nicht in Android) | fehlt | K (Bonus, optional) |
+| G13 | Token-Verbrauch je Sitzung | Gateway-rpc, nicht in Android | `session_tokens {days=7,limit=50}` | (nicht in Android) | fehlt | K (Bonus, optional) |
+| G14 | Auto-Hibernation-Plan | Gateway-rpc `hibernate {apply?}`, nicht in Android; Tags `hibernated`, `closed_reason` kommen in Sitzungen | `hibernate` | (nur Anzeige in Memory.kt) | fehlt | K (nur Anzeige; Config `hibernate.mode: on` ist Martins Entscheidung, Standard `dry-run`) |
+
+### 2.8 Eigenes Telefon, Systemintegration
+
+| Nr | Funktion | Beschreibung | Android-Quellen | iOS | Kl. und Grund |
+|---|---|---|---|---|---|
+| H1 | Teilen-Menü (Share-Ziel) | Dateien oder Text aus jeder App in eine Sitzung | ShareActivity.kt, Share.kt | fehlt | X für echte Share Extension (App Extension). Teilersatz K: App als Ziel für "In Relay öffnen" über `CFBundleDocumentTypes` und `onOpenURL` (keine Extension) und ein App-Intent in Shortcuts |
+| H2 | Homescreen-Widget "Wartet auf dich" | Bis 3 Sitzungen | WaitingWidget.kt | fehlt | X (WidgetKit ist eine App Extension; App Group nötig) |
+| H3 | Quick-Settings-Kachel | Jarvis per Kachel | JarvisTile.kt | Ersatz vorhanden (Siri-Kurzbefehl, Aktionstaste) | X (Android-spezifisch) |
+| H4 | Telefon-Bridge | Mitteilungen anderer Apps, SMS, Health Connect, Standort an `inbox_put` | `inbox_put {kind: notification|sms|health|location, items[]}`; Bridge.kt, BridgeCore.kt, BridgeListener.kt, BridgeReaders.kt, BridgeStore.kt, BridgeUi.kt | fehlt | X (iOS erlaubt weder Notification-Listener noch SMS-Zugriff; HealthKit-Entitlement und Hintergrundlesen unter kostenloser Apple-ID nicht verfügbar) |
+| H5 | Formularausfüller | Android-Autofill-Dienst und Accessibility-Dienst füllen Profildaten | `profile_get`, `profile_set {profile?, edited_at?, sites?}`; AutofillProfile.kt, AutofillStore.kt, AutofillFields.kt, AutofillScreen.kt, RelayAutofillService.kt, FillAccessibilityService.kt, FillAccessibilityPlan.kt | fehlt | X (iOS: Credential Provider Extension nötig, also App Extension). Teilersatz K: Profil-Editor mit Kopieren-Buttons, Gateway-Seite `profile.json` läuft ohne Infra |
+| H6 | Wecker mit Briefing | AlarmManager, Vollbild, Brief per TTS auf Alarm-Stream, Snooze | Alarm.kt, AlarmService.kt, AlarmActivity.kt, AlarmSettings.kt, AlarmIcons.kt | fehlt | X auf Android-Art (kein beliebiger Alarmdienst; mit iOS 26 AlarmKit eingeschränkt möglich, Brief selbst ist I) |
+| H7 | Shizuku-Shell | Flugmodus, WLAN, Selbstinstallation | Shell.kt, PhoneControls.kt, Updater.kt | fehlt | X (Android-spezifisch) |
+| H8 | Akkustatistik | Statistik an `voice_timing` | PhoneStats.kt | fehlt | X/irrelevant |
+
+### 2.9 Funktionen mit Zusatzinfrastruktur (I)
+
+| Nr | Funktion | Beschreibung | rpc / Events | Android-Quellen | iOS | Infra, die fehlt |
+|---|---|---|---|---|---|---|
+| I1 | Morgen-Briefing | Wetter, Fahrrad oder S-Bahn, nächste Züge, Störungen, Team-Sätze; Push 08:00 als `notice` tag `brief` | `brief {fresh?, last?}` -> `{text,at,data:{weather,departures[],disruptions[],verdict,parcels[],team[],team_sections[]}}`; `hello_ok.config.brief {lat,lon,from_id,from_name,to_id,to_name,line}` | Brief.kt, BriefScreen.kt | fehlt | config.yaml `brief:` mit Koordinaten und MVG-Stationen (München); Bright Sky und MVG-API sind öffentlich, die Daten persönlich |
+| I2 | Züge live | Nächste Abfahrten beider Richtungen, Meldungen 7 Tage, direkt von MVG | (Phone ruft MVG selbst) | Trains.kt | fehlt | `config.brief` (nur Ortsdaten), MVG (München) |
+| I3 | Wecker-Brief | siehe H6 | | Alarm*.kt | fehlt | `config.brief`, Wecker nicht auf iOS möglich |
+| I4 | Kalender | Alle Kalender in einer Agenda, Outlook-Offline-Cache von anderen Rechnern | `calendar {from,days=28,refresh?}` | Calendar.kt | fehlt | `~/workspace/personal/bin/cal` (agenda, sync), config `calendar.sources`, `calendar.hide`, `calendar.owa`, owacal.py über SSH |
+| I5 | News | YouTube und X Feed, Zusammenfassen | `news {limit,refresh?,source?,query?}`, `news_post {id,page?}`, `news_summary {id,start?}` | News.kt, NewsPost.kt | fehlt | `~/workspace/personal/bin/news`, Agent-Browser für X, Skill youtube, `claude-pool run auto` |
+| I6 | Posteingang | Mail und Messenger-Verlauf, Suche, Antworten, Löschen, Aufräumvorschläge | `inbox_feed`, `inbox_chat`, `inbox_search`, `inbox_mail`, `inbox_mail_reply`, `inbox_mail_delete`, `inbox_mail_suggest`, `inbox_mail_keep`, `inbox_mail_delete_many` | Inbox.kt, InboxFormat.kt | fehlt | `personal/bin/mail` (Index), Thunderbird mit Add-on `relay-mail`, `personal/bin/mail-act`; Chats brauchen die Telefon-Bridge (H4, nicht auf iOS) |
+| I7 | Team (Heute, Team, Routinen, Aufgaben) | Mitglieder mit Lead-Sitzung, Handoffs, Routinen, Check-ins, Wartet-Hinweise | `team`, `team_send`, `team_open`, `handoffs`, `handoff`, `handoff_set`, `handoff_cancel`, `handoff_wait`, `handoff_done`, `team_worker`, `routines`, `routine_run`, `routine_set`, `checkin_add`, `session_peek`, `session_reply`; Events `handoff`, `routine_run` | Team.kt, TeamModel.kt, TeamScreens.kt, TeamUi.kt | fehlt | config.yaml `team:` mit `roster:` und `routines:` (Projekt "assistant": `team/roster.yaml`, `team/routines.yaml`), Team-MCP, Lead-Sitzungen |
+| I8 | Uptime-Alarme | Uptime-Kuma-Meldung als Mitteilung, klingelt auch in Ruhezeiten | Event `alert {monitor_id,monitor,status,msg,since,url}` | Uptime.kt | fehlt | Raspberry Pi mit Uptime Kuma, `kuma-forward` (Port 8768), Gateway `uptime: {listen: "<LAN>:8767"}`, Secret `~/.config/notifyd/kuma-webhook.secret` |
+| I9 | Pi-Wake und Desktop-Status | Handy fragt den Pi: wecken, Status, Snapshot bei Standby | SSH zum Pi mit `wake`, `status`, `snapshot`; `hello_ok.config.pi {host,port,user,host_key}` | PiClient.kt, DesktopPower.kt, Standby.kt, Outbox.kt, NetworkMonitor.kt | fehlt | Pi, `/usr/local/bin/wake-desktop`, authorized_keys-Zwang, Sleep-Hook |
+| I10 | Hosted | Übersicht aller gehosteten Dienste und Webseiten, Tunnel `tunnel <port>` | `hosted`; SSH-Kanal `tunnel <port>` | Hosted.kt | fehlt | Registry `~/agent-notes/hosted.json`, Pi mit Hosted-Login, config `hosted:` |
+| I11 | Laptops und VPN | Wake, Schlafen, Ausschalten, VPN je Rechner | `machines`, `machine_power {id,action,confirm,dry_run?}`, `vpn {id,action,confirm,dry_run?}` | Laptops.kt | fehlt | `~/.config/notifyd/machines.json`, SSH-Hosts, NOPASSWD-Regeln auf den Laptops, WoL |
+| I12 | Heim-WLAN (FRITZ!Box) | Haupt- und Gast-WLAN an und aus | `wifi`, `wifi_set {which,on,confirm?,dry_run?}` | Wifi.kt | fehlt | `~/.config/notifyd/fritz.env` (`FRITZ_HOST`, `FRITZ_USER`, `FRITZ_PASSWORD`, chmod 600), TR-064 an der FRITZ!Box. Nur nötig, falls Martin eine FRITZ!Box hat |
+| I13 | Desktop-Posteingangsseite | Lokale Web-Seite 127.0.0.1:8796 | (kein Handy-Protokoll) | nicht in der App | nicht relevant | Desktop-Seite `desktop/inbox/` |
+| I14 | Autofill-Synchronisation | siehe H5 | | | | |
+| I15 | Rückfall bei schlafendem PC | Snapshot vom Pi (Sitzungen und letzte 20 Nachrichten) | Pi `snapshot` | Standby.kt | fehlt | wie I9 |
+
+## 3. Zählung
+
+Handzählung nach den Tabellen 2.1 bis 2.9 (Einträge mit Zusatz, etwa Teilersatz, zählen in ihrer Hauptklasse; Mischfälle wie G1 zählen als K, ihr Claude-Teil steht zusätzlich als I):
+
+- Klasse K: 70 Einträge (A1 bis A5, A6, A9, A10; B1 bis B16; C1 bis C20; D1 bis D3; E1 bis E15; F1 bis F7, F11; G1, G4, G6 bis G9, G11 bis G14). iOS-Status davon: etwa 20 vorhanden, 22 teilweise, 28 fehlen.
+- Klasse I: 15 Einträge (I1 bis I12, I15, F9, F10, F13) plus G2, G3, G5, G10 und der Claude-Teil von G1. Gemeinsame Ursachen: Pi (I8, I9, I15, G10), `personal/`-Projekt mit `bin/cal`, `bin/mail`, `bin/news` (I4 bis I6), `team:`-Block (I7), `config.brief` (I1, I2), `claude-pool` (G1 bis G3, G5), Jarvis Live und Wake-Listen (F9, F10), Interview-Trainer (F13), `machines.json` (I11), `fritz.env` (I12), `hosted.json` (I10).
+- Klasse X: 11 Einträge (A7, A8, F8, H1 bis H8). Teilersatz ohne Extension steht je Zeile.
+
+Es sind Richtwerte, keine geprüfte Statistik.
+
+## 4. Umsetzungsplan für Klasse K
+
+Reihenfolge nach Nutzen für Martin. Jedes Paket ist etwa gleich groß (ein bis zwei Nächte eines Implementierers). Alle Pakete sind unabhängig, außer dass WP1 die gemeinsame Hilfsstruktur (Einstellungen-Speicher) anlegt, die WP3 und WP4 nutzen.
+
+Gemeinsame Vorbemerkungen für alle Pakete:
+
+- Texte der App sind Deutsch, keine Gedankenstriche.
+- Jede neue Einstellung wird als `@AppStorage` in `AppModel` oder einer neuen `Prefs`-Klasse abgelegt. Vorschlag: neue Datei `A: Prefs.swift` mit `@AppStorage`-Properties, die WP1 anlegt.
+- Jeder rpc-Fehler wird als Text in `model.lastError` gezeigt (vorhanden). Ein älteres oder anders konfiguriertes Gateway antwortet mit `unknown rpc` oder `{"enabled": false}`. Das darf die Oberfläche nie zerstören. Unbekannte Felder ignorieren, fehlende Felder mit Standard lesen (`JSON`-Helfer in `C: JSON.swift` sind lenient).
+- Free-Apple-ID-Grenzen: keine App Extensions, keine Push-Entitlements, keine App Groups. Nichts hinzufügen, was sie braucht.
+- Nach jeder Änderung bauen (CI-Workflow `ios.yml`) und, soweit möglich, `cd RelayCore && swift test` ausführen. Reine Logik (Triage, Ruhezeiten, Links) gehört nach RelayCore und bekommt Tests, wie Android sie in `*Test.kt` hat.
+
+### WP1: Sitzungsliste, Zustandspunkte, Triage
+
+Ziel: Die Übersicht fühlt sich wie Android an und zeigt auf einen Blick, was Martin braucht.
+
+Punkte:
+
+1. **StateDot** (B2). Ersetzt `StateBadge` in der Zeile (Badge bleibt im Chat-Kopf). Formen: `busy` = `ProgressView` klein (13 pt, Akzentfarbe); `needs_input` = roter Ring 14 pt mit rotem Punkt 6 pt; `idle` = gefüllter grüner Kreis 9 pt; `exited` = hohler grauer Ring 10 pt; Offline (Stale): alles grau, kein Spinner, `needs_input` als grauer Ring mit grauem Punkt. Accessibility-Label mit Zustandswort (arbeitet, wartet, bereit, beendet, "zuletzt bekannt").
+2. **Triage-Streifen** (B6). Eine schlanke Zeile unter der Navigationsleiste: links "N brauchen dich" (Tipp öffnet die nächste, siehe 3) oder "N ungelesen", Mitte "RAM 10.4G" (rot ab 90 %), "CPU 63%", rechts Konto-Pillen "c1 43%" (5h) und "51%" (Woche) aus `usage`; Tipp auf RAM öffnet RAM-Monitor, Tipp auf Pille öffnet Nutzung. Ausgeblendet, wenn es nichts zu sagen gibt. Offline: "Stand vor X min".
+   - rpc: `memory {summary:true}` alle 30 s solange die Liste sichtbar ist. Antwort: `{"total_mb","available_mb","swap_total_mb","swap_used_mb","cpu_pct","load1","cpus","summary":true}`. RAM belegt = `total_mb - available_mb`, Stufe 1 ab 80 %, Stufe 2 ab 90 %.
+   - rpc: `usage {refresh:false}` alle 120 s. Antwort `{"accounts":[{"alias","tool","label","plan","windows":[{"name":"5 h"|"week","pct","resets_at","forecast"?}],"error","gone"?,"checked_at"}]}`. Fehlt `windows` (c1 ohne Pool-Helfer), die Pille für das Konto weglassen.
+   - Android: TriageStrip.kt, Triage.kt (`summary`, `quotas`, `ram`, `cpu`).
+3. **"Weiter (n)"** (B7): Im Chat-Kopf Knopf mit Zähler. Warteschlange: zuerst Sitzungen mit `waits` (älteste zuerst, nach `last_activity`), dann ungelesene (neueste zuerst); nie die aktuelle; beendete nur wenn ungelesen. Tipp navigiert (`path.append`) zur ersten. Reine Funktion in RelayCore (`Triage.queue(sessions, unread, current)`), mit Test.
+4. **Alle gelesen** (B8): Menüeintrag in der Übersicht, leert `unread`. Ereignis `session_seen {session_key, answer_ts, how}`: Sitzung als gelesen markieren und ihre "fertig"- und "beendet"-Mitteilungen entfernen (`UNUserNotificationCenter.removeDeliveredNotifications`). Fragen-Mitteilungen bleiben, solange die Sitzung wartet. `hello_ok.sessions[].seen_at` als gelesen werten, wenn `seen_at >= ` Zeitpunkt der letzten Antwort.
+5. **Schließen mit Rückgängig** (B9): Eintrag verschwindet sofort aus der Liste (lokale `hidden`-Menge), Snackbar-artiger Streifen unten "Sitzung geschlossen. Rückgängig" 6 s, danach erst `close`. Bei `state == "busy"`: Bestätigungsdialog "Arbeitende Sitzung stoppen und schließen?", dann `close {key, mb?, stop:true}`. Antwort `{"closed":{...,"stopped":"interrupted"|"timeout"}}`. Wegen der App-Lebensdauer: Läuft die App in den Hintergrund, bevor 6 s um sind, die Aktion trotzdem ausführen (`BackgroundRefresh.withBackgroundTime`). Android: SessionClose.kt.
+6. **Kill und Umbenennen** (B12): Kontextmenü (lange drücken) in der Zeile: "Umbenennen..." (Textfeld, nur Claude) sendet `send {key, text:"/rename <name>", enter:true, force:true}`; "Töten" (Bestätigung) ruft `kill {key}` -> `{}` (nur bei `attachable`/`tmux_session != null`).
+7. **Live/Zuletzt, Hintergrundläufe** (B11): Segment oben "Laufend | Zuletzt"; Zuletzt lädt `list_sessions {include_dormant:true, limit:100}`; Schalter "Hintergrundläufe" setzt `include_background:true` (jede solche Sitzung hat `background:true`; nur zeigen, wenn gewählt).
+8. **Tags** (B13): Konto-Alias als Kapsel, Kontext-Prozent ab `level != ok` (orange "large", rot "full"), Kapsel "ruht" bei `hibernated:true`, Kapsel "geschlossen" bei `closed:true` (`closed_reason`: user, idle, pressure, rotate, cancelled).
+9. **Fuzzy-Suche** (B3): fzf-ähnlich. Alle durch Leerzeichen getrennten Begriffe müssen als Teilfolge vorkommen; Wortanfänge, Treffer in Folge und der letzte Pfadteil zählen höher; Smart-Case (Großbuchstabe im Begriff = case-sensitiv). Treffer-Buchstaben im Titel fett (`AttributedString`). Portiere `Fuzzy.kt` (58 Zeilen) nach `C: Fuzzy.swift` mit Test.
+10. **Avatare** (B14): Aus `hello_ok.config` die Blöcke `avatars` (`{ordner: emoji}`), `avatar_colors` (`{ordner: "#RRGGBB"}`), `avatar_topics` lesen und speichern; fehlen sie (bei Martin), Initialen aus dem Ordnernamen und eine Hash-Farbe aus einer festen Palette. Android: `Avatars`, `SessionAvatar` in SessionsScreen.kt.
+11. **Offline-Liste** (A4, A2): Letzte `list_sessions`-Antwort als JSON in einer Datei (Application Support) speichern, beim Start sofort zeigen, grau (StateDot stale) und Kopfzeile "Stand vor X min". `lastSync` bei `hello_ok` und jedem Event mit `seq` aktualisieren.
+12. **Cloud-Sitzungen** (B16): Abschnitt "Cloud" in der Nutzung (WP5) und Eintrag unter "Wartet auf dich", wenn `state:"waiting"`; hier nur die Daten bereitstellen (WP5 macht die Ansicht).
+
+Android-Vorlagen: SessionsScreen.kt, Sessions.kt, Triage.kt, TriageStrip.kt, SessionClose.kt, Fuzzy.kt, Common.kt.
+iOS-Orte: `A: SessionsView.swift` (Zeile, Menü, Streifen, Filter), `A: RelayApp.swift` (StateBadge bleibt), `A: AppModel.swift` (hidden, unread, session_seen), neue `C: Fuzzy.swift`, `C: Triage.swift`.
+
+### WP2: Chat lesen: Nachrichtenmenü, Links, Dateien, Markdown
+
+Ziel: Antworten mit Pfaden, Links und Tabellen sind benutzbar.
+
+Punkte:
+
+1. **Datei-Chips** (C5). Jede `files[]`-Angabe einer Nachricht (`[{"path","name","size","mime","kind","mtime","inline"?}]`, bis 12 je Nachricht, `kind`: image|pdf|text|audio|video|other) wird ein Chip mit Symbol, Name, Größe. Bilder bekommen ein Thumbnail (64 bis 2048 px). Tippen öffnet die Ansicht. Langes Drücken: Teilen, Speichern, Pfad kopieren.
+   - rpc `file_info {path}` -> `{"path","name","size","mime","mtime","kind"}`.
+   - rpc `file_get {path, offset=0, length=524288, thumb?}` -> `{"data_b64","offset","size","eof","mime","name","mtime","thumb"?}`. Mit `thumb` (px): `thumb:true`, `mime:"image/jpeg"`, `size` = Größe des Thumbnails, `eof:true`, ein Aufruf. Oder `thumb:false` und der erste Block der Datei in Originalform (z. B. SVG, HEIC ohne ImageMagick). Sonst in 512-KiB-Blöcken laden, bis `eof` (max 100 MB; Fortschritt zeigen).
+   - Fehler sind Klartext: `refused: ... is private (...)`, `refused: ... is outside your home and /tmp`, `not found: ...`, `not a regular file: ...`, `too large: ...`. Anzeigen, nichts versuchen, es zu umgehen. Der Gateway verweigert Sperrpfade (`~/.ssh`, `~/.config/`, `*.env` usw.) und Privatordner (`~/Documents/{health,finance,messages,journal}`) selbst.
+   - Cache: Datei unter `Caches/relay-files/<hash(pfad)>-<mtime>` (bei geänderter mtime neu laden).
+   - Ansicht (`A: FileViewerView.swift`): Bild mit Zoom und Verschieben (`MagnificationGesture`; Android `ZoomMath` in FileLogic.kt), PDF per `PDFKit`, Text und Code monospace mit Kopieren und Auswahl, Markdown gerendert (WP2 Punkt 4), sonst `QLPreviewController` oder ShareLink. Modi aus `FileKinds.mode(name, mime, kind)`: Markdown bei `.md/.markdown`; SVG als Text; Bild per Endung (jpg, jpeg, png, gif, webp, heic, heif, bmp, avif) oder `kind`; PDF; Text per Endung/Name-Liste; sonst Sonstiges. Portiere `FileKinds` (Zeilen 168 bis 260 in FileLogic.kt) nach RelayCore mit Test.
+2. **Link-Behandlung** (C4). `Links.extract(md)` (FileLogic.kt Zeilen 8 bis 85): alle Links einer Nachricht in Reihenfolge, je Ziel einmal: Markdown-Links (auch auf Dateien), `<url>`-Autolinks, nackte http(s)- und www.-URLs, auch in Code; Bilder (`![..](..)`) und Anker (`#..`) weglassen. `LinkTargets.resolve(raw, base)`: Web-URL oder Datei (absolut, `~/` auf Home des Gateways, relativ zum Sitzungsordner `session.cwd`, `:zeile[:spalte]` abschneiden, `file://` und Prozent-Kodierung). Tipp auf einen Link im Text: Web = `openURL` (Safari), Datei = `file_info`, dann Ansicht. Inline-Links in `MarkdownText` anklickbar machen (`AttributedString` mit `.link`, eigenes `OpenURLAction`, das Dateipfade abfängt).
+3. **Nachrichtenmenü** (C3). Lange drücken auf eine Nachricht öffnet ein Sheet: "Kopieren" (ganzer Text), "Text auswählen" (Vollbild-Textansicht mit Auswahl), "Vorlesen" (TTS, WP6), Abschnitt "Links" (bis 30, je Zeile mit Aktionen: Öffnen, Kopieren), Abschnitt "Dateien" (Chips). Android: ChatFiles.kt (`messageMenu`, `MessageMenuSheet`, `MessageMenuContent`).
+4. **Markdown** (C2). Eigene Block-Renderer statt `AttributedString` allein: Überschriften (`#`), Listen (`-`, `*`, `1.`), Zitate (`>`), Trennlinien, GFM-Tabellen (Kopfzeile, `|---|` Trennzeile; horizontal scrollbar), Codeblöcke (monospace, horizontal scrollbar, Kopieren-Knopf), Inline (`**`, `*`, `` ` ``, Links). Zerlegung wie Android `ChatText.Segments` (Fließtext, Code, Tabelle). `A: ChatView.swift` `MarkdownText` ist heute `inline` plus `split` (Code ja/nein).
+5. **Transkript-Feinheiten**. Werkzeugzeilen mit Pfad: `tools[]` Dateiwerkzeuge (Read, Edit, Write, NotebookEdit) tragen `path` (absolut), tippbar zur Ansicht (Android `ToolPaths.short/split`). "Anfang des Gesprächs"-Marke, wenn `before` null.
+6. **Datei-Typ-Symbole**: Icon je Art (Bild, PDF, Text, Code, Audio, Video, Datei) nach `FileKinds.icon`.
+
+Android-Vorlagen: ChatFiles.kt, FileViewer.kt, FileActions.kt, FileLogic.kt, RemoteFiles.kt, ChatMarkdown.kt, ChatText.kt.
+iOS-Orte: `A: ChatView.swift` (`MessageRow`, `MarkdownText`), neue `A: FileViewerView.swift`, `A: MessageMenu.swift`, `C: Links.swift`, `C: FileKinds.swift`, Abruf-Helfer in `C: Gateway.swift` oder `A: AppModel.swift` (`fetchFile(path)`).
+
+### WP3: Chat schreiben: Outbox, Chips, Diktat, Fragenformular, Modell und Effort
+
+Punkte:
+
+1. **Outbox** (C9). Neue Struktur `OutItem {id, key, text, at, state: queued|sending|failed, tries}` als JSON-Datei, in Datei geschrieben und ersetzt (so übersteht ein Absturz die Liste). Ein Worker (Task im `AppModel`) sendet der Reihe nach `send {key, text, enter:true, client_id:<id>}`; Wartezeit nach Fehlern `20 s << min(wartungen, 4)`, höchstens 300 s; nur Netz- und Verbindungsfehler wiederholen, ein Fehler vom Gateway (`ok:false`) beendet den Versuch, die Zeile bietet "Wiederholen" und "Bearbeiten". Gleiche `client_id` liefert dieselbe Antwort (Gateway merkt sich die letzten 300), daher ist ein zweites Senden nach verlorener Antwort harmlos. Der Chat zeigt Outbox-Einträge als graue Blasen mit Status ("wartet auf Verbindung", "sendet", "fehlgeschlagen"). Nur Text, keine Kartenantworten (die gehören zum Bildschirm von jetzt).
+   - Wichtig: `send` verweigert eine arbeitende Sitzung ohne `force` und eine mehrdeutige (`duplicates>1`) ohne `force`; die Outbox sendet mit `force:true` erst nach Bestätigung des Nutzers (iOS hat dafür bereits "Trotzdem senden").
+2. **Ping vor Eingabe** (A3): `ping` (6 s) wenn die Verbindung 20 s still war; keine Antwort = neu verbinden, dann senden.
+3. **Slash-Chips je Tool** (C7). Einstellung (Einstellungen, Abschnitt "Sitzungen"): je Tool ein Textfeld "Slash-Befehle, durch Leerzeichen getrennt". Standard: claude `/compact /clear /model /usage /resume /cost`, codex `/model /status /compact /new`, agy `/model /help`. Chips zeigen die des Tools der Sitzung (`session.tool`). Beim Tippen von `/` als erstes Zeichen: Vorschlagsliste: erst die Chips, dann Standard-Befehle (claude: `/clear /compact /context /cost /usage /model /effort /resume /rewind /memory ...`, Liste in ChatText.kt `SlashCatalog` (`forTool`, `matches`, höchstens 10 Treffer, nur solange kein Leerzeichen im Text), dort nachlesen).
+4. **Schnellantworten** (C8): Einstellung "Schnellantworten, durch | getrennt", Standard `Weiter|Ja|Status?`, höchstens 8, eindeutig. Zeile über dem Eingabefeld, Tipp sendet sofort. Die erste auch als Aktion `quick` an der "fertig"-Mitteilung (`UNNotificationAction` "Weiter").
+5. **Modell und Effort** (C15): Tipp auf den Titel (nur `tool == "claude"`): Menü "Modell": opus, sonnet, haiku; "Effort": low, medium, high, xhigh, max; aktuelle mit Haken (Modellname aus `context.model` des letzten `transcript`, Effort aus `context.effort`); deaktiviert, wenn `state == "busy"` ("Wechsel, wenn die Sitzung idle ist"). Wahl sendet `send {key, text:"/model sonnet", enter:true}` bzw. `/effort <level>`. Die Kopfzeile zeigt "opus 5.5 · low effort · 120k ctx" nach der nächsten Anfrage.
+6. **Zusammenfassungskarte** (C16): Menü "Zusammenfassen" -> `speak_summary {key, name:<Sitzungsname>, lang:<auto|de|en>}` (Timeout 90 s) -> `{"text":"1 bis 3 Sätze","how":"pool"|"main"|"brief"|"cache"}`. Karte unten im Chat ("Zusammenfassung", Vorlesen, Schließen, Fehlertext rot). Kostet Haiku-Token auf c1.
+7. **Fragenformular** (C10). Wenn `session.question.questions[]` vorhanden: je Frage Titel (`header`), Text, Optionen als Auswahl (Einzel: Tipp = ausgewählt; `multi`: mehrere); Zeile "Etwas anderes..." mit Textfeld; "Absenden". Antwort in einem Schritt: `send {key, steps:[...], expect_question:<question.question>}`. `steps` sind bis zu 80 Tastennamen oder `{"text":"..."}` und gehen mit 0,15 s Abstand heraus. Die Tastenfolge für Auswahl, "Other" und Mehrfachauswahl bildet Android in `Answers.kt` ab (`Step`, `Pick`, `AnswerKeys`, `TypedAnswer`; nachlesen, nicht raten). `expect_question` verhindert, dass ein veralteter Knopf eine neuere Frage beantwortet. Mehrfragenformulare (`count > 1`) brauchen das exakt; weist das Gateway die Antwort zurück, Karte neu laden. Ist `questions` nicht vorhanden (älteres Gateway), nur die erste Frage.
+8. **Anhänge** (C13): zusätzlich Kamera (`UIImagePickerController` oder `PhotosPicker`-Kamera, ohne Extension), Bild aus Zwischenablage, Videos. Fotos mit langer Kante > 2048 px vor dem Upload auf 2048 verkleinern (JPEG 0,85), GIF und Nicht-Bilder nie. Hochladen: `upload_begin {name,size}` -> `{upload_id}`; `upload_chunk {upload_id, seq, data_b64}` (0,1,2, in Reihenfolge, je höchstens 512 KiB roh) -> `{received}`; `upload_end {upload_id}` -> `{path,size}` (max 50 MB). Der Pfad geht als zusätzliche Zeile in die Nachricht (vorhanden).
+9. **Diktat im Textfeld** (C18): Mikrofonknopf im Eingabefeld, nutzt `Voice.swift` (SFSpeechRecognizer, Vokabular aus `voice_vocab`). Optional "Aufräumen" (Einstellung, Standard aus): `clean_warm` beim Start (ohne Parameter, `{}`), `clean_dictation {text, before, session_key}` -> `{"text","cleaned","warm","ms"}` ersetzt das Diktat, außer der Nutzer hat inzwischen getippt; Fehler oder langsame Antwort lassen den Rohtext. Kostet Sonnet-Token.
+10. **Stop-Knopf** (C12, C20): Während `busy` ein roter Stop-Knopf im Arbeitsstatus (`send {key, keys:["Escape"], force:true}`), plus Menüpunkt. Laufende Aufgaben (`running[]`: `{id,kind,label,since,background,activity?}`) als aufklappbare Liste unter der Statuszeile, `status.preview` (die entstehende Antwort) als graue Vorschau.
+11. **Kontextkopf** (C14): Untertitel "opus 5.5 · low effort · Claude · ~/ordner · 120k ctx". Quelle: `transcript` neueste Seite `.context {"tokens","model"}` und `session.context {"tokens","window","pct","level","model"?}`.
+
+Android-Vorlagen: Outbox.kt, ChatScreen.kt, ChatText.kt, SlashChips.kt, SessionScreen.kt (`ModelEffortMenu`), Summary.kt, Answers.kt, Attach.kt, AttachUi.kt, ComposeBar.kt, VoiceCleanup.kt, Running.kt.
+iOS-Orte: `A: ChatView.swift` (Eingabeleiste, Kopf), `A: AppModel.swift` (`send`, Outbox-Worker), neue `A: Outbox.swift`, `A: QuestionForm.swift`, `A: SummaryCard.swift`; `C: Models.swift` (Question hat bereits `questions`).
+
+### WP4: Mitteilungen, Ruhezeiten, Hinweise, Freigaben
+
+Punkte:
+
+1. **Einstellungsabschnitt "Mitteilungen"** (E4 bis E8) in `A: SetupView.swift`:
+   - "Sitzung fertig": Ton / Still / Aus (`notifyReady`, Standard Ton). Still = `interruptionLevel = .passive` und `sound = nil`, Aus = keine Mitteilung (Ungelesen-Markierung bleibt).
+   - "Braucht Eingabe": Hinweis / Still (`notifyInput`, Standard Hinweis).
+   - "Züge, die der Agent selbst gestartet hat": `tasks` (still, solange Hintergrundaufgaben laufen, Standard) / `same` (wie "fertig") / `silent` (immer still). Regel aus Digest.kt `quietAuto`: gilt nur bei `origin == "auto"` und `!asks`; "tasks" nur wenn `tasks > 0`; Fragen (`asks:true`) klingeln immer.
+   - "Still, wenn ich am PC bin" (`quietAtDesk`, Standard an): ein `session_state` mit `desk:true` wird still; bei Frage nur, wenn das Gateway `desk` setzt (es tut es nur, wenn ein Terminal am PC die Sitzung zeigt). Aus: `desk` wird ignoriert.
+   - "Ruhezeiten" (`quietHours`, Standard aus, Von 22:00 Bis 07:00; zwei `DatePicker(.hourAndMinute)`): "fertig" und "beendet" still, über Mitternacht (`from > to`), `from == to` = nie. Fragen (`needs_input`, `asks`) klingeln immer.
+   - "Aktionen brauchen entsperrtes Gerät" (`actionAuth`, Standard an): Mitteilungsaktionen mit Eingabe (Antworten, Schnellantwort, Freigeben) nutzen `UNNotificationActionOptions.authenticationRequired`.
+   - Entscheidungsfunktion: `NotifyPolicy.alert(kind, prefs, key, ev, minuteOfDay) -> popup|silent|none` aus Digest.kt nach RelayCore portieren und testen (Reihenfolge: stumm -> `none`; `quiet:true` bei READY -> `none`; Basis aus Einstellung; `desk` -> still; `quietAuto` -> still; Ruhezeit bei Nicht-Frage -> still).
+2. **"Beendet"-Mitteilung** (E2): `session_ended {session_key, session, by_user}` mit `by_user:false` und vorher lebender Sitzung: "Beendet · Name", Aufräumen mit gleichem Mitteilungs-Slot wie "fertig".
+3. **Aktionen** (E3): Zusätzlich zu Antworten, Erledigt, Stumm: "Weiter" (erste Schnellantwort), bei Freigaben "Freigeben" und "Ablehnen".
+4. **`session_seen`** (E10): siehe WP1 Punkt 4.
+5. **Hinweise (`notice`)** (E12):
+   - Event `notice {title, text, source, tag?, handoff?, member?}`. Mitteilung mit Kennung `notice:<tag>` (gleicher `tag` ersetzt die vorige), ohne `tag` mit `notice#<seq>`. Beim Replay: nur zeigen, wenn jünger als 24 h (`ts` fehlt = zeigen).
+   - Lokal merken: letzte 14 Tage, höchstens 100, neueste zuerst, je `tag` einmal (JSON-Datei).
+   - Tipp auf die Mitteilung öffnet `NoticeView`: Titel, Zeit, Text; jede Textzeile mit Web-Link bekommt einen Knopf, die Zeile selbst ohne den Link; darunter Liste früherer Hinweise. Von der Übersicht aus erreichbar (Menü "Hinweise"). Android: NoticeScreen.kt (`NoticeLogic`, reine Teile dort nachlesen), Notifier.kt.
+6. **Freigaben** (E13, E14):
+   - Events `send_request {request_id, kind, executor, app?, conversation?, text, summary, requested_by, expires_at}` (persistiert), `send_resolved {request_id, ok, error?}`. Nur `executor:"desktop"` umsetzen (kind mail, invite, post, order, payment: das iPhone genehmigt nur, den Rest tut der anfragende Agent). `kind:"message"` (executor phone) kann das iPhone nicht senden: Anfrage nicht anzeigen lassen oder klar kennzeichnen "nur am Android-Handy". `expires_at` (unix s) abgelaufen = nicht anzeigen.
+   - UI: schlanker Streifen oben in jeder Ansicht "Freigeben? <summary>" bzw. "3 Freigaben warten"; Tipp öffnet ein Sheet mit dem genauen Text (`text`), "Freigeben" und "Ablehnen". Zu schließen oder auszublenden entscheidet nichts (Anfrage bleibt bis beantwortet, am PC beantwortet oder abgelaufen). Gleiche Anfragen (gleiche `kind` und `text`) als eine Karte; Freigeben beantwortet nur die neueste.
+   - Antwort: rpc `send_result {request_id, ok, error?}` (`ok:true` = freigegeben; Ablehnen: `ok:false, error:"denied"`). Das Gateway antwortet mit `send_resolved`, worauf die Anfrage verschwindet.
+   - Jarvis-Bestätigungen: Event `needs_confirmation {action_id, description}` (Streifen wie oben), rpc `confirm {action_id, ok}` -> `{"result":"..."}`; Event `confirmation_resolved {action_id, result}` entfernt sie. Sie sind persistiert, beim Replay nur die noch offenen anzeigen.
+   - Android: BridgeUi.kt, BridgeCore.kt (Teil Freigaben), Bridge.kt (`SendReq`), Relay.kt (`replayConfirms`). Die Freigabe-Hälfte von Bridge.kt hängt nicht an Android-Berechtigungen.
+7. **`desktop_sleep`** (A9): Event `{"type":"desktop_sleep","at":<epoch s>}` kommt, kurz bevor der PC suspendiert (logind) und das Gateway die Verbindung beendet. Dann: Banner "Desktop schläft seit HH:MM", nicht sofort neu verbinden, sondern alle 5 min versuchen. Ohne Pi weckt nichts den PC; der Hinweis ist trotzdem nützlicher als "Verbindungsfehler".
+8. **Standort auf Anfrage** (E15, nur wenn Zeit bleibt): Event `location_request {request_id, reason, expires_at}` -> lokale Mitteilung "Standort angefordert: <reason>"; bei Tippen (App im Vordergrund) `CLLocationManager.requestLocation` (Genauigkeit begrenzt, 60 s Limit); `inbox_put {kind:"location", items:[{"id":"loc-<request_id>","ts","lat","lon","accuracy_m","provider":"ios","request_id"}]}` und `location_result {request_id, ok, lat?, lon?, accuracy_m?, ts?, error?}`. `inbox_put` antwortet `{stored, duplicates}`. Info.plist braucht `NSLocationWhenInUseUsageDescription`.
+
+Android-Vorlagen: Digest.kt, Notifier.kt, NoticeScreen.kt, BridgeUi.kt, Settings.kt, SettingsScreen.kt, ActionReceiver.kt, Standby.kt.
+iOS-Orte: `A: AppModel.swift` (`onStateChange`, `handle`), `A: SetupView.swift`, neue `A: NoticeView.swift`, `A: ApprovalsStrip.swift`, `C: NotifyPolicy.swift`.
+
+### WP5: Konten, Nutzung, Cloud, Einstellungen, Desktop-Power
+
+Punkte:
+
+1. **Nutzung überarbeiten** (G1, G2, G4, G6). Je Konto: Plan, Fenster mit Balken und Reset (vorhanden). Neu:
+   - Prognose-Zeile `forecast {"rate_pct_h","basis":"recent"|"window","unused_at_reset_pct","runs_out_at"?}`: "Reicht bis zum Reset, ca. X % bleiben ungenutzt" oder "leer um HH:MM" (`runs_out_at`). Nur zeigen, wenn vorhanden (Claude ohne Pool-Helfer hat kein `forecast`).
+   - Klarer Fehlertext, wenn `error` beginnt mit "usage helper unavailable": "Für Claude-Limits fehlt der Pool-Helfer auf dem PC (`claude-pool`)". Codex zeigt trotzdem.
+   - `extras` (Hauptkonto): `{"as_of","cloud_credit"?:{"limit","used","left","currency","expires_at","locked"},"extra_usage"?:{"enabled","currency","used","limit","balance","auto_reload","reason"},"by_product"?:[{"name","pct"}],"scoped"?:[{"name","pct","resets_at"}],"error"?}`. Als Abschnitt "Weitere Angaben" unter dem Konto: Cloud-Guthaben (Rest, läuft ab), Extra Usage (verbraucht, Limit), Nutzung je Produkt.
+   - Konto-Detail per Tipp: reserviert für `usage_split` (I), also hier nur Konto-Tipp -> Detailansicht mit den obigen Teilen.
+2. **Cloud-Sitzungen** (B16): Abschnitt "Cloud-Sitzungen" in der Nutzung. rpc `cloud_sessions {refresh?:false}` -> `{"sessions":[{"id","alias","title","repo","branch","state":"waiting"|"running"|"ready"|"done","question","detail","cost_usd","model","created_at","last_at","unread","url"}],"checked_at","error"?}`; 30 Tage, neueste zuerst, 60 s Cache; Event `cloud_sessions {sessions, checked_at}` aktualisiert live. Tipp öffnet `url` im Browser/Claude-App. `state:"waiting"` erscheint zusätzlich in der Übersicht unter "Wartet auf dich" (Cloud-Zeile, Tipp = URL). Leerer Zustand "Keine Cloud-Sitzungen in den letzten 30 Tagen". Fehler (Token abgelaufen) als Text, nie als Absturz.
+3. **Overview-Agent einstellen** (G8). Neuer Abschnitt "Jarvis-Agent" in den Einstellungen, nur verbunden: rpc `get_config` -> `{"overview":{"alias","model","effort"},"poll_fallback_s":15}`. Pickers: Konto (`accounts` -> Alias und Label), Modell (haiku, sonnet, opus oder Freitext), Effort (`low` Standard, `medium`, `high`, `xhigh`, `max`, `""` = CLI-Standard). Speichern: `set_config {overview_alias?, overview_model?, overview_effort?}` (alle optional) -> gleiche Form wie `get_config`.
+4. **RAM-Monitor Feinschliff** (G7): Aktualisierung alle 10 s solange sichtbar (nicht öfter, der Aufruf kostet etwa 1,5 s), Warnband "Weniger als 2 GB frei: unten eine Sitzung schließen" bei `available_mb < 2048`, Balken relativ zum größten Eintrag, Texte für Geschlossene "vor 5 min zum Schlafen gelegt · idle 23 h · 251 MB + 100 MB Swap" (Gründe: `user`, `idle`, `pressure` = "idle 3 h, RAM knapp", `rotate`, `cancelled`), Schließen mit Rückgängig (wie WP1 Punkt 5). Antwort-Form siehe Matrix G7; `closed[]` Zeilen `{"key","title","alias","tool","id","cwd","closed_at","mb","reason","idle_h"?,"swap_mb"?}`.
+5. **Desktop ausschalten** (G9, nur mit Freigabe von Martin für die sudoers-Regel): Menü "Desktop ausschalten...". Zuerst `power_status` -> `{"sessions":n,"busy":[{"key","title","alias"}],"tasks":n,"uptime_s","reopen"}`; Liste dessen, was endet; "reopen:true" = das Gateway öffnet diese Sitzungen nach dem nächsten Start wieder. Zweiter Tipp "Jetzt ausschalten" ruft `power_off {confirm:true}` -> `{"ok":true,"at":ts,"dry_run":false}`; das Gateway antwortet zuerst und fährt 3 s später herunter. Standard ist `dry_run:true` in einem Testmodus (Schalter in den Einstellungen "Testlauf"). Hinweis in der Oberfläche: "Ohne Pi oder Wake-on-LAN startet der PC nicht wieder per Handy." Erst bauen, wenn Martin die NOPASSWD-Regel (`sudo -n systemctl poweroff`) bewusst setzt; sonst schlägt es stumm fehl (nur im Journal).
+6. **Digest und Token-Verbrauch** (G12, G13, optional): Menü "Was war los": `digest {hours:12}` -> `{"title","text","data":{"since","finished":[{"key","title","alias","at","last_message","now"}],"waiting":[{"key","title","alias","since","question"}],"closed":[...],"usage":[...],"memory":{...}}}`, Zeitfenster 0,5 bis 168 h. Und "Token-Verbrauch": `session_tokens {days:7, limit:50}` -> `{"days","since","generated","count","sessions":[{"key","alias","id","title","cwd","member","calls","subagent_calls","input","cache_read","cache_write","output","weighted","last_at","alive","context"?}],"accounts":{alias:totals},"members":{id:totals},"all":totals}`. `weighted` = Input-Äquivalente (Cache-Read x0,1, Cache-Write x1,25, Output x5), schnell nützlich, da die Claude-Limits sonst fehlen.
+7. **Sitzungs-Hibernate-Anzeige** (G14): `hibernated`, `closed`, `closed_reason` aus `list_sessions` ablesen (WP1 Tags). Keine Aktion, `hibernate`-Plan nur als Info.
+
+Android-Vorlagen: AccountsScreen.kt, Cloud.kt, Memory.kt, MemoryScreen.kt, SettingsScreen.kt, DesktopPower.kt (nur `power_status` und `power_off`, nicht den Pi-Teil).
+iOS-Orte: `A: InfoViews.swift` (UsageView, MemoryView), `A: SetupView.swift`, neue `A: CloudView.swift`, `A: AgentSettingsView.swift`.
+
+### WP6: Jarvis und Stimme
+
+Punkte:
+
+1. **Stimmenwahl** (F6). Einstellungen "Sprachausgabe": Tempo (0,5 bis 1,5), Sprache `auto|de|en`, Stimme Deutsch und Stimme Englisch aus `AVSpeechSynthesisVoice.speechVoices()` (nur installierte, Qualität `.enhanced` oder `.premium` zuerst, Tag "de-DE", "enhanced"), je mit "Testen". Standard: die beste vorhandene. Bei `auto` je Satz die Sprache bestimmen (Heuristik aus `Voices.detect`: häufige deutsche oder englische Wörter, Umlaute zählen doppelt; kann sie nicht entscheiden, Rückfall auf die Einstellung). Hinweis "Mehr Stimmen: Einstellungen > Bedienungshilfen > Gesprochene Inhalte > Stimmen". Offline-Stimmen nur, weil Antworten private Daten enthalten können (kein Netzwerkdienst). Android: VoicePicker.kt, Voices.kt, Speech.kt.
+2. **Stoppwörter** (F4): Im Gesprächsmodus beendet das Gespräch, wer höchstens drei Wörter sagt, von denen eines in `stop, stopp, ende, beenden, danke, dankeschön, tschüss, tschüs, thanks, bye` steht (Kleinschreibung, Trennung an Nicht-Buchstaben). Ein langer Satz, der "danke" enthält, beendet nichts. Auch nach zwei stillen Zügen in Folge enden. Android: SpeechText.kt (`StopWords`), Conversation.kt. Funktion in RelayCore mit Test.
+3. **Erkennung beibringen** (F5): In Jarvis ein Menüpunkt "Erkennung korrigieren": Felder "Gehört" (optional) und "Gemeint". `voice_vocab_add {meant, heard?}` -> `{"added": line}` (hängt einen Begriff oder die Korrektur "heard => meant" an `router/voice-vocab.txt` an); danach `voice_vocab` neu laden -> `{"terms":[...],"corrections":[[heard,meant],...]}`. Das Vokabular besteht aus den Begriffen der Datei plus Sitzungstiteln und Konto-Aliassen. Anwendung: die Begriffe als `contextualStrings` des `SFSpeechRecognitionRequest`; Hypothesen mit Begriff bevorzugen (Bonus je verschiedenem Begriff); Korrekturen ganzwörtlich, case-insensitiv, längste Phrase zuerst, einmal pro Text (Android `SpeechVocab.kt`, Teile "Terms und Wörter aus Titeln `work/api-merge` -> work, api, merge", kurze Wörter weg, dedupliziert, begrenzt). Teile davon sind schon in `A: Voice.swift`; prüfen und ergänzen.
+4. **Fertige Sitzungen vorlesen** (F7): Einstellung "Fertige Sitzungen vorlesen" (nur wenn Kopfhörer verbunden (`AVAudioSession.currentRoute`) oder Gesprächsmodus aktiv). Bei "fertig"-Ereignis im Vordergrund: `speak_summary {key, name, lang}` -> `{"text","how"}` und vorlesen; Fallback auf die ersten Sätze der `last_message`, wenn der Aufruf scheitert (Android `SpeechText.firstSentences`). Läuft nur im Vordergrund oder bei laufendem Audio-Hintergrundmodus; kein Dauerbetrieb versprechen.
+5. **Jarvis-Verlauf speichern** (F2): Verlauf (Nutzer und Antworten, ohne Ereignisse) als JSON-Datei, "Chat löschen" im Menü. Wird von der App-Suche (WP7) mit durchsucht.
+6. **Diktat im Chat** (C18): siehe WP3 Punkt 9; hier die Sprachwahl "Erkennungssprache auto|de|en" auch für das Diktat nutzen.
+7. **Telemetrie** (F11, optional): `voice_timing {trigger:"mic"|"button"|"follow_up", stt:"device", stages:{name: ms seit Auslöser}}` -> `{}`. Nur, wenn Zeit bleibt.
+8. **Warm-up**: `jarvis_warm` (vorhanden) auch beim Fokus auf das Jarvis-Textfeld, höchstens alle 30 s, nur verbunden; "unknown rpc" nicht erneut versuchen.
+
+Android-Vorlagen: Voice.kt, Speech.kt, SpeechText.kt, SpeechVocab.kt, VoicePicker.kt, Voices.kt, VoiceTeach.kt, AssistantScreen.kt, Conversation.kt, Assistant.kt.
+iOS-Orte: `A: Voice.swift`, `A: JarvisView.swift`, `A: SetupView.swift` (Abschnitt), neue `A: VoicePickerView.swift`, `C: Voices.swift`, `C: StopWords.swift`.
+
+### WP7: Suche, Eingänge von außen, Feinschliff
+
+Punkte:
+
+1. **Gesprächssuche in der Liste** (B4). Beim Tippen (nach 400 ms Pause, höchstens eine Anfrage gleichzeitig, nie zwei Scans parallel) rpc `search_transcripts {query, days:7}` -> `{"hits":[{"session_key","tool","alias","role","snippet","ts"}]}` (max 20, neueste zuerst, ein Treffer je Sitzung). Seit 2026-10-24 muss ein Treffer jedes Wort der Anfrage in beliebiger Reihenfolge enthalten; `"in Anführungszeichen"` bleibt Phrase; Groß-/Kleinschreibung, Akzente und Umlautschreibweisen (ä = ae = a, ß = ss) werden ignoriert. Treffer nur für Sitzungen in der Liste anzeigen (Hintergrundläufe, Zusammenfassungen und Jarvis-Läufe nicht). Anzeige als Abschnitt "In Gesprächen" unter den Titeltreffern, Snippet unter dem Titel. Mindestens 2 Zeichen.
+2. **App-weite Suche** (B5): Eine Suchleiste durchsucht Sitzungen (Fuzzy, WP1), den Jarvis-Verlauf (WP6 Punkt 5) und Gespräche (Punkt 1). Ergebnisgruppen mit Zwischenüberschrift; Tipp springt an die Stelle (Chat: `transcript_search` des Treffers, vorhanden). Android: AppSearch.kt (reine Teile: jedes Wort kommt vor, Gesprächstreffer nach Sitzung benannt).
+3. **"In Relay öffnen"** (H1, ohne Extension). Info.plist: `CFBundleDocumentTypes` (public.data, public.content, public.image, public.text) mit `LSSupportsOpeningDocumentsInPlace = false`; `onOpenURL` in `A: RelayApp.swift`. Nimmt eine Datei entgegen, zeigt "In welche Sitzung senden?" (laufende Sitzungen, zuletzt geöffnete zuerst, dann wartende, dann neueste; Suchfeld), optional Nachricht, dann Upload (`upload_*` wie WP3 Punkt 8) und Pfad in die Sitzung (`send`). Logik: `ShareLogic.body` und `ShareLogic.targets` (Share.kt): `"<Nachricht>\n\n<Pfad>\n<Pfad>"`, ohne Dateien der geteilte Text als Körper. Android: Share.kt, ShareActivity.kt. Echtes Teilen-Menü aller Apps bleibt X (Share Extension).
+4. **Shortcuts (App Intents)** (kein Extension nötig, `A: Shortcuts.swift`): "Nachricht an Sitzung senden" (Parameter Sitzung, Text) und "Neue Sitzung starten" (Konto, Ordner, Prompt). Beide rufen `send` bzw. `launch`; die App muss dafür kurz im Vordergrund sein, ein App-Intent ohne `openAppWhenRun` darf im Hintergrund verbinden, aber nur, wenn der SSH-Schlüssel im Schlüsselbund ohne Face ID zugänglich ist (prüfen).
+5. **Profil-Editor** (H5, Teilersatz): Einstellungen "Profil": rpc `profile_get` -> `{"profile":{"full_name","first_name","last_name","birthday","emails":[...],"phone","street","house_number","postcode","city","country","driving_licence","id_number"},"sites":{"web:<domain>"|"app:<package>": email},"updated_at"}`; Bearbeiten, Speichern per `profile_set {profile, edited_at:<unix s>}` -> wie `profile_get` plus `conflict:true`, wenn das gespeicherte Profil neuer ist (dann nichts schreiben, das gespeicherte übernehmen). Jedes Feld mit "Kopieren". Keine Karten- oder IBAN-Nummern (das Gateway weist sie ab). Nur sinnvoll, wenn Martin `~/.config/notifyd/profile.json` nutzen will; sonst überspringen.
+6. **Kleinteile**:
+   - `app_log {entries:[{ts,level,tag,message,stack,app_version}]}` bei Fehlern und Abstürzen (höchstens 200) an den PC; `notifyd phone log` zeigt es. Nur, wenn verbunden, sonst nicht puffern.
+   - Offen-Intent: Tipp auf Mitteilung öffnet den Chat (vorhanden), Hinweis-Mitteilung öffnet `NoticeView` (WP4), Freigabe öffnet Sheet.
+   - Favoriten-Ordner (D2): Stern in der Ordnerliste, `favDirs` in den Einstellungen (Menge), "letztes Konto" vorauswählen (`lastAlias`).
+   - Verbindungstexte (A10): "Kein Weg zum PC" statt "Offline", wenn eine private LAN-Adresse konfiguriert ist (`10.`, `172.16-31.`, `192.168.`) und kein VPN aktiv ist (`NWPathMonitor`: `.usesInterfaceType(.other)` für Tunnel). Nur Wortwahl, keine Blockade.
+   - Chat-Kopf "Stand": `last_activity` als relative Zeit, die auch im Schlaf stimmt (Uhr beim Vordergrundwechsel neu lesen, nicht nur Timer).
+   - Kontextmenü an der Zeile bündeln (WP1) und mit `UIContextMenuInteraction` per `.contextMenu` umsetzen.
+
+Android-Vorlagen: SessionSearch.kt, AppSearch.kt, Share.kt, ShareActivity.kt, AutofillProfile.kt, AutofillScreen.kt (nur Feldliste und Konfliktlogik), AppLog.kt, NetworkMonitor.kt, SessionsScreen.kt (`rememberNowMs`).
+iOS-Orte: `A: SessionsView.swift` (Suche), neue `A: AppSearchView.swift`, `A: RelayApp.swift` (`onOpenURL`), `A: Shortcuts.swift`, `A: ProfileView.swift`, `project.yml` und Info.plist (Dokumenttypen).
+
+## 5. Nicht ins Backlog (Begründung in einem Satz)
+
+- Klasse I: siehe Abschnitt 2.9 und `infrastruktur-prompt.md`. Sobald Martin die Infrastruktur nachgebaut hat, können die zugehörigen Ansichten als WP8 folgen (Briefing, Kalender, News, Posteingang, Team, Uptime, Hosted, Laptops, WLAN). Das rpc-Format steht in PROTOCOL.md.
+- Klasse X: Selbst-Update, Dauerverbindung, Wake-Word, Share Extension, Widget, Quick-Tile, Telefon-Bridge (Mitteilungen, SMS, Health), Formularausfüller, Wecker, Shizuku, `kind:"message"`-Freigaben. Gründe oben je Zeile.
+- Gateway-only: `takeover` (nur ein Claude-Konto), `attach` (Terminal, von Android nicht genutzt), `activity`, `seen`, `session_settings`, `team_open`, `dispatch`, `new_session` (Jarvis-Werkzeuge, nicht für Apps).
+
+## 6. Prüfen nach der Umsetzung
+
+- Gegen das echte Gateway: `swift run relay-smoke <host> <port> <user> <seed-datei> [rpc-methode [json]]` je neuem rpc (RelayCore). Erwartung bei Martins Gateway: `usage` für c1 mit `error`, `brief` mit Text "brief is not configured ...", `team` mit `{"enabled": false, ...}`, `calendar`, `news`, `inbox_*`, `hosted`, `machines`, `wifi` mit Fehler oder leer (nicht anzeigen).
+- Jede Ansicht, deren rpc `unknown rpc` oder `{"enabled": false}` liefert, zeigt nichts oder einen ruhigen Hinweis, nie einen Fehlerbanner bei jedem Start.
+- Reine Logik (Fuzzy, Triage, NotifyPolicy, Ruhezeiten, Links, FileKinds, StopWords) mit Swift-Tests in `RelayCore/Tests`, Fälle aus den Android-Tests (`app/src/test/...`) übernehmen.
