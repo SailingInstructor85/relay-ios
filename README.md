@@ -4,7 +4,7 @@ Native SwiftUI-App für [Relay](https://github.com/chart21/relay): Sie verbindet
 Relay-Gateway (`notifyd`) auf dem Linux-Desktop und bildet den Kern der Android-App nach. Getestet ist sie für ein
 iPhone 16 Pro (iOS 17 oder neuer).
 
-## Funktionen (Version 0.1)
+## Funktionen (Version 0.2)
 
 - **SSH wie bei Android:** eigener Ed25519-Schlüssel im iOS-Schlüsselbund, Host-Key-Pinning beim ersten Verbinden (TOFU),
   nur der `serve`-Kanal von `notifyd ssh-entry`, kein Shell-Zugang
@@ -17,13 +17,22 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Live-Bildschirm** (tmux-Aufnahme) mit Tastenleiste: Esc, Enter, Pfeiltasten, Tab, Ctrl-C, Ziffern
 - **Neue Sitzung:** Konto wählen, Ordner aus den zuletzt benutzten, per Suche oder durch Blättern, erste Nachricht
 - **Anhänge:** Fotos und Dateien hochladen, der Pfad landet in der Nachricht
-- **Nutzung & Limits** pro Konto, **RAM-Monitor** mit Schließen und Wiederöffnen, **Jarvis** als Text-Chat
-  (Diktieren geht über das Mikrofon der Tastatur)
-- **Mitteilungen** bei „fertig“ und „wartet“, solange die App läuft; nach einer Pause gibt es eine Zusammenfassung
+- **Nutzung & Limits** pro Konto, **RAM-Monitor** mit Schließen und Wiederöffnen
+- **Jarvis per Sprache:** Mikrofon antippen und sprechen. Die Erkennung läuft auf dem iPhone und nutzt das Vokabular
+  des Gateways (`voice_vocab`). Die Antwort wird Satz für Satz vorgelesen. Im Gesprächsmodus hört Jarvis danach
+  wieder zu. Der Kurzbefehl „Jarvis in Relay“ funktioniert per Siri oder über die Aktionstaste.
+- **Mitteilungen** bei „fertig“ und „wartet“. Direkt aus der Mitteilung antworten, „Erledigt“ setzen oder die
+  Sitzung stummschalten. Bis zu drei verpasste Ereignisse kommen einzeln, mehr als Zusammenfassung.
+- **Hintergrundaktualisierung:** Ist die App zu, verbindet sie sich ab und zu kurz und meldet Verpasstes. iOS bestimmt
+  den Zeitpunkt, meist alle 15 bis 60 Minuten.
+- **Suche im Verlauf** einer Sitzung, ein Treffer springt an die Stelle im Chat
+- **Sperre mit Face ID** (Einstellungen → Sicherheit)
 
-Noch nicht enthalten, weil iOS es nicht zulässt oder weil es später kommt: Wake-Word „Hey Jarvis“, Telefon-Bridge
-(SMS, Health, fremde Mitteilungen), Selbst-Update per APK und Mitteilungen bei geschlossener App. Für Letzteres bräuchte
-man Apple-Push über einen Server, und den will Relay bewusst nicht.
+Noch nicht enthalten, weil iOS es nicht zulässt oder weil es später kommt: ein dauerhaft lauschendes Wake-Word
+„Hey Jarvis“ (stattdessen Siri oder die Aktionstaste), die Telefon-Bridge (SMS, Health, fremde Mitteilungen), das
+Teilen-Menü und ein Homescreen-Widget (beide brauchen eigene App-IDs, siehe App-Store-Abschnitt) sowie sofortige
+Mitteilungen bei geschlossener App. Für Letzteres bräuchte man Apple-Push über einen Server, und den will Relay bewusst
+nicht.
 
 ## Aufbau
 
@@ -44,7 +53,10 @@ Tests unter Linux: `cd RelayCore && swift test`. Ende-zu-Ende-Test gegen ein Gat
    Das läuft mit deiner normalen Apple-ID. SideStore braucht für die Ersteinrichtung einmal einen Rechner, danach
    nicht mehr.
 3. Die IPA auf dem iPhone in SideStore öffnen („+“ → Datei). SideStore signiert sie mit deiner Apple-ID.
-4. Mit einer kostenlosen Apple-ID läuft die Signatur nach **7 Tagen** ab. SideStore erneuert sie auf dem iPhone
+4. **Updates automatisch:** In SideStore unter „Quellen“ → „+“ diese Adresse eintragen:
+   `https://github.com/SailingInstructor85/relay-ios/releases/latest/download/source.json`.
+   Jede neue Version (Git-Tag `v*`) erscheint dann in SideStore als Update.
+5. Mit einer kostenlosen Apple-ID läuft die Signatur nach **7 Tagen** ab. SideStore erneuert sie auf dem iPhone
    selbst (Refresh), dafür muss das VPN bzw. der Pairing-Mechanismus von SideStore aktiv sein.
 
 ## Verbindung einrichten
