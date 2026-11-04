@@ -214,7 +214,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         return t.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func voice(for text: String) -> AVSpeechSynthesisVoice? {
+    static func voice(for text: String) -> AVSpeechSynthesisVoice? {
         let r = NLLanguageRecognizer()
         r.languageConstraints = [.german, .english]
         r.processString(text)

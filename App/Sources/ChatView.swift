@@ -26,6 +26,8 @@ struct ChatView: View {
     @State private var showSearch = false
     @State private var highlight: String?
     @State private var jumpTo: String?
+    @State private var viewer: RemoteRef?
+    @State private var menuMessage: TMessage?
     @FocusState private var focused: Bool
 
     private var session: Session? { model.session(for: sessionKey) }
@@ -39,6 +41,8 @@ struct ChatView: View {
                         if before != nil {
                             Button(loading ? "Lade…" : "Ältere Nachrichten laden") { Task { await loadOlder() } }
                                 .font(.footnote).frame(maxWidth: .infinity).padding(.top, 8)
+                        } else if loadedOnce && !messages.isEmpty {
+                            Text("Anfang des Gesprächs").font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.top, 8)
                         }
                         ForEach(messages) { m in MessageRow(m: m, highlighted: m.id == highlight).id(m.id) }
                         if let s = session, s.state == "busy" {
@@ -58,6 +62,16 @@ struct ChatView: View {
                     .padding(.vertical, 8)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .environment(\.chatActions, ChatActions(
+                    openPath: { p in openPath(p) },
+                    openFile: { viewer = $0 },
+                    menu: { menuMessage = $0 }))
+                .environment(\.openURL, OpenURLAction { url in
+                    MainActor.assumeIsolated {
+                        LinkRouter.open(url.absoluteString, base: session?.cwd, onFile: { viewer = $0 }, onError: { error = $0 })
+                    }
+                    return .handled
+                })
                 .onChange(of: messages.count) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
                 .onChange(of: menu?.id) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
                 .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
@@ -74,6 +88,12 @@ struct ChatView: View {
         .toolbar { toolbarItems }
         .sheet(isPresented: $showSearch) {
             ChatSearchView(sessionKey: key) { id, index in Task { await jump(to: id, index: index) } }.environmentObject(model)
+        }
+        .sheet(item: $viewer) { r in
+            FileViewerView(start: r, base: session?.cwd).environmentObject(model)
+        }
+        .sheet(item: $menuMessage) { m in
+            MessageMenu(message: m, base: session?.cwd, onFile: { viewer = $0 }).environmentObject(model)
         }
         .sheet(isPresented: $showScreen) {
             if let s = session { NavigationStack { ScreenView(session: s) }.environmentObject(model) }
@@ -161,6 +181,13 @@ struct ChatView: View {
         }
         ToolbarItem(placement: .topBarTrailing) {
             if session?.liveTmux != nil { Button { showScreen = true } label: { Image(systemName: "terminal") } }
+        }
+    }
+
+    private func openPath(_ path: String) {
+        Task {
+            do { viewer = try await FileStore.shared.info(path) }
+            catch { self.error = error.localizedDescription }
         }
     }
 
@@ -299,18 +326,25 @@ struct MessageRow: View {
     let m: TMessage
     var highlighted = false
     @State private var toolsOpen = false
+    @Environment(\.chatActions) private var actions
 
     var body: some View {
         content
             .background(highlighted ? Color.yellow.opacity(0.25) : Color.clear)
             .animation(.easeInOut, value: highlighted)
+            .contentShape(Rectangle())
+            .onLongPressGesture(minimumDuration: 0.45) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                actions.menu(m)
+            }
     }
 
     @ViewBuilder private var content: some View {
         switch m.role {
         case "user":
-            HStack { Spacer(minLength: 40); Text(m.text).textSelection(.enabled).padding(10)
-                .background(Color.accentColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 14)) }
+            HStack { Spacer(minLength: 40)
+                Text(MarkdownText.linkified(AttributedString(m.text))).padding(10)
+                    .background(Color.accentColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 14)) }
             .padding(.horizontal)
         case "system":
             Text(m.text).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.horizontal)
@@ -318,11 +352,11 @@ struct MessageRow: View {
             toolRow
         default:
             VStack(alignment: .leading, spacing: 6) {
-                if !m.text.isEmpty { MarkdownText(text: m.text) }
+                if !m.text.isEmpty { MarkdownText(text: m.text, selectable: false) }
                 if !m.tools.isEmpty { toolRow }
                 if !m.files.isEmpty {
-                    ForEach(m.files, id: \.path) { f in
-                        Label(f.name, systemImage: f.kind == "image" ? "photo" : "doc").font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(m.files, id: \.path) { f in FileChip(ref: RemoteRef(f), onOpen: actions.openFile) }
                     }
                 }
             }
@@ -330,12 +364,28 @@ struct MessageRow: View {
         }
     }
 
+    private func pathButton(_ t: ToolCall, path: String) -> some View {
+        let parts = ToolPaths.split(summary: t.summary, path: path)
+        return HStack(spacing: 6) {
+            Image(systemName: "doc.text").font(.caption2).foregroundStyle(.secondary)
+            Button { actions.openPath(path) } label: { Text(parts.name).font(.system(.caption, design: .monospaced)).underline() }
+                .buttonStyle(.plain).foregroundStyle(Color.accentColor)
+            Text("\(t.name) · \(parts.rest)").font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+        }
+    }
+
     @ViewBuilder private var toolRow: some View {
-        if !m.tools.isEmpty {
+        if m.tools.count == 1, let p = m.tools[0].path, ToolPaths.isFileTool(m.tools[0].name) {
+            pathButton(m.tools[0], path: p).padding(.horizontal)
+        } else if !m.tools.isEmpty {
             DisclosureGroup(isExpanded: $toolsOpen) {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(m.tools.enumerated()), id: \.offset) { _, t in
-                        Text("\(t.name): \(t.summary)").font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(4)
+                        if let p = t.path, ToolPaths.isFileTool(t.name) {
+                            pathButton(t, path: p)
+                        } else {
+                            Text("\(t.name): \(t.summary)").font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(4)
+                        }
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             } label: {
@@ -346,46 +396,6 @@ struct MessageRow: View {
         } else if !m.text.isEmpty {
             Text(m.text).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(6).padding(.horizontal)
         }
-    }
-}
-
-/// Markdown with fenced code blocks shown as monospaced boxes; the rest as inline markdown.
-struct MarkdownText: View {
-    let text: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(Self.split(text).enumerated()), id: \.offset) { _, part in
-                if part.code {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        Text(part.text).font(.system(.caption, design: .monospaced)).textSelection(.enabled).padding(8)
-                    }
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
-                } else {
-                    Text(Self.inline(part.text)).textSelection(.enabled)
-                }
-            }
-        }
-    }
-
-    static func inline(_ s: String) -> AttributedString {
-        (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
-    }
-
-    static func split(_ s: String) -> [(code: Bool, text: String)] {
-        var out: [(code: Bool, text: String)] = []
-        var code = false
-        var buf: [Substring] = []
-        for line in s.split(separator: "\n", omittingEmptySubsequences: false) {
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
-                let t = buf.joined(separator: "\n")
-                if !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out.append((code, t)) }
-                buf = []; code.toggle(); continue
-            }
-            buf.append(line)
-        }
-        let t = buf.joined(separator: "\n")
-        if !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out.append((code, t)) }
-        return out
     }
 }
 
