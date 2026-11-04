@@ -26,6 +26,13 @@ jobs:
         run: xcodebuild -version
       - name: Generate project
         run: brew install xcodegen && xcodegen generate
+      - name: Version
+        run: |
+          V=$(grep MARKETING_VERSION project.yml | head -1 | sed -E 's/.*"(.*)".*/\1/')
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF#refs/tags/v}"; fi
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          echo "BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
+          echo "Relay $V (${{ github.run_number }})"
       - name: Build (unsigned)
         run: |
           set -o pipefail
@@ -33,6 +40,7 @@ jobs:
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
             build | tee build.log | grep -E "error:|warning: .*deprecated|BUILD" || true
           test -d build/Build/Products/Release-iphoneos/Relay.app
       - name: Package IPA
@@ -48,8 +56,16 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with: { name: build-log, path: build.log }
+      - name: SideStore source (tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          cp Relay-unsigned.ipa Relay.ipa
+          python3 scripts/make_source.py Relay.ipa "$VERSION" "$BUILD" "${{ github.repository }}" "${GITHUB_REF#refs/tags/}" source.json
       - name: Release (tags)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: Relay-unsigned.ipa
+          files: |
+            Relay.ipa
+            Relay-unsigned.ipa
+            source.json

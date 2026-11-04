@@ -23,6 +23,9 @@ struct ChatView: View {
     @State private var importing = false
     @State private var uploadInfo = ""
     @State private var showScreen = false
+    @State private var showSearch = false
+    @State private var highlight: String?
+    @State private var jumpTo: String?
     @FocusState private var focused: Bool
 
     private var session: Session? { model.session(for: sessionKey) }
@@ -37,7 +40,7 @@ struct ChatView: View {
                             Button(loading ? "Lade…" : "Ältere Nachrichten laden") { Task { await loadOlder() } }
                                 .font(.footnote).frame(maxWidth: .infinity).padding(.top, 8)
                         }
-                        ForEach(messages) { m in MessageRow(m: m).id(m.id) }
+                        ForEach(messages) { m in MessageRow(m: m, highlighted: m.id == highlight).id(m.id) }
                         if let s = session, s.state == "busy" {
                             HStack(spacing: 8) { ProgressView(); Text(status.isEmpty ? "arbeitet…" : status).font(.footnote).foregroundStyle(.secondary) }
                                 .padding(.horizontal)
@@ -58,6 +61,9 @@ struct ChatView: View {
                 .onChange(of: messages.count) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
                 .onChange(of: menu?.id) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
                 .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
+                .onChange(of: jumpTo) { _, id in
+                    if let id { withAnimation { proxy.scrollTo(id, anchor: .top) }; jumpTo = nil }
+                }
             }
             if let e = error { ErrorBanner(text: Binding(get: { e }, set: { error = $0 })).padding(.vertical, 4) }
             if !uploadInfo.isEmpty { Text(uploadInfo).font(.caption).foregroundStyle(.secondary).padding(.top, 4) }
@@ -66,6 +72,9 @@ struct ChatView: View {
         .navigationTitle(session?.name ?? "Sitzung")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarItems }
+        .sheet(isPresented: $showSearch) {
+            ChatSearchView(sessionKey: key) { id, index in Task { await jump(to: id, index: index) } }.environmentObject(model)
+        }
         .sheet(isPresented: $showScreen) {
             if let s = session { NavigationStack { ScreenView(session: s) }.environmentObject(model) }
         }
@@ -121,7 +130,11 @@ struct ChatView: View {
             Menu {
                 if let s = session {
                     if s.liveTmux != nil { Button { showScreen = true } label: { Label("Live-Bildschirm", systemImage: "terminal") } }
+                    Button { showSearch = true } label: { Label("Im Verlauf suchen", systemImage: "magnifyingglass") }
                     Button { model.togglePin(s.key) } label: { Label(model.pinned.contains(s.key) ? "Loslösen" : "Anheften", systemImage: "pin") }
+                    Button { model.toggleMute(s.key) } label: {
+                        Label(model.muted.contains(s.key) ? "Mitteilungen an" : "Stummschalten", systemImage: model.muted.contains(s.key) ? "bell" : "bell.slash")
+                    }
                     if s.waits { Button { Task { await model.done(s) } } label: { Label("Als erledigt markieren", systemImage: "checkmark") } }
                     if s.exited || s.closed || s.hibernated {
                         Button { Task { do { _ = try await model.reopen(s); await model.refresh() } catch { self.error = error.localizedDescription } } } label: { Label("Wieder öffnen", systemImage: "arrow.uturn.backward") }
@@ -187,6 +200,23 @@ struct ChatView: View {
             messages.insert(contentsOf: older.filter { !known.contains($0.id) }, at: 0)
             before = r["before"].string
         } catch { self.error = error.localizedDescription }
+    }
+
+    /// Shows a search hit: loads the transcript from its index when it isn't loaded yet, scrolls there, highlights it.
+    private func jump(to id: String, index: Int) async {
+        if !messages.contains(where: { $0.id == id }) {
+            loading = true; defer { loading = false }
+            do {
+                let r = try await model.rpc("transcript", ["key": .string(key), "from": .number(Double(index))], timeout: 30)
+                messages = r["messages"].array.map(TMessage.from)
+                before = r["before"].string
+            } catch { self.error = error.localizedDescription; return }
+        }
+        try? await Task.sleep(nanoseconds: 350_000_000) // let the list lay out first
+        highlight = id
+        jumpTo = id
+        try? await Task.sleep(nanoseconds: 2_500_000_000)
+        if highlight == id { withAnimation { highlight = nil } }
     }
 
     private func refreshScreen() async {
@@ -257,9 +287,16 @@ struct ChatView: View {
 
 struct MessageRow: View {
     let m: TMessage
+    var highlighted = false
     @State private var toolsOpen = false
 
     var body: some View {
+        content
+            .background(highlighted ? Color.yellow.opacity(0.25) : Color.clear)
+            .animation(.easeInOut, value: highlighted)
+    }
+
+    @ViewBuilder private var content: some View {
         switch m.role {
         case "user":
             HStack { Spacer(minLength: 40); Text(m.text).textSelection(.enabled).padding(10)
@@ -369,5 +406,67 @@ struct QuestionCard: View {
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 14)).padding(.horizontal)
+    }
+}
+
+/// Search over the whole transcript of one session (rpc `transcript_search`); a hit jumps there in the chat.
+struct ChatSearchView: View {
+    @EnvironmentObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    let sessionKey: String
+    let onPick: (String, Int) -> Void
+
+    @State private var query = ""
+    @State private var hits: [JSON] = []
+    @State private var searched = ""
+    @State private var searching = false
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let error { Text(error).foregroundStyle(.red).font(.footnote) }
+                ForEach(Array(hits.enumerated()), id: \.offset) { _, h in
+                    Button {
+                        onPick(h.str("id"), h["index"].int ?? 0)
+                        dismiss()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(h.str("role") == "user" ? "Du" : "Agent").font(.caption.weight(.semibold))
+                                Spacer()
+                                Text(TermText.ago(h.num("ts"))).font(.caption2).foregroundStyle(.secondary)
+                            }
+                            Text(h.str("snippet")).font(.callout).lineLimit(4)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                if !searching && hits.isEmpty && searched.count >= 2 && error == nil {
+                    Text("Nichts gefunden für „\(searched)“").foregroundStyle(.secondary)
+                }
+                if searching { HStack { Spacer(); ProgressView(); Spacer() } }
+            }
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Im Verlauf suchen")
+            .task(id: query) {
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                if !Task.isCancelled { await run() }
+            }
+            .navigationTitle("Suche")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Schließen") { dismiss() } } }
+        }
+    }
+
+    private func run() async {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard q.count >= 2 else { hits = []; searched = ""; return }
+        searching = true; defer { searching = false }
+        do {
+            let r = try await model.rpc("transcript_search", ["key": .string(sessionKey), "query": .string(q), "limit": 100], timeout: 20)
+            hits = r["matches"].array
+            searched = q
+            error = nil
+        } catch { self.error = error.localizedDescription }
     }
 }

@@ -13,7 +13,13 @@ struct RelayApp: App {
             RootView()
                 .environmentObject(model)
                 .onAppear { model.start(); model.requestNotificationPermission() }
-                .onChange(of: phase) { _, p in model.setForeground(p == .active) }
+                .onChange(of: phase) { _, p in
+                    model.setForeground(p == .active)
+                    if p == .background {
+                        BackgroundRefresh.schedule()
+                        if model.lockEnabled { model.locked = true }
+                    }
+                }
         }
     }
 }
@@ -21,13 +27,25 @@ struct RelayApp: App {
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ app: UIApplication, didFinishLaunchingWithOptions o: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        AppModel.registerNotificationActions()
+        BackgroundRefresh.register()
         return true
     }
     func userNotificationCenter(_ c: UNUserNotificationCenter, willPresent n: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound, .list]
     }
     func userNotificationCenter(_ c: UNUserNotificationCenter, didReceive r: UNNotificationResponse) async {
-        if let key = r.notification.request.content.userInfo["key"] as? String {
+        guard let key = r.notification.request.content.userInfo["key"] as? String else { return }
+        switch r.actionIdentifier {
+        case "reply":
+            let text = (r as? UNTextInputNotificationResponse)?.userText.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !text.isEmpty else { return }
+            await BackgroundRefresh.withBackgroundTime { await AppModel.shared.replyFromNotification(key: key, text: text) }
+        case "done":
+            await BackgroundRefresh.withBackgroundTime { await AppModel.shared.doneFromNotification(key: key) }
+        case "mute":
+            await MainActor.run { AppModel.shared.toggleMute(key) }
+        default:
             await MainActor.run { AppModel.shared.openChat = key }
         }
     }
@@ -36,7 +54,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 struct RootView: View {
     @EnvironmentObject var model: AppModel
     var body: some View {
-        if model.configured { SessionsView() } else { NavigationStack { SetupView(firstRun: true) } }
+        ZStack {
+            if model.configured { SessionsView() } else { NavigationStack { SetupView(firstRun: true) } }
+            if model.locked { LockView() }
+        }
     }
 }
 

@@ -33,6 +33,8 @@ final class AppModel: ObservableObject {
     @AppStorage("notify") var notifyEnabled = true
     @AppStorage("pinnedKeys") private var pinnedRaw = ""
     @AppStorage("unreadKeys") private var unreadRaw = ""
+    @AppStorage("mutedKeys") private var mutedRaw = ""
+    @AppStorage("lockEnabled") var lockEnabled = false
 
     @Published private(set) var state: ConnState = .off
     @Published private(set) var sessions: [String: Session] = [:]
@@ -40,6 +42,8 @@ final class AppModel: ObservableObject {
     @Published var showDormant = false
     @Published var lastError: String?
     @Published var openChat: String?   // a session key to navigate to (notification tap)
+    @Published var openJarvis = false  // Siri / Action Button shortcut
+    @Published var locked = false      // Face ID lock shown
 
     /// Chats that watch a session receive its `transcript_append` here.
     var transcriptListeners: [String: (String, [TMessage]) -> Void] = [:]
@@ -61,12 +65,18 @@ final class AppModel: ObservableObject {
         get { Set(unreadRaw.split(separator: "\n").map(String.init)) }
         set { unreadRaw = newValue.sorted().joined(separator: "\n") }
     }
+    /// Sessions whose "ready" / "waiting" notifications are silenced (they still show as unread).
+    var muted: Set<String> {
+        get { Set(mutedRaw.split(separator: "\n").map(String.init)) }
+        set { mutedRaw = newValue.sorted().joined(separator: "\n"); objectWillChange.send() }
+    }
 
     var configured: Bool { ServerConfig(host: host, port: port, user: user).isComplete }
     var publicKey: String { identity.openSSHPublicKey() }
     var setupCommand: String { "notifyd setup key \"\(publicKey)\"" }
 
     private init() {
+        locked = UserDefaults.standard.bool(forKey: "lockEnabled")
         if let seed = Keychain.get("ssh-seed"), let id = try? Identity(rawSeed: seed) { identity = id }
         else { let id = Identity(); Keychain.set(id.rawSeed, for: "ssh-seed"); identity = id }
         monitor.pathUpdateHandler = { [weak self] path in
@@ -94,7 +104,85 @@ final class AppModel: ObservableObject {
 
     func setForeground(_ fg: Bool) {
         foreground = fg
-        if fg { if link?.isOpen != true { reconnect() } }
+        if fg {
+            if oneShot != nil { link?.close() } // a background check's link: the main loop takes over
+            else if link?.isOpen != true { reconnect() }
+        }
+    }
+
+    private func makeLink() -> GatewayLink {
+        let cfg = ServerConfig(host: host.trimmingCharacters(in: .whitespaces), port: port, user: user.trimmingCharacters(in: .whitespaces))
+        return GatewayLink(config: cfg, identity: identity, pinnedHostKey: hostKey.isEmpty ? nil : hostKey,
+                           onHostKey: { key in Task { @MainActor in AppModel.shared.hostKey = key } },
+                           onEvent: { ev in Task { @MainActor in AppModel.shared.handle(ev) } })
+    }
+
+    // MARK: short connections while in the background (notification actions, background refresh)
+
+    private var oneShot: Task<Void, Never>?
+
+    /// Makes sure a link is up, opening a one-off one when the app is in the background (the main loop sleeps there).
+    /// Returns once `hello_ok` has been handled, or false after `timeout` seconds.
+    func connectOnce(timeout: Double = 20) async -> Bool {
+        if state == .connected, link?.isOpen == true { return true }
+        guard configured else { return false }
+        if foreground {
+            reconnect()
+        } else if oneShot == nil {
+            link?.close()
+            let l = makeLink()
+            link = l
+            state = .connecting
+            let hello = Hello.make(sinceSeq: lastSeq, pinned: Array(pinned), appVersion: Self.appVersion)
+            oneShot = Task { [weak self] in
+                try? await l.run(hello: hello)
+                guard let self else { return }
+                if self.link === l { self.link = nil; if !self.foreground { self.state = .off } }
+                self.oneShot = nil
+            }
+        }
+        let until = Date().addingTimeInterval(timeout)
+        while Date() < until && !Task.isCancelled {
+            if state == .connected, link?.isOpen == true { return true }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        return false
+    }
+
+    /// Ends a background link again (the main loop reconnects when the app comes back).
+    func releaseBackground() {
+        if !foreground, oneShot != nil { link?.close() }
+    }
+
+    /// Background refresh: connect, let the replayed events raise their notifications, disconnect.
+    func backgroundCheck() async -> Bool {
+        guard await connectOnce(timeout: 20) else { releaseBackground(); return false }
+        try? await Task.sleep(nanoseconds: 1_500_000_000) // late events after hello_ok
+        releaseBackground()
+        return true
+    }
+
+    func replyFromNotification(key: String, text: String) async {
+        guard await connectOnce() else {
+            notifyRaw(id: "reply-fail-\(key)", title: "Antwort nicht gesendet", body: "Keine Verbindung zum Desktop: \(text)", key: key)
+            return
+        }
+        if let s = session(for: key) {
+            do { try await send(s, text: text) ; markRead(s.key) }
+            catch { notifyRaw(id: "reply-fail-\(key)", title: "Antwort nicht gesendet", body: "\(error.localizedDescription): \(text)", key: key) }
+        }
+        releaseBackground()
+    }
+
+    func doneFromNotification(key: String) async {
+        if await connectOnce(), let s = session(for: key) { await done(s) }
+        releaseBackground()
+    }
+
+    func toggleMute(_ key: String) {
+        var m = muted
+        if m.contains(key) { m.remove(key) } else { m.insert(key) }
+        muted = m
     }
 
     private func runLoop() async {
@@ -102,22 +190,23 @@ final class AppModel: ObservableObject {
         while !Task.isCancelled {
             guard configured else { state = .off; try? await Task.sleep(nanoseconds: 1_000_000_000); continue }
             guard hasNetwork else { state = .noNetwork; try? await Task.sleep(nanoseconds: 1_000_000_000); continue }
+            if !foreground { // background: stay offline until we come back (background checks use connectOnce)
+                while !foreground && !Task.isCancelled { try? await Task.sleep(nanoseconds: 500_000_000) }
+            }
+            while oneShot != nil { try? await Task.sleep(nanoseconds: 100_000_000) }
             state = .connecting
             kick = false
-            let cfg = ServerConfig(host: host.trimmingCharacters(in: .whitespaces), port: port, user: user.trimmingCharacters(in: .whitespaces))
-            let l = GatewayLink(config: cfg, identity: identity, pinnedHostKey: hostKey.isEmpty ? nil : hostKey,
-                                onHostKey: { key in Task { @MainActor in AppModel.shared.hostKey = key } },
-                                onEvent: { ev in Task { @MainActor in AppModel.shared.handle(ev) } })
+            let l = makeLink()
             link = l
             let started = Date()
             let hello = Hello.make(sinceSeq: lastSeq, pinned: Array(pinned), appVersion: Self.appVersion)
             do { try await l.run(hello: hello) }
             catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? "\(error)"
-                state = .error(msg)
+                if link === l { state = .error(msg) }
                 if error is HostKeyMismatch { lastError = msg }
             }
-            link = nil
+            if link === l { link = nil }
             if Date().timeIntervalSince(started) > 20 { backoff = 2 }
             // wait: backoff, or until a kick / foreground comes back
             let until = Date().addingTimeInterval(kick ? 0.3 : backoff)
@@ -202,6 +291,7 @@ final class AppModel: ObservableObject {
 
     private var pendingDigest = 0
     private var digestLines: [String] = []
+    private var missed: [String: (title: String, body: String)] = [:]
 
     private func onStateChange(_ s: Session, prev: String?, ev: JSON, replay: Bool) {
         let now = s.state
@@ -215,23 +305,32 @@ final class AppModel: ObservableObject {
         if ev.flag("quiet") { return }
         let asks = ev.flag("asks")
         if ready && !asks && ev.str("origin") == "auto" && (ev["tasks"].int ?? 0) > 0 { return }
+        if muted.contains(s.key) { return }
+        let title = needs ? "Braucht Eingabe · \(s.name)" : (asks ? "Fragt dich · \(s.name)" : "Fertig · \(s.name)")
+        let body = needs ? (ev["message"].string ?? s.question?.text ?? "Wartet auf deine Eingabe") : (asks ? s.asksText : s.lastMessage)
         if replay {
             pendingDigest += 1
             digestLines.append("\(s.name): \(needs || asks ? "wartet auf dich" : "fertig")")
+            missed[s.key] = (title, body)
             return
         }
         if ev.flag("desk") && !needs { return }
         if s.key == visibleChat && foreground { return }
-        let title = needs ? "Braucht Eingabe · \(s.name)" : (asks ? "Fragt dich · \(s.name)" : "Fertig · \(s.name)")
-        let body = needs ? (ev["message"].string ?? s.question?.text ?? "Wartet auf deine Eingabe") : (asks ? s.asksText : s.lastMessage)
         notify(s, title: title, body: body)
     }
 
     private func postDigest() {
         let lines = digestLines
         let n = pendingDigest
-        pendingDigest = 0; digestLines = []
+        let each = missed
+        pendingDigest = 0; digestLines = []; missed = [:]
         guard n > 0 else { return }
+        if each.count <= 3 { // few: one notification per session, with reply actions
+            for (key, m) in each where !(key == visibleChat && foreground) {
+                notifyRaw(id: "s-\(key)", title: m.title, body: m.body, key: key)
+            }
+            return
+        }
         notifyRaw(id: "digest", title: "Relay: \(n) Änderung\(n == 1 ? "" : "en")", body: lines.suffix(6).joined(separator: "\n"), key: nil)
     }
 
@@ -239,6 +338,16 @@ final class AppModel: ObservableObject {
 
     func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
+    /// Actions on a session notification: answer inline, mark done, mute the session.
+    static func registerNotificationActions() {
+        let reply = UNTextInputNotificationAction(identifier: "reply", title: "Antworten", options: [],
+                                                  textInputButtonTitle: "Senden", textInputPlaceholder: "Nachricht an die Sitzung")
+        let done = UNNotificationAction(identifier: "done", title: "Erledigt", options: [])
+        let mute = UNNotificationAction(identifier: "mute", title: "Stummschalten", options: [])
+        let cat = UNNotificationCategory(identifier: "session", actions: [reply, done, mute], intentIdentifiers: [], options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([cat])
     }
 
     private func notify(_ s: Session, title: String, body: String) {
@@ -251,7 +360,7 @@ final class AppModel: ObservableObject {
         c.title = title
         c.body = String(body.prefix(300))
         c.sound = .default
-        if let key { c.userInfo = ["key": key]; c.threadIdentifier = key }
+        if let key { c.userInfo = ["key": key]; c.threadIdentifier = key; c.categoryIdentifier = "session" }
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: c, trigger: nil))
     }
 

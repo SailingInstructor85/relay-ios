@@ -8,7 +8,7 @@ struct SessionsView: View {
     @State private var search = ""
     @State private var showNew = false
 
-    enum Dest: Hashable { case chat(String), settings, usage, memory, jarvis }
+    enum Dest: Hashable { case chat(String), settings, usage, memory, jarvis, jarvisListening }
 
     private var filtered: [Session] {
         let q = search.lowercased()
@@ -60,6 +60,10 @@ struct SessionsView: View {
                     } label: { Image(systemName: "ellipsis.circle") }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button { path.append(Dest.jarvisListening) } label: { Image(systemName: "mic") }
+                        .accessibilityLabel("Jarvis per Sprache")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button { showNew = true } label: { Image(systemName: "plus") }.disabled(model.state != .connected)
                 }
             }
@@ -70,6 +74,7 @@ struct SessionsView: View {
                 case .usage: UsageView()
                 case .memory: MemoryView()
                 case .jarvis: JarvisView()
+                case .jarvisListening: JarvisView(autoListen: true)
                 }
             }
             .sheet(isPresented: $showNew) {
@@ -87,6 +92,12 @@ struct SessionsView: View {
             .onChange(of: model.showDormant) { _, _ in Task { await model.refresh() } }
             .onChange(of: model.openChat) { _, key in
                 if let key { path = NavigationPath(); path.append(Dest.chat(key)); model.openChat = nil }
+            }
+            .onChange(of: model.openJarvis) { _, open in
+                if open { path = NavigationPath(); path.append(Dest.jarvisListening); model.openJarvis = false }
+            }
+            .onAppear {
+                if model.openJarvis { path.append(Dest.jarvisListening); model.openJarvis = false }
             }
             .safeAreaInset(edge: .top) { ErrorBanner(text: $model.lastError) }
         }
@@ -106,12 +117,15 @@ struct SessionsView: View {
         if !list.isEmpty {
             Section(title) {
                 ForEach(list) { s in
-                    NavigationLink(value: Dest.chat(s.key)) { SessionRow(s: s, unread: model.unread.contains(s.key), pinned: model.pinned.contains(s.key)) }
+                    NavigationLink(value: Dest.chat(s.key)) { SessionRow(s: s, unread: model.unread.contains(s.key), pinned: model.pinned.contains(s.key), muted: model.muted.contains(s.key)) }
                         .swipeActions(edge: .leading) {
                             if s.waits || model.unread.contains(s.key) {
                                 Button { Task { await model.done(s) } } label: { Label("Erledigt", systemImage: "checkmark") }.tint(.green)
                             }
                             Button { model.togglePin(s.key) } label: { Label("Pin", systemImage: "pin") }.tint(.yellow)
+                            Button { model.toggleMute(s.key) } label: {
+                                Label(model.muted.contains(s.key) ? "Ton an" : "Stumm", systemImage: model.muted.contains(s.key) ? "bell" : "bell.slash")
+                            }.tint(.gray)
                         }
                         .swipeActions(edge: .trailing) {
                             if s.alive && !s.exited {
@@ -128,6 +142,7 @@ struct SessionRow: View {
     let s: Session
     let unread: Bool
     let pinned: Bool
+    var muted = false
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             ZStack(alignment: .topTrailing) {
@@ -138,6 +153,7 @@ struct SessionRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     if pinned { Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.yellow) }
+                    if muted { Image(systemName: "bell.slash.fill").font(.caption2).foregroundStyle(.secondary) }
                     Text(s.name).font(.body.weight(unread ? .semibold : .regular)).lineLimit(1)
                     Spacer(minLength: 4)
                     Text(TermText.ago(s.lastActivity)).font(.caption2).foregroundStyle(.secondary)

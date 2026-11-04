@@ -4,13 +4,14 @@ options:
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
+  developmentLanguage: de
 packages:
   RelayCore:
     path: RelayCore
 settings:
   base:
-    MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "2"
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: ""
 targets:
@@ -27,12 +28,18 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Relay
+        CFBundleDevelopmentRegion: de
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSLocalNetworkUsageDescription: Relay verbindet sich per SSH mit deinem Desktop im lokalen Netz.
         NSPhotoLibraryUsageDescription: Fotos können an eine Sitzung auf dem Desktop geschickt werden.
+        NSMicrophoneUsageDescription: Jarvis hört zu, wenn du aufs Mikrofon tippst.
+        NSSpeechRecognitionUsageDescription: Deine Sprache wird auf dem iPhone in Text umgewandelt und an Jarvis geschickt.
+        NSFaceIDUsageDescription: Relay lässt sich mit Face ID sperren.
+        UIBackgroundModes: [fetch, audio]
+        BGTaskSchedulerPermittedIdentifiers: [dev.relay.ios.refresh]
         ITSAppUsesNonExemptEncryption: false
         LSApplicationCategoryType: public.app-category.developer-tools
     settings:
