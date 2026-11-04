@@ -127,6 +127,16 @@ struct ChatView: View {
 
     @ToolbarContentBuilder private var toolbarItems: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
+            let queue = Triage.queue(model.triageSessions, unread: model.unread, current: key)
+            HStack(spacing: 8) {
+                if let s = session { StateBadge(state: s.shownState) }
+                if let next = queue.first {
+                    Button { model.openChat = next.key } label: { Label("Weiter (\(queue.count))", systemImage: "forward.end").font(.footnote.weight(.semibold)) }
+                        .accessibilityLabel("Weiter zur nächsten Sitzung, \(queue.count) offen")
+                }
+            }
+        }
+        ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 if let s = session {
                     if s.liveTmux != nil { Button { showScreen = true } label: { Label("Live-Bildschirm", systemImage: "terminal") } }

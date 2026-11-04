@@ -35,11 +35,20 @@ final class AppModel: ObservableObject {
     @AppStorage("unreadKeys") private var unreadRaw = ""
     @AppStorage("mutedKeys") private var mutedRaw = ""
     @AppStorage("lockEnabled") var lockEnabled = false
+    @AppStorage("lastSync") var lastSync: Double = 0
+    @AppStorage("avatarLook") private var avatarLookRaw = ""
 
     @Published private(set) var state: ConnState = .off
     @Published private(set) var sessions: [String: Session] = [:]
     @Published private(set) var accounts: [Account] = []
-    @Published var showDormant = false
+    @Published var showDormant = false      // "Zuletzt" instead of "Laufend"
+    @Published var showBackground = false   // also headless runs
+    @Published private(set) var hidden: Set<String> = []   // closed with Undo pending
+    @Published private(set) var undoable: Session?
+    @Published private(set) var memory: MemoryInfo?
+    @Published private(set) var usage: [UsageAccount] = []
+    @Published private(set) var cloudSessions: [CloudSession] = []
+    @Published private(set) var look = Avatars.Look()
     @Published var lastError: String?
     @Published var openChat: String?   // a session key to navigate to (notification tap)
     @Published var openJarvis = false  // Siri / Action Button shortcut
@@ -77,6 +86,10 @@ final class AppModel: ObservableObject {
 
     private init() {
         locked = UserDefaults.standard.bool(forKey: "lockEnabled")
+        if let raw = JSON.parse(avatarLookRaw) { look = Avatars.look(from: raw) }
+        if let cached = Self.loadSessionCache() {
+            for s in cached.array.compactMap(Session.from) { sessions[s.key] = s }
+        }
         if let seed = Keychain.get("ssh-seed"), let id = try? Identity(rawSeed: seed) { identity = id }
         else { let id = Identity(); Keychain.set(id.rawSeed, for: "ssh-seed"); identity = id }
         monitor.pathUpdateHandler = { [weak self] path in
@@ -240,12 +253,18 @@ final class AppModel: ObservableObject {
     private func handle(_ ev: JSON) {
         let seq = ev["seq"].int ?? 0
         let replay = ev.flag("replay")
-        defer { if seq > lastSeq { lastSeq = seq } }
+        defer { if seq > lastSeq { lastSeq = seq }; if seq > 0 || ev.str("type") == "hello_ok" { lastSync = Date().timeIntervalSince1970 } }
         switch ev.str("type") {
         case "hello_ok":
             state = .connected
             var fresh: [String: Session] = [:]
             for s in ev["sessions"].array.compactMap(Session.from) { fresh[s.key] = s }
+            saveSessionCache(ev["sessions"])
+            applyConfig(ev["config"])
+            // sessions seen elsewhere after their last activity count as read
+            var u = unread
+            for s in fresh.values where Triage.seenAfterActivity(s) { u.remove(s.key) }
+            if u != unread { unread = u }
             // keep known dormant sessions the user may be looking at
             for (k, s) in sessions where fresh[k] == nil && (s.exited || s.closed) { fresh[k] = s }
             sessions = fresh
@@ -271,7 +290,13 @@ final class AppModel: ObservableObject {
             let key = ev.str("session_key")
             sessions[key]?.asks = false
         case "session_seen":
-            var u = unread; u.remove(ev.str("session_key")); unread = u
+            let key = ev.str("session_key")
+            var u = unread; u.remove(key); unread = u
+            // "ready" and "ended" notifications go; a question stays while the session waits
+            if let s = session(for: key), s.waits { break }
+            clearNotifications(for: key)
+        case "cloud_sessions":
+            cloudSessions = ev["sessions"].array.compactMap(CloudSession.from)
         case "transcript_append":
             let key = ev.str("session_key")
             let msgs = ev["messages"].array.map(TMessage.from)
@@ -381,11 +406,125 @@ final class AppModel: ObservableObject {
 
     func refresh() async {
         do {
-            let r = try await rpc("list_sessions", ["include_dormant": .bool(showDormant), "limit": 100])
+            var p: [String: JSON] = ["include_dormant": .bool(showDormant), "limit": 100]
+            if showBackground { p["include_background"] = true }
+            let r = try await rpc("list_sessions", .object(p))
             var fresh: [String: Session] = [:]
             for s in r["sessions"].array.compactMap(Session.from) { fresh[s.key] = s }
             sessions = fresh
+            lastSync = Date().timeIntervalSince1970
+            if !showDormant && !showBackground { saveSessionCache(r["sessions"]) }
         } catch { lastError = error.localizedDescription }
+    }
+
+    // MARK: triage data
+
+    /// Sessions the "Weiter" queue and the strip count (no closing ones, no headless runs).
+    var triageSessions: [Session] {
+        sessions.values.filter { !hidden.contains($0.key) && !$0.background && !$0.placeholder }
+    }
+
+    func loadMemory() async {
+        if let r = try? await rpc("memory", ["summary": true]) { memory = MemoryInfo.from(r) }
+    }
+
+    func loadUsage() async {
+        if let r = try? await rpc("usage", ["refresh": false], timeout: 60) { usage = r["accounts"].array.map(UsageAccount.from) }
+    }
+
+    /// While the list is visible: memory every 30 s, usage every 120 s. Cancelled with the view's task.
+    func pollTriage() async {
+        var tick = 0
+        while !Task.isCancelled {
+            if state == .connected {
+                await loadMemory()
+                if tick % 4 == 0 { await loadUsage() }
+                tick += 1
+            }
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+        }
+    }
+
+    func markAllRead() {
+        let waiting = Set(sessions.values.filter { $0.waits }.map(\.key))
+        let ids = unread.subtracting(waiting).map { "s-\($0)" }
+        unread = []
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
+    }
+
+    // MARK: close with undo, rename, kill
+
+    private var closeTasks: [String: Task<Void, Never>] = [:]
+
+    func canClose(_ s: Session) -> Bool { s.alive && !s.exited && !s.background && s.attachable && !s.placeholder }
+
+    /// The row disappears at once; the gateway's `close` runs after 6 s unless `undoClose` comes first. A running app
+    /// asks iOS for background time so the close still happens when it goes away meanwhile.
+    func softClose(_ s: Session) {
+        let key = s.key
+        hidden.insert(key)
+        undoable = s
+        closeTasks[key]?.cancel()
+        closeTasks[key] = Task {
+            await BackgroundRefresh.withBackgroundTime {
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                guard !Task.isCancelled else { return }
+                self.closeTasks[key] = nil
+                if self.undoable?.key == key { self.undoable = nil }
+                if await self.connectOnce() {
+                    do { _ = try await self.rpc("close", ["key": .string(key), "stop": .bool(s.state == "busy")]) }
+                    catch { self.lastError = "Nicht geschlossen: \(error.localizedDescription)" }
+                } else {
+                    self.lastError = "Nicht geschlossen: keine Verbindung"
+                }
+                self.hidden.remove(key)
+                await self.refresh()
+                self.releaseBackground()
+            }
+        }
+    }
+
+    func undoClose(_ s: Session) {
+        closeTasks[s.key]?.cancel()
+        closeTasks[s.key] = nil
+        hidden.remove(s.key)
+        if undoable?.key == s.key { undoable = nil }
+    }
+
+    func rename(_ s: Session, to name: String) async {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { return }
+        do { try await send(s, text: "/rename \(n)", force: true) } catch { lastError = error.localizedDescription }
+    }
+
+    func kill(_ s: Session) async {
+        do { _ = try await rpc("kill", ["key": .string(s.key)]); await refresh() }
+        catch { lastError = error.localizedDescription }
+    }
+
+    // MARK: avatars and offline list
+
+    private func applyConfig(_ config: JSON) {
+        guard config.object != nil else { return }
+        var raw: [String: JSON] = [:]
+        for k in ["avatars", "avatar_colors", "avatar_topics"] where config.has(k) { raw[k] = config[k] }
+        let l = Avatars.look(from: .object(raw))
+        if l != look { look = l; avatarLookRaw = JSON.object(raw).serialized() }
+    }
+
+    private static var cacheURL: URL? {
+        try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent("sessions-cache.json")
+    }
+
+    private static func loadSessionCache() -> JSON? {
+        guard let u = cacheURL, let d = try? Data(contentsOf: u) else { return nil }
+        return JSON.parse(d)
+    }
+
+    private func saveSessionCache(_ list: JSON) {
+        guard let u = Self.cacheURL, let d = list.serialized().data(using: .utf8) else { return }
+        try? d.write(to: u, options: .atomic)
     }
 
     func send(_ s: Session, text: String, force: Bool = false) async throws {
@@ -455,7 +594,11 @@ final class AppModel: ObservableObject {
     // MARK: derived lists
 
     var visibleSessions: [Session] {
-        sessions.values.filter { !$0.background && (showDormant || !($0.exited || $0.closed || $0.hibernated)) }
+        sessions.values.filter { s in
+            if hidden.contains(s.key) || (s.background && !showBackground) { return false }
+            let dormant = s.exited || s.closed || s.hibernated
+            return showDormant ? dormant : !dormant
+        }
     }
 
     func session(for ref: String) -> Session? {

@@ -69,6 +69,45 @@ extension Session {
     }
 }
 
+/// The state of a session as a small shape: spinner (busy), red ring with dot (waits), green dot (ready), hollow ring (ended).
+/// `stale` (offline list): all grey, no spinner.
+struct StateDot: View {
+    let state: String
+    var stale = false
+
+    private var word: String {
+        let w: String
+        switch state {
+        case "busy": w = "arbeitet"
+        case "needs_input": w = "wartet"
+        case "exited": w = "beendet"
+        default: w = "bereit"
+        }
+        return stale ? "\(w), zuletzt bekannt" : w
+    }
+
+    var body: some View {
+        Group {
+            switch state {
+            case "busy":
+                if stale { Circle().fill(Color.gray).frame(width: 9, height: 9) }
+                else { ProgressView().controlSize(.mini).tint(.accentColor) }
+            case "needs_input":
+                let c: Color = stale ? .gray : .red
+                Circle().strokeBorder(c, lineWidth: 2).frame(width: 14, height: 14)
+                    .overlay(Circle().fill(c).frame(width: 6, height: 6))
+            case "exited":
+                Circle().strokeBorder(Color.gray, lineWidth: 1.5).frame(width: 10, height: 10)
+            default:
+                Circle().fill(stale ? Color.gray : Color.green).frame(width: 9, height: 9)
+            }
+        }
+        .frame(width: 14, height: 14)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(word)
+    }
+}
+
 struct StateBadge: View {
     let state: String
     var body: some View {

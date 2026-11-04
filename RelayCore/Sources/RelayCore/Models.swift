@@ -68,6 +68,7 @@ public struct Session: Sendable, Hashable, Identifiable {
     public let question: Question?
     public let hibernated: Bool
     public let closed: Bool
+    public let closedReason: String
     public let seenAt: Double
     public let context: SessionContext?
     public var asks: Bool
@@ -106,7 +107,7 @@ public struct Session: Sendable, Hashable, Identifiable {
             tmuxSession: (tmux?.isEmpty ?? true) ? nil : tmux,
             lastActivity: o.num("last_activity"), lastMessage: o.str("last_message"),
             duplicates: o["duplicates"].int ?? 1, remoteUrl: o.str("remote_url"), background: o.flag("background"),
-            question: Question.from(o["question"]), hibernated: o.flag("hibernated"), closed: o.flag("closed"),
+            question: Question.from(o["question"]), hibernated: o.flag("hibernated"), closed: o.flag("closed"), closedReason: o.str("closed_reason"),
             seenAt: o.num("seen_at"), context: SessionContext.from(o["context"]),
             asks: o.flag("asks"), asksText: o.str("asks_text"))
     }
@@ -263,4 +264,21 @@ public struct DirEntry: Sendable, Hashable, Identifiable {
     public var id: String { path }
     public let name: String, path: String, isGit: Bool
     public init(name: String, path: String, isGit: Bool) { self.name = name; self.path = path; self.isGit = isGit }
+}
+
+// MARK: cloud sessions (claude.ai/code, rpc/event `cloud_sessions`)
+
+public struct CloudSession: Sendable, Hashable, Identifiable {
+    public let id: String, alias: String, title: String, repo: String, branch: String
+    public let state: String, question: String, detail: String, url: String
+    public let lastAt: Double
+    public let unread: Bool
+    public var waiting: Bool { state == "waiting" }
+
+    public static func from(_ o: JSON) -> CloudSession? {
+        let id = o.str("id"); guard !id.isEmpty else { return nil }
+        return CloudSession(id: id, alias: o.str("alias"), title: o.str("title", id), repo: o.str("repo"), branch: o.str("branch"),
+                            state: o.str("state"), question: o.str("question"), detail: o.str("detail"), url: o.str("url"),
+                            lastAt: o.num("last_at"), unread: o.flag("unread"))
+    }
 }
