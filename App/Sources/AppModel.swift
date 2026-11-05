@@ -435,7 +435,7 @@ final class AppModel: ObservableObject {
         let mute = UNNotificationAction(identifier: "mute", title: "Stummschalten", options: [])
         let cat = UNNotificationCategory(identifier: "session", actions: [reply, done, mute], intentIdentifiers: [], options: [])
         // "ready" notifications also carry the first quick reply ("Weiter") as a one-tap action
-        var readyActions = [reply]
+        var readyActions: [UNNotificationAction] = [reply]
         if let q = ChatPrefs.quickReplies.first { readyActions.append(UNNotificationAction(identifier: "quick", title: q, options: auth)) }
         readyActions += [done, mute]
         let ready = UNNotificationCategory(identifier: "session-ready", actions: readyActions, intentIdentifiers: [], options: [])

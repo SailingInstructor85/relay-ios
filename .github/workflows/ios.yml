@@ -35,13 +35,14 @@ jobs:
           echo "Relay $V (${{ github.run_number }})"
       - name: Build (unsigned)
         run: |
-          set -o pipefail
           xcodebuild -project Relay.xcodeproj -scheme Relay -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
-            build | tee build.log | grep -E "error:|warning: .*deprecated|BUILD" || true
+            build > build.log 2>&1 && rc=0 || rc=$?
+          grep -E "error:|BUILD (SUCCEEDED|FAILED)" build.log | sort -u || true
+          test "$rc" -eq 0
           test -d build/Build/Products/Release-iphoneos/Relay.app
       - name: Package IPA
         run: |

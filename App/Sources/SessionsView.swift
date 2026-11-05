@@ -16,7 +16,7 @@ struct SessionsView: View {
     @State private var killTarget: Session?
     @State private var showKill = false
 
-    enum Dest: Hashable { case chat(String), settings, usage, memory, jarvis, jarvisListening, notices, notice(String) }
+    enum Dest: Hashable { case chat(String), settings, usage, memory, jarvis, jarvisListening, notices, notice(String), digest, tokens }
 
     private func haystack(_ s: Session) -> String { "\(s.name) \(s.alias) \(s.folder) \(s.cwd)" }
 
@@ -41,6 +41,26 @@ struct SessionsView: View {
 
     private var stale: Bool { model.state != .connected }
 
+    @ViewBuilder private var listContent: some View {
+        let all = filtered
+        if model.showDormant {
+            section("Zuletzt", sorted(all))
+        } else {
+            let waiting = sorted(all.filter { $0.s.waits })
+            let busy = sorted(all.filter { $0.s.state == "busy" && !$0.s.waits })
+            let idle = sorted(all.filter { $0.s.state == "idle" && !$0.s.waits })
+            let other = sorted(all.filter { !$0.s.waits && $0.s.state != "busy" && $0.s.state != "idle" })
+            section("Wartet auf dich", waiting, extra: cloudWaiting)
+            section("Arbeitet", busy)
+            section("Bereit", idle)
+            section("Sonstige", other)
+        }
+        if all.isEmpty && model.state == .connected {
+            ContentUnavailableView(model.showDormant ? "Keine letzten Sitzungen" : "Keine Sitzungen", systemImage: "terminal",
+                                   description: Text(model.showDormant ? "Beendete und geschlossene Sitzungen erscheinen hier." : "Starte eine neue Sitzung mit +"))
+        }
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             List {
@@ -51,23 +71,7 @@ struct SessionsView: View {
                     }.pickerStyle(.segmented)
                 }.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                 if model.state != .connected { connectionRow }
-                let all = filtered
-                if model.showDormant {
-                    section("Zuletzt", sorted(all))
-                } else {
-                    let waiting = sorted(all.filter { $0.s.waits })
-                    let busy = sorted(all.filter { $0.s.state == "busy" && !$0.s.waits })
-                    let idle = sorted(all.filter { $0.s.state == "idle" && !$0.s.waits })
-                    let other = sorted(all.filter { !$0.s.waits && $0.s.state != "busy" && $0.s.state != "idle" })
-                    section("Wartet auf dich", waiting, extra: cloudWaiting)
-                    section("Arbeitet", busy)
-                    section("Bereit", idle)
-                    section("Sonstige", other)
-                }
-                if all.isEmpty && model.state == .connected {
-                    ContentUnavailableView(model.showDormant ? "Keine letzten Sitzungen" : "Keine Sitzungen", systemImage: "terminal",
-                                           description: Text(model.showDormant ? "Beendete und geschlossene Sitzungen erscheinen hier." : "Starte eine neue Sitzung mit +"))
-                }
+                listContent
             }
             .listStyle(.insetGrouped)
             .searchable(text: $search, prompt: "Sitzungen suchen")
