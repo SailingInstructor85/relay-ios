@@ -48,6 +48,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var memory: MemoryInfo?
     @Published private(set) var usage: [UsageAccount] = []
     @Published private(set) var cloudSessions: [CloudSession] = []
+    @Published private(set) var cloudError = ""
+    @Published private(set) var cloudChecked: Double = 0
     @Published private(set) var look = Avatars.Look()
     @Published var lastError: String?
     @Published var openChat: String?   // a session key to navigate to (notification tap)
@@ -313,6 +315,7 @@ final class AppModel: ObservableObject {
             dropMissed(key)
         case "cloud_sessions":
             cloudSessions = ev["sessions"].array.compactMap(CloudSession.from)
+            cloudChecked = ev.num("checked_at"); cloudError = ev.str("error")
         case "transcript_append":
             let key = ev.str("session_key")
             let msgs = ev["messages"].array.map(TMessage.from)
@@ -484,6 +487,15 @@ final class AppModel: ObservableObject {
 
     func loadMemory() async {
         if let r = try? await rpc("memory", ["summary": true]) { memory = MemoryInfo.from(r) }
+    }
+
+    /// rpc `cloud_sessions` (gateway caches 60 s). Errors stay as text in `cloudError`, never thrown.
+    func loadCloud(refresh: Bool = false) async {
+        do {
+            let r = try await rpc("cloud_sessions", ["refresh": .bool(refresh)], timeout: 40)
+            cloudSessions = r["sessions"].array.compactMap(CloudSession.from)
+            cloudChecked = r.num("checked_at"); cloudError = r.str("error")
+        } catch { cloudError = error.localizedDescription }
     }
 
     func loadUsage() async {

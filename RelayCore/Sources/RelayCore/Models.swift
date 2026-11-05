@@ -116,6 +116,9 @@ public struct Session: Sendable, Hashable, Identifiable {
 public struct Account: Sendable, Hashable, Identifiable {
     public var id: String { alias }
     public let alias: String, tool: String, label: String, home: String, loggedIn: Bool
+    public init(alias: String, tool: String, label: String, home: String, loggedIn: Bool) {
+        self.alias = alias; self.tool = tool; self.label = label; self.home = home; self.loggedIn = loggedIn
+    }
     public static func from(_ o: JSON) -> Account? {
         let a = o.str("alias"); guard !a.isEmpty else { return nil }
         return Account(alias: a, tool: o.str("tool"), label: o.str("label", a), home: o.str("home"), loggedIn: o.flag("logged_in", true))
@@ -245,18 +248,51 @@ public struct ScreenMenu: Sendable, Hashable {
 
 // MARK: usage / memory
 
-public struct UsageWindow: Sendable, Hashable { public let name: String; public let pct: Double; public let resetsAt: Double; public let runsOutAt: Double? }
+public struct UsageWindow: Sendable, Hashable {
+    public let name: String, pct: Double, resetsAt: Double
+    public let runsOutAt: Double?
+    /// `forecast.unused_at_reset_pct`: what stays unused until the reset at the current pace (nil without forecast).
+    public let unusedAtReset: Double?
+    public init(name: String, pct: Double, resetsAt: Double, runsOutAt: Double? = nil, unusedAtReset: Double? = nil) {
+        self.name = name; self.pct = pct; self.resetsAt = resetsAt; self.runsOutAt = runsOutAt; self.unusedAtReset = unusedAtReset
+    }
+}
+
+/// `extras` of the main Claude account (cloud credit, extra usage, use by product).
+public struct UsageExtras: Sendable, Hashable {
+    public struct Credit: Sendable, Hashable { public let limit: Double, used: Double, left: Double, currency: String, expiresAt: Double, locked: Bool }
+    public struct Extra: Sendable, Hashable { public let enabled: Bool, currency: String, used: Double, limit: Double?, balance: Double?, autoReload: Bool, reason: String }
+    public struct Part: Sendable, Hashable { public let name: String, pct: Double, resetsAt: Double }
+    public let asOf: Double, credit: Credit?, extra: Extra?, byProduct: [Part], scoped: [Part], error: String
+    public var isEmpty: Bool { credit == nil && extra == nil && byProduct.isEmpty && scoped.isEmpty && error.isEmpty }
+
+    public static func from(_ o: JSON) -> UsageExtras? {
+        guard o.object != nil else { return nil }
+        let c = o["cloud_credit"], e = o["extra_usage"]
+        let parts: (JSON) -> [Part] = { $0.array.map { Part(name: $0.str("name"), pct: $0.num("pct"), resetsAt: $0.num("resets_at")) } }
+        return UsageExtras(
+            asOf: o.num("as_of"),
+            credit: c.object == nil ? nil : Credit(limit: c.num("limit"), used: c.num("used"), left: c.num("left"), currency: c.str("currency"),
+                                                   expiresAt: c.num("expires_at"), locked: c.flag("locked")),
+            extra: e.object == nil ? nil : Extra(enabled: e.flag("enabled"), currency: e.str("currency"), used: e.num("used"), limit: e["limit"].double,
+                                                 balance: e["balance"].double, autoReload: e.flag("auto_reload"), reason: e.str("reason")),
+            byProduct: parts(o["by_product"]), scoped: parts(o["scoped"]), error: o.str("error"))
+    }
+}
+
 public struct UsageAccount: Sendable, Hashable, Identifiable {
     public var id: String { alias }
     public let alias: String, tool: String, label: String, plan: String, error: String
     public let windows: [UsageWindow]
     public let gone: Bool
+    public let extras: UsageExtras?
     public static func from(_ o: JSON) -> UsageAccount {
         UsageAccount(alias: o.str("alias"), tool: o.str("tool"), label: o.str("label", o.str("alias")), plan: o.str("plan"),
                      error: o.str("error"),
                      windows: o["windows"].array.map { UsageWindow(name: $0.str("name"), pct: $0.num("pct"), resetsAt: $0.num("resets_at"),
-                                                                     runsOutAt: $0["forecast"]["runs_out_at"].double) },
-                     gone: o.flag("gone"))
+                                                                     runsOutAt: $0["forecast"]["runs_out_at"].double,
+                                                                     unusedAtReset: $0["forecast"]["unused_at_reset_pct"].double) },
+                     gone: o.flag("gone"), extras: UsageExtras.from(o["extras"]))
     }
 }
 
@@ -273,12 +309,14 @@ public struct CloudSession: Sendable, Hashable, Identifiable {
     public let state: String, question: String, detail: String, url: String
     public let lastAt: Double
     public let unread: Bool
+    public let costUsd: Double, model: String
     public var waiting: Bool { state == "waiting" }
 
     public static func from(_ o: JSON) -> CloudSession? {
         let id = o.str("id"); guard !id.isEmpty else { return nil }
         return CloudSession(id: id, alias: o.str("alias"), title: o.str("title", id), repo: o.str("repo"), branch: o.str("branch"),
                             state: o.str("state"), question: o.str("question"), detail: o.str("detail"), url: o.str("url"),
-                            lastAt: o.num("last_at"), unread: o.flag("unread"))
+                            lastAt: o.num("last_at"), unread: o.flag("unread"),
+                            costUsd: o.num("cost_usd"), model: o.str("model"))
     }
 }

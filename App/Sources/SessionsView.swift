@@ -7,6 +7,7 @@ struct SessionsView: View {
     @State private var path = NavigationPath()
     @State private var search = ""
     @State private var showNew = false
+    @State private var showPower = false
     @State private var confirmClose: Session?
     @State private var showConfirmClose = false
     @State private var renameTarget: Session?
@@ -78,11 +79,15 @@ struct SessionsView: View {
                         Button { path.append(Dest.jarvis) } label: { Label("Jarvis fragen", systemImage: "waveform") }
                         Button { path.append(Dest.usage) } label: { Label("Nutzung & Limits", systemImage: "gauge.with.dots.needle.33percent") }
                         Button { path.append(Dest.memory) } label: { Label("RAM-Monitor", systemImage: "memorychip") }
+                        Button { path.append(Dest.digest) } label: { Label("Was war los", systemImage: "newspaper") }
+                        Button { path.append(Dest.tokens) } label: { Label("Token-Verbrauch", systemImage: "chart.bar") }
                         Button { path.append(Dest.notices) } label: { Label("Hinweise", systemImage: "bell.badge") }
                         Button { model.markAllRead() } label: { Label("Alle gelesen", systemImage: "checkmark.circle") }
                             .disabled(model.unread.isEmpty)
                         Toggle(isOn: $model.showBackground) { Label("Hintergrundläufe", systemImage: "moon.zzz") }
                         Button { model.reconnect() } label: { Label("Neu verbinden", systemImage: "arrow.clockwise") }
+                        Button { showPower = true } label: { Label("Desktop ausschalten ...", systemImage: "power") }
+                            .disabled(model.state != .connected)
                         Button { path.append(Dest.settings) } label: { Label("Einstellungen", systemImage: "gear") }
                     } label: { Image(systemName: "ellipsis.circle") }
                 }
@@ -100,12 +105,15 @@ struct SessionsView: View {
                 case .settings: SetupView()
                 case .usage: UsageView()
                 case .memory: MemoryView()
+                case .digest: DigestView()
+                case .tokens: TokensView()
                 case .jarvis: JarvisView()
                 case .jarvisListening: JarvisView(autoListen: true)
                 case .notices: NoticeView(ref: nil, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice)
                 case .notice(let ref): NoticeView(ref: ref, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice)
                 }
             }
+            .sheet(isPresented: $showPower) { PowerView().environmentObject(model) }
             .sheet(isPresented: $showNew) {
                 NewSessionView { target in
                     showNew = false

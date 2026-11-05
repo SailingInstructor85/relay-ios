@@ -55,6 +55,7 @@ struct SetupView: View {
             if !firstRun {
                 NotifySettingsSection()
                 ChatSettingsSection()
+                AgentSettingsSection()
                 Section("Sicherheit") {
                     Toggle("Mit Face ID sperren", isOn: $model.lockEnabled)
                     Text("Relay sperrt sich, sobald die App in den Hintergrund geht.").font(.caption).foregroundStyle(.secondary)
