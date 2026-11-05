@@ -27,11 +27,11 @@ CFG
 chmod -R a+rwX "$D"; chmod 600 "$D/host_key" "$D/verify_key"
 sudo /usr/sbin/sshd -f "$D/sshd_config" -E "$D/sshd.log"
 sleep 1
-echo "sshd laeuft:"; pgrep -fl "sshd -f $D" || { cat "$D/sshd.log"; exit 1; }
+echo "sshd laeuft:"; pgrep -fl "sshd -f $D" || { sudo cat "$D/sshd.log"; exit 1; }
 # Prüfung mit gewöhnlichem ssh: hello -> hello_ok
 OUT=$(printf '{"type":"hello","since_seq":0,"client":"ci"}\n{"type":"rpc","id":"1","method":"ping","params":{}}\n' \
-  | timeout 20 ssh -i "$D/verify_key" -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes "$(whoami)@127.0.0.1" serve | head -c 3000 || true)
+  | ssh -o ConnectTimeout=10 -i "$D/verify_key" -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes "$(whoami)@127.0.0.1" serve | head -c 3000 || true)
 echo "$OUT" | cut -c1-300
-echo "$OUT" | grep -q hello_ok || { echo "FEHLER: kein hello_ok ueber ssh"; cat "$D/sshd.log" | tail -30; exit 1; }
+echo "$OUT" | grep -q hello_ok || { echo "FEHLER: kein hello_ok ueber ssh"; sudo tail -30 "$D/sshd.log"; exit 1; }
 echo "ssh-Pruefung ok"
 rm -f "$D/state.json" "$D/rpc.jsonl"; chmod -R a+rwX "$D"
