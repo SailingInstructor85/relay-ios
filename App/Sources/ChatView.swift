@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import ImageIO
 import UniformTypeIdentifiers
 import RelayCore
 
@@ -33,6 +34,7 @@ struct ChatView: View {
     @State private var confirmForce: String?
     @State private var photo: PhotosPickerItem?
     @State private var importing = false
+    @State private var pickingPhoto = false
     @State private var uploadInfo = ""
     @State private var showScreen = false
     @State private var showSearch = false
@@ -132,6 +134,7 @@ struct ChatView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item]) { result in
             if case .success(let url) = result { Task { await uploadFile(url) } }
         }
+        .photosPicker(isPresented: $pickingPhoto, selection: $photo, matching: .any(of: [.images, .videos]), preferredItemEncoding: .compatible)
         .onChange(of: photo) { _, item in if let item { Task { await uploadPhoto(item) } } }
         .confirmationDialog("Die Sitzung arbeitet gerade.", isPresented: Binding(get: { confirmForce != nil }, set: { if !$0 { confirmForce = nil } }), titleVisibility: .visible) {
             Button("Trotzdem senden") { if let t = confirmForce { Task { await send(t, force: true) } } }
@@ -200,7 +203,8 @@ struct ChatView: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 Menu {
-                    PhotosPicker(selection: $photo, matching: .any(of: [.images, .videos])) { Label("Foto oder Video", systemImage: "photo") }
+                    // A PhotosPicker inside a Menu does not open on iOS; the menu item only sets a flag for .photosPicker below.
+                    Button { pickingPhoto = true } label: { Label("Foto oder Video", systemImage: "photo") }
                     if CameraPicker.available { Button { camera = true } label: { Label("Kamera", systemImage: "camera") } }
                     if UIPasteboard.general.hasImages { Button { Task { await uploadClipboard() } } label: { Label("Bild aus Zwischenablage", systemImage: "doc.on.clipboard") } }
                     Button { importing = true } label: { Label("Datei", systemImage: "doc") }
@@ -565,8 +569,11 @@ struct ChatView: View {
             return
         }
         guard let data = try? await item.loadTransferable(type: Data.self) else { error = "Foto konnte nicht geladen werden"; return }
-        let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
-        await upload(name: "foto-\(stamp).\(ext)", data: data, photo: true, mime: item.supportedContentTypes.first?.preferredMIMEType)
+        // With .compatible encoding iOS may hand over JPEG for a HEIC original, so the name follows the bytes, not the item.
+        let type = CGImageSourceCreateWithData(data as CFData, nil).flatMap { CGImageSourceGetType($0) }.flatMap { UTType($0 as String) }
+            ?? item.supportedContentTypes.first
+        let ext = type?.preferredFilenameExtension ?? "jpg"
+        await upload(name: "foto-\(stamp).\(ext)", data: data, photo: true, mime: type?.preferredMIMEType)
     }
 
     private func uploadClipboard() async {
