@@ -41,8 +41,8 @@ final class ListTests: RelayTestCase {
 
     func test03_PinMuteSwipe() {
         launchConnected()
-        let row = row("API Refactoring")!
-        row.swipeRight()
+        let r0 = row("API Refactoring")!
+        r0.swipeRight()
         settle(0.6)
         shot("swipe-rechts")
         tap("Pin", soft: true)
