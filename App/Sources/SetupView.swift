@@ -55,6 +55,7 @@ struct SetupView: View {
             if !firstRun {
                 NotifySettingsSection()
                 ChatSettingsSection()
+                SpeechSettingsSection()
                 AgentSettingsSection()
                 Section("Sicherheit") {
                     Toggle("Mit Face ID sperren", isOn: $model.lockEnabled)

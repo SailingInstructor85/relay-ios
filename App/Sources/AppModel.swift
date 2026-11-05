@@ -54,6 +54,10 @@ final class AppModel: ObservableObject {
     @Published var lastError: String?
     @Published var openChat: String?   // a session key to navigate to (notification tap)
     @Published var openJarvis = false  // Siri / Action Button shortcut
+    @Published var voiceLive = false   // hello_ok.config.voice == "live": the Desktop offers Jarvis Live (not used here)
+    var conversationActive = false     // Jarvis conversation mode is running (set by JarvisView)
+    var lastJarvisWarm = Date.distantPast
+    var jarvisWarmUnsupported = false
     @Published var locked = false      // Face ID lock shown
     @Published var openNotice: String? // a notice ref to open (notification tap)
     @Published private(set) var desktopSleepAt: Date?  // `desktop_sleep`: the PC suspends, retry every 5 min
@@ -67,7 +71,7 @@ final class AppModel: ObservableObject {
     private var kick = false
     private let monitor = NWPathMonitor()
     private var hasNetwork = true
-    private var foreground = true
+    var foreground = true
     var visibleChat: String?
     /// When the link last carried anything (event or answer): `ensureAlive` pings when it was quiet for a while.
     var lastTraffic = Date()
@@ -384,6 +388,7 @@ final class AppModel: ObservableObject {
             addMissed(s.key, Missed(title: title, body: body, line: "\(s.name): \(needs || asks ? "wartet auf dich" : "fertig")", alert: al))
             return
         }
+        if ready && !asks { announceFinished(s) }
         if s.key == visibleChat && foreground { return }
         notify(s, title: title, body: body, ready: ready && !asks, silent: al == .silent)
     }
@@ -576,6 +581,8 @@ final class AppModel: ObservableObject {
 
     private func applyConfig(_ config: JSON) {
         guard config.object != nil else { return }
+        let live = VoiceMode.isLive(config["voice"].string)
+        if live != voiceLive { voiceLive = live }
         var raw: [String: JSON] = [:]
         for k in ["avatars", "avatar_colors", "avatar_topics"] where config.has(k) { raw[k] = config[k] }
         let l = Avatars.look(from: .object(raw))

@@ -1,7 +1,7 @@
 import Foundation
 import AVFoundation
 import Speech
-import NaturalLanguage
+import RelayCore
 
 /// Speech in and out for Jarvis: on-device recognition (SFSpeechRecognizer) with the gateway's vocabulary, and
 /// spoken replies sentence by sentence while the answer streams in (AVSpeechSynthesizer).
@@ -13,6 +13,8 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     var terms: [String] = []
     var corrections: [(heard: String, meant: String)] = []
+    private var hyps: [String] = []
+    private var hypConf: [Float] = []
 
     private let engine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -24,7 +26,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     private let synth = AVSpeechSynthesizer()
     private var pendingUtterances = 0
-    private var speechBuffer = ""
+    private var splitter = SentenceSplitter()
     private var speakWaiters: [CheckedContinuation<Void, Never>] = []
 
     override init() {
@@ -49,8 +51,9 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     /// Records until the speaker pauses (1.6 s after the last recognised word), `stopListening()` is called, nothing is
     /// heard for 7 s, or 45 s pass. Returns the recognised text with the gateway's corrections applied ("" = nothing).
-    func listen(locale: String = "de-DE") async throws -> String {
+    func listen(locale: String? = nil) async throws -> String {
         stopSpeaking()
+        let locale = locale ?? SpeechPrefs.recognitionLocale
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)), recognizer.isAvailable else {
             throw RelayErrorText("Spracherkennung für \(locale) ist gerade nicht verfügbar.")
         }
@@ -62,7 +65,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         req.shouldReportPartialResults = true
         if recognizer.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
         req.addsPunctuation = true
-        req.contextualStrings = Array(terms.prefix(100))
+        req.contextualStrings = SpeechVocab.biasing(terms)
         request = req
 
         let input = engine.inputNode
@@ -72,12 +75,13 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         try engine.start()
 
         partial = ""
+        hyps = []; hypConf = []
         listening = true
         started = Date()
         lastHeard = Date()
-        task = Self.recognize(recognizer, req) { [weak self] text, final in
+        task = Self.recognize(recognizer, req) { [weak self] text, alts, conf, final in
             guard let self else { return }
-            if let text, !text.isEmpty { self.partial = text; self.lastHeard = Date() }
+            if let text, !text.isEmpty { self.partial = text; self.lastHeard = Date(); self.hyps = alts; self.hypConf = conf }
             if final { self.endListening() }
         }
         watchdog = Task { [weak self] in
@@ -106,7 +110,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         request?.endAudio()
         task?.cancel()
         request = nil; task = nil
-        let text = partial
+        let text = SpeechVocab.pick(hyps, conf: hypConf, terms: SpeechVocab.scoringTerms(terms: terms, corrections: corrections)) ?? partial
         finishListening?.resume(returning: text)
         finishListening = nil
     }
@@ -118,44 +122,37 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     }
 
     nonisolated private static func recognize(_ r: SFSpeechRecognizer, _ req: SFSpeechAudioBufferRecognitionRequest,
-                                              _ onResult: @escaping @MainActor (String?, Bool) -> Void) -> SFSpeechRecognitionTask {
+                                              _ onResult: @escaping @MainActor (String?, [String], [Float], Bool) -> Void) -> SFSpeechRecognitionTask {
         r.recognitionTask(with: req) { result, error in
             let text = result?.bestTranscription.formattedString
+            let alts = result?.transcriptions.map(\.formattedString) ?? []
+            let conf: [Float] = result?.transcriptions.map { t in
+                t.segments.isEmpty ? 0 : t.segments.map(\.confidence).reduce(0, +) / Float(t.segments.count)
+            } ?? []
             let final = (result?.isFinal ?? false) || error != nil
-            Task { @MainActor in onResult(text, final) }
+            Task { @MainActor in onResult(text, alts, conf, final) }
         }
     }
 
     func applyCorrections(_ s: String) -> String {
-        var out = s
-        for c in corrections where !c.heard.isEmpty {
-            out = out.replacingOccurrences(of: c.heard, with: c.meant, options: [.caseInsensitive])
-        }
-        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+        SpeechVocab.correct(s, corrections).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: speaking
 
     /// Feeds streamed answer text; complete sentences are spoken at once, the rest waits for more text or `flush()`.
     func feed(_ delta: String) {
-        speechBuffer += delta
-        while let r = speechBuffer.range(of: #"[.!?:;]\s|\n"#, options: .regularExpression) {
-            let sentence = String(speechBuffer[..<r.upperBound])
-            speechBuffer = String(speechBuffer[r.upperBound...])
-            say(sentence)
-        }
+        for sentence in splitter.add(delta) { say(sentence) }
     }
 
     func flush() {
-        let rest = speechBuffer
-        speechBuffer = ""
-        say(rest)
+        if let rest = splitter.end() { say(rest) }
     }
 
-    func speak(_ text: String) { speechBuffer = ""; feed(text); flush() }
+    func speak(_ text: String) { splitter.reset(); feed(text); flush() }
 
     func stopSpeaking() {
-        speechBuffer = ""
+        splitter.reset()
         if synth.isSpeaking { synth.stopSpeaking(at: .immediate) }
         pendingUtterances = 0
         speaking = false
@@ -164,16 +161,14 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     /// Returns once everything queued has been spoken (or speaking was stopped).
     func waitUntilSpoken() async {
-        if pendingUtterances == 0 && speechBuffer.isEmpty { return }
+        if pendingUtterances == 0 && splitter.isEmpty { return }
         await withCheckedContinuation { c in speakWaiters.append(c) }
     }
 
     private func say(_ raw: String) {
         let text = Self.speakable(raw)
         guard text.rangeOfCharacter(from: .alphanumerics) != nil else { return }
-        let u = AVSpeechUtterance(string: text)
-        u.voice = Self.voice(for: text)
-        u.rate = AVSpeechUtteranceDefaultSpeechRate * 1.05
+        let u = Self.utterance(text)
         pendingUtterances += 1
         speaking = true
         try? AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .duckOthers])
@@ -193,7 +188,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         pendingUtterances = max(0, pendingUtterances - 1)
         if pendingUtterances == 0 {
             speaking = false
-            if speechBuffer.isEmpty { resumeSpeakWaiters() }
+            if splitter.isEmpty { resumeSpeakWaiters() }
         }
     }
 
@@ -214,16 +209,60 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         return t.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// An utterance with the chosen voice, language (per sentence when "auto") and tempo.
+    static func utterance(_ text: String) -> AVSpeechUtterance {
+        let u = AVSpeechUtterance(string: text)
+        u.voice = SpeechPrefs.voice(for: text)
+        let rate = AVSpeechUtteranceDefaultSpeechRate * Float(SpeechPrefs.tempo)
+        u.rate = min(max(rate, AVSpeechUtteranceMinimumSpeechRate), AVSpeechUtteranceMaximumSpeechRate)
+        return u
+    }
+}
+
+/// Settings of speech in and out (UserDefaults; the settings view uses the same keys through `@AppStorage`).
+enum SpeechPrefs {
+    static let recogKey = "speechRecog", langKey = "speechLang", tempoKey = "speechTempo"
+    static let voiceDeKey = "voiceDe", voiceEnKey = "voiceEn", readFinishedKey = "readFinished"
+
+    private static var d: UserDefaults { .standard }
+
+    /// Recognition locale for the setting auto | de | en.
+    static var recognitionLocale: String {
+        Voices.recognitionLocale(setting: d.string(forKey: recogKey) ?? "auto", preferred: Locale.preferredLanguages)
+    }
+    static var tempo: Double {
+        let t = d.object(forKey: tempoKey) as? Double ?? 1.0
+        return min(max(t, 0.5), 1.5)
+    }
+    static var readFinished: Bool { d.bool(forKey: readFinishedKey) }
+
+    /// Installed offline voices of a language ("de" or "en"), best first. Novelty and Eloquence voices are left out.
+    static func voices(_ lang: String) -> [AVSpeechSynthesisVoice] {
+        let home = lang == "de" ? ["de-DE"] : ["en-US", "en-GB"]
+        return AVSpeechSynthesisVoice.speechVoices()
+            .filter { home.contains($0.language) && !$0.identifier.contains("eloquence") && !$0.identifier.contains("speech.synthesis.voice") }
+            .sorted {
+                let a = Voices.rank(quality: $0.quality.rawValue, language: $0.language, lang: lang)
+                let b = Voices.rank(quality: $1.quality.rawValue, language: $1.language, lang: lang)
+                return a != b ? a > b : $0.name < $1.name
+            }
+    }
+
+    static func label(_ v: AVSpeechSynthesisVoice) -> String {
+        let q: String
+        switch v.quality { case .premium: q = "premium"; case .enhanced: q = "enhanced"; default: q = "kompakt" }
+        return "\(v.name) · \(v.language) · \(q)"
+    }
+
+    /// The chosen voice for a language if still installed, else the best one.
+    static func voice(lang: String) -> AVSpeechSynthesisVoice? {
+        let all = voices(lang)
+        let chosen = d.string(forKey: lang == "de" ? voiceDeKey : voiceEnKey) ?? ""
+        return all.first { $0.identifier == chosen } ?? all.first ?? AVSpeechSynthesisVoice(language: lang == "de" ? "de-DE" : "en-US")
+    }
+
     static func voice(for text: String) -> AVSpeechSynthesisVoice? {
-        let r = NLLanguageRecognizer()
-        r.languageConstraints = [.german, .english]
-        r.processString(text)
-        let lang = (r.dominantLanguage == .english && text.count > 12) ? "en" : "de"
-        let candidates = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix(lang) }
-        let preferred = lang == "de" ? "de-DE" : "en-US"
-        return candidates.filter { $0.language == preferred }.max { $0.quality.rawValue < $1.quality.rawValue }
-            ?? candidates.max { $0.quality.rawValue < $1.quality.rawValue }
-            ?? AVSpeechSynthesisVoice(language: preferred)
+        voice(lang: Voices.langFor(text, setting: d.string(forKey: langKey) ?? "auto"))
     }
 }
 

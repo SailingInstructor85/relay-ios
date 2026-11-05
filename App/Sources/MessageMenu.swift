@@ -91,9 +91,7 @@ final class SpeechOut: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         if speaking { stop(); return }
         let text = VoiceIO.speakable(markdown)
         guard text.rangeOfCharacter(from: .alphanumerics) != nil else { return }
-        let u = AVSpeechUtterance(string: text)
-        u.voice = VoiceIO.voice(for: text)
-        u.rate = AVSpeechUtteranceDefaultSpeechRate * 1.05
+        let u = VoiceIO.utterance(text)
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
         try? AVAudioSession.sharedInstance().setActive(true)
         speaking = true
