@@ -129,8 +129,10 @@ final class AppModel: ObservableObject {
     var setupCommand: String { "notifyd setup key \"\(publicKey)\"" }
 
     private init() {
+        UITestMode.prepare()
         locked = UserDefaults.standard.bool(forKey: "lockEnabled")
-        if let seed = Keychain.get("ssh-seed"), let id = try? Identity(rawSeed: seed) { identity = id }
+        if let seed = UITestMode.seed, let id = try? Identity(rawSeed: seed) { identity = id }
+        else if let seed = Keychain.get("ssh-seed"), UITestMode.active == false, let id = try? Identity(rawSeed: seed) { identity = id }
         else { let id = Identity(); Keychain.set(id.rawSeed, for: "ssh-seed"); identity = id }
         if let raw = JSON.parse(avatarLookRaw) { look = Avatars.look(from: raw) }
         if let cached = Self.loadSessionCache() {

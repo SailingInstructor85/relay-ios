@@ -57,3 +57,27 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_STYLE: Automatic
+  RelayUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: App/UITests
+    dependencies:
+      - target: Relay
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.relay.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Relay
+        CODE_SIGN_STYLE: Automatic
+schemes:
+  Relay:
+    build:
+      targets:
+        Relay: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - RelayUITests

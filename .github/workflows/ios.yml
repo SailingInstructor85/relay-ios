@@ -70,3 +70,73 @@ jobs:
             Relay.ipa
             Relay-unsigned.ipa
             source.json
+
+  simulator:
+    runs-on: macos-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Generate project
+        run: brew install xcodegen && xcodegen generate
+      - name: Simulator waehlen und starten
+        run: |
+          xcrun simctl list devices available | grep -i iphone | head -30
+          UDID=$(python3 testing/pick_sim.py)
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl list devices | grep "$UDID"
+      - name: sshd und Mock-Gateway
+        run: testing/ci_sshd.sh
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild -project Relay.xcodeproj -scheme Relay -configuration Debug \
+            -sdk iphonesimulator -destination "id=$UDID" -derivedDataPath build-sim \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build-for-testing > build-sim.log 2>&1 && rc=0 || rc=$?
+          grep -E "error:|BUILD (SUCCEEDED|FAILED)|TEST BUILD (SUCCEEDED|FAILED)" build-sim.log | sort -u || true
+          test "$rc" -eq 0
+      - name: UI-Tests
+        run: |
+          rm -rf Results.xcresult
+          TEST_RUNNER_RELAY_UI_PORT=2222 TEST_RUNNER_RELAY_UI_USER="$(whoami)" \
+          xcodebuild -project Relay.xcodeproj -scheme Relay -configuration Debug \
+            -sdk iphonesimulator -destination "id=$UDID" -derivedDataPath build-sim \
+            -resultBundlePath Results.xcresult -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            test-without-building > test.log 2>&1 && rc=0 || rc=$?
+          echo "$rc" > test.rc
+          grep -E "Test Case .* (passed|failed)|TEST (SUCCEEDED|FAILED)|error:" test.log | tail -150 || true
+          echo "xcodebuild rc=$rc"
+      - name: Screenshots exportieren
+        if: always()
+        run: |
+          mkdir -p out
+          xcrun xcresulttool get test-results summary --path Results.xcresult > out/summary.json 2>&1 || true
+          xcrun xcresulttool get test-results tests --path Results.xcresult > out/tests.json 2>&1 || true
+          xcrun xcresulttool export attachments --path Results.xcresult --output-path out/raw 2>&1 | tail -5 || true
+          python3 testing/export_shots.py out/raw out/shots || true
+          cp /tmp/relaymock/mock.log /tmp/relaymock/rpc.jsonl /tmp/relaymock/sshd.log out/ 2>/dev/null || true
+          cp test.log build-sim.log out/ 2>/dev/null || true
+          xcrun simctl spawn "$UDID" log show --last 30m --predicate 'process == "Relay"' --style compact > out/relay-app.log 2>&1 || true
+          ls out/shots | wc -l
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simulator-results
+          path: |
+            out/shots
+            out/*.json
+            out/*.log
+            out/rpc.jsonl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xcresult
+          path: Results.xcresult
+      - name: Ergebnis
+        run: test "$(cat test.rc)" -eq 0

@@ -100,14 +100,14 @@ struct SessionsView: View {
                     Button { showPower = true } label: { Label("Desktop ausschalten ...", systemImage: "power") }
                         .disabled(model.state != .connected)
                     Button { path.append(Dest.settings) } label: { Label("Einstellungen", systemImage: "gear") }
-                } label: { Image(systemName: "ellipsis.circle") }
+                } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("Menü").accessibilityIdentifier("mainMenu")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { path.append(Dest.jarvisListening) } label: { Image(systemName: "mic") }
                     .accessibilityLabel("Jarvis per Sprache")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showNew = true } label: { Image(systemName: "plus") }.disabled(model.state != .connected)
+                Button { showNew = true } label: { Image(systemName: "plus") }.disabled(model.state != .connected).accessibilityLabel("Neue Sitzung").accessibilityIdentifier("newSession")
             }
         }
         .task { await model.pollTriage() }

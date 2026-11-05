@@ -206,7 +206,7 @@ struct ChatView: View {
                     Button { importing = true } label: { Label("Datei", systemImage: "doc") }
                 } label: { Image(systemName: "paperclip").font(.title3) }
                 TextField("Nachricht an die Sitzung", text: $input, axis: .vertical)
-                    .lineLimit(1...6).focused($focused)
+                    .lineLimit(1...6).focused($focused).accessibilityIdentifier("chatInput")
                     .submitLabel(returnSends ? .send : .return)
                     .onSubmit { if returnSends && canSend { Task { await send(input) } } }
                     .padding(8).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
@@ -215,7 +215,7 @@ struct ChatView: View {
                 }.accessibilityLabel(voice.listening ? "Diktat beenden" : "Diktieren")
                 Button { Task { await send(input) } } label: {
                     Image(systemName: sending ? "hourglass" : "arrow.up.circle.fill").font(.system(size: 30))
-                }.disabled(!canSend)
+                }.disabled(!canSend).accessibilityLabel("Senden").accessibilityIdentifier("chatSend")
             }
             .padding(.horizontal).padding(.bottom, 6)
         }
@@ -377,7 +377,7 @@ struct ChatView: View {
                         if let c = s.context { Text("Kontext: \(c.label) (\(c.pct) %)") }
                     }
                 }
-            } label: { Image(systemName: "ellipsis.circle") }
+            } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("Sitzungsmenü").accessibilityIdentifier("chatMenu")
         }
         ToolbarItem(placement: .topBarTrailing) {
             if session?.liveTmux != nil { Button { showScreen = true } label: { Image(systemName: "terminal") } }
