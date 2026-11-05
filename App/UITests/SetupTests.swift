@@ -28,9 +28,8 @@ final class SetupTests: RelayTestCase {
         focus(port); port.typeText("\u{8}\u{8}" + (env["RELAY_UI_PORT"] ?? "2222") + "\n"); settle(0.5)
         shot("einrichtung-port")
         let user = app.textFields["Benutzer"]
-        focus(user); user.typeText(env["RELAY_UI_USER"] ?? NSUserName())
+        focus(user); user.typeText((env["RELAY_UI_USER"] ?? NSUserName()) + "\n"); settle(0.6)
         shot("einrichtung-ausgefuellt")
-        dismissKeyboard()
         tap("Verbinden", exact: true)
         XCTAssertTrue(has("Wartet auf dich", 30), "nach dem Verbinden keine Sitzungsliste")
         shot("liste-nach-verbinden")
