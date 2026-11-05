@@ -14,7 +14,15 @@ final class SetupTests: RelayTestCase {
         app.swipeUp()
         settle(0.5)
         XCTAssertTrue(host.waitForExistence(timeout: 5), "Hostfeld fehlt")
-        func focus(_ e: XCUIElement) { e.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).tap(); settle(0.4) }
+        func focus(_ e: XCUIElement) {
+            for _ in 0..<3 {
+                e.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).tap(); settle(0.6)
+                if app.keyboards.count > 0 { return }
+                dismissSystemAlerts()
+            }
+            shot("kein-fokus")
+        }
+        shot("einrichtung-gescrollt")
         focus(host); host.typeText("127.0.0.1")
         let port = app.textFields["Port"]
         focus(port); port.typeText("\u{8}\u{8}" + (env["RELAY_UI_PORT"] ?? "2222"))

@@ -59,7 +59,7 @@ struct PowerView: View {
             .confirmationDialog(ask == .off ? "Desktop wirklich ausschalten?" : "Desktop in Standby schicken?", isPresented: Binding(get: { ask != nil }, set: { if !$0 { ask = nil } }), titleVisibility: .visible, presenting: ask) { a in
                 Button(dryRun ? "\(a.title) (Testlauf)" : a.title, role: .destructive) { Task { await run(a) } }
             } message: { _ in
-                Text((status?.busy.isEmpty ?? true) ? "Offene Sitzungen enden." : "\(status?.busy.count ?? 0) Sitzungen arbeiten gerade und werden unterbrochen.")
+                Text((status?.busy.isEmpty ?? true) ? "Offene Sitzungen enden." : ((status?.busy.count ?? 0) == 1 ? "1 Sitzung arbeitet gerade und wird unterbrochen." : "\(status?.busy.count ?? 0) Sitzungen arbeiten gerade und werden unterbrochen."))
             }
             .task { await load() }
         }

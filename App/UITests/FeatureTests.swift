@@ -16,8 +16,8 @@ final class NewSessionTests: RelayTestCase {
         // Ordnersuche
         let q = app.textFields["Ordner suchen…"]
         if q.exists { q.tap(); q.typeText("bill"); settle(2); shot("neu-ordnersuche"); }
-        expect("billing", 4, soft: true)
-        tap("billing", soft: true)
+        expect("/home/dev/workspace/billing", 4, soft: true)
+        tap("/home/dev/workspace/billing", exact: true, soft: true)
         settle(0.8)
         shot("neu-ordner-gewaehlt")
     }
@@ -28,12 +28,15 @@ final class NewSessionTests: RelayTestCase {
         settle(1.5)
         tap("Durchsuchen", soft: true)
         settle(2)
+        app.swipeUp(); settle(0.5)
         shot("neu-durchsuchen")
-        tap("workspace", 3, soft: true)
+        tap("workspace", 3, exact: true, soft: true)
         settle(1.5)
+        app.swipeUp(); settle(0.5)
         shot("neu-workspace")
         let name = app.textFields.matching(NSPredicate(format: "placeholderValue CONTAINS 'Name'")).firstMatch
-        if name.exists { name.tap(); name.typeText("neuprojekt"); dismissKeyboard() }
+        if name.exists { name.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).tap(); name.typeText("neuprojekt"); dismissKeyboard() }
+        for _ in 0..<3 where !has("Neuer Ordner", 0.5) { app.swipeUp() }
         tap("Neuer Ordner", soft: true)
         settle(1.5)
         shot("neu-mkdir")
@@ -47,12 +50,12 @@ final class NewSessionTests: RelayTestCase {
         let q = app.textFields["Ordner suchen…"]
         q.tap(); q.typeText("webapp"); settle(2)
         shot("start-suche")
-        tap("webapp", soft: true)
+        tap("/home/dev/workspace/webapp", exact: true, soft: true)
         settle(0.6)
         let msg = app.textFields["Erste Nachricht"]
         if msg.exists { msg.tap(); msg.typeText("Hallo neue Sitzung"); dismissKeyboard() }
         shot("start-bereit")
-        for l in ["Starten", "Sitzung starten", "Los"] where tap(l, 1, exact: true, soft: true) { break }
+        tap("Starten", 2, exact: true, soft: true)
         settle(4)
         shot("start-nach-launch")
         XCTAssertTrue(mockReceived("launch"), "launch nicht aufgerufen")
@@ -155,7 +158,7 @@ final class InfoTests: RelayTestCase {
         shot("freigabe-streifen")
         if tap("E-Mail an frau@example.com", 3, soft: true) || tap("Freigabe", 2, soft: true) {
             settle(1.5); shot("freigabe-sheet")
-            tap("Freigeben", 2, soft: true)
+            tap("Freigeben", 2, exact: true, soft: true)
             settle(1.5); shot("freigabe-erledigt")
             XCTAssertTrue(mockReceived("send_result", where: { $0["ok"] as? Bool == true }))
         }
@@ -166,7 +169,8 @@ final class InfoTests: RelayTestCase {
         mainMenu("Jarvis fragen")
         settle(1.5)
         shot("jarvis-leer")
-        typeInto("Jarvis schreiben…", "Was läuft gerade?", enter: true)
+        typeInto("jarvisInput", "Was läuft gerade?")
+        tapID("jarvisSend")
         settle(0.8)
         shot("jarvis-streamt")
         settle(5)
@@ -206,9 +210,9 @@ final class InfoTests: RelayTestCase {
         }
         shot("mitteilungen-abschnitt")
         let sw = app.switches["Ruhezeiten"]
-        if sw.exists { sw.tap(); settle(0.8); shot("ruhezeiten-an"); expect("Von", 2, soft: true) }
+        if sw.exists { sw.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap(); settle(0.8); shot("ruhezeiten-an"); expect("Von", 2, soft: true) }
         let sw2 = app.switches["Still, wenn ich am PC bin"]
-        if sw2.exists { sw2.tap(); settle(0.5); shot("still-am-pc") }
+        if sw2.exists { sw2.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap(); settle(0.5); shot("still-am-pc") }
     }
 
     func test14_VoiceSettings() {
@@ -235,7 +239,7 @@ final class InfoTests: RelayTestCase {
         let f = app.textFields.matching(NSPredicate(format: "value CONTAINS 'Musterstadt'")).firstMatch
         if f.exists { f.tap(); f.typeText("x"); dismissKeyboard() }
         shot("profil-geaendert")
-        for l in ["Speichern", "Sichern"] where tap(l, 1, exact: true, soft: true) { break }
+        tap("Auf dem Desktop speichern", 2, soft: true)
         settle(1.5); shot("profil-gespeichert")
     }
 
@@ -253,7 +257,7 @@ final class InfoTests: RelayTestCase {
         for _ in 0..<10 { if has("Return sendet", 0.4) { break }; app.swipeUp() }
         shot("sitzungs-einstellungen")
         let sw = app.switches["Return sendet"]
-        if sw.exists { sw.tap(); settle(0.5); shot("return-sendet-an") }
+        if sw.exists { sw.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap(); settle(0.5); shot("return-sendet-an") }
     }
 
     func test18_HostKeyForget() {
@@ -261,6 +265,7 @@ final class InfoTests: RelayTestCase {
         mainMenu("Einstellungen")
         settle(1)
         shot("hostkey-vor")
+        for _ in 0..<3 where !has("Host-Schlüssel vergessen", 0.5) { app.swipeUp() }
         tap("Host-Schlüssel vergessen", soft: true)
         settle(5)
         shot("hostkey-neu-gepinnt")

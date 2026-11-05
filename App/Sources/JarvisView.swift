@@ -57,11 +57,12 @@ struct JarvisView: View {
             micBar
             HStack {
                 TextField("Jarvis schreiben…", text: $input, axis: .vertical).lineLimit(1...4)
-                    .focused($inputFocused)
+                    .focused($inputFocused).accessibilityIdentifier("jarvisInput")
                     .padding(8).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
                 Button { let q = input; input = ""; Task { await ask(q, byVoice: false) } } label: {
                     Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
-                }.disabled(input.trimmingCharacters(in: .whitespaces).isEmpty || asking)
+                }.disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || asking)
+                    .accessibilityLabel("Senden").accessibilityIdentifier("jarvisSend")
             }.padding([.horizontal, .bottom])
         }
         .navigationTitle("Jarvis")
@@ -240,7 +241,7 @@ struct TeachRecognitionView: View {
                 }
                 if let e = error { Text(e).foregroundStyle(.red).font(.callout) }
                 if let d = done { Text("Gemerkt: \(d)").foregroundStyle(.green).font(.callout) }
-                Section("Bekannt (\(voice.corrections.count) Korrekturen, \(voice.terms.count) Begriffe)") {
+                Section("Bekannt (\(voice.corrections.count) \(voice.corrections.count == 1 ? "Korrektur" : "Korrekturen"), \(voice.terms.count) \(voice.terms.count == 1 ? "Begriff" : "Begriffe"))") {
                     ForEach(Array(voice.corrections.prefix(30).enumerated()), id: \.offset) { _, c in
                         Text("\(c.heard) → \(c.meant)").font(.callout)
                     }

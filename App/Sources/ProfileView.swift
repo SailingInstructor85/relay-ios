@@ -21,14 +21,20 @@ struct ProfileView: View {
             Section("Angaben") {
                 ForEach(ProfileFields.all, id: \.key) { f in
                     HStack {
-                        TextField(f.label, text: Binding(get: { fields[f.key] ?? "" }, set: { fields[f.key] = $0 }))
-                            .autocorrectionDisabled()
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(f.label).font(.caption).foregroundStyle(.secondary)
+                            TextField(f.label, text: Binding(get: { fields[f.key] ?? "" }, set: { fields[f.key] = $0 }))
+                                .autocorrectionDisabled()
+                        }
                         copyButton(fields[f.key] ?? "")
                     }
                 }
                 HStack {
-                    TextField("E-Mail-Adressen (mit Komma getrennt)", text: $emails)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.emailAddress)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("E-Mail-Adressen").font(.caption).foregroundStyle(.secondary)
+                        TextField("E-Mail-Adressen (mit Komma getrennt)", text: $emails)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.emailAddress)
+                    }
                     copyButton(emails)
                 }
             }

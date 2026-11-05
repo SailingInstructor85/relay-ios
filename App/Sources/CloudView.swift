@@ -22,7 +22,7 @@ struct CloudSection: View {
         } header: {
             Text("Cloud-Sitzungen")
         } footer: {
-            if model.cloudChecked > 0 { Text("Geprüft \(Date(timeIntervalSince1970: model.cloudChecked), style: .relative). Tippen öffnet die Sitzung.") }
+            if model.cloudChecked > 0 { Text("Tippen öffnet die Sitzung. Geprüft vor \(Date(timeIntervalSince1970: model.cloudChecked), style: .relative)") }
         }
     }
 }

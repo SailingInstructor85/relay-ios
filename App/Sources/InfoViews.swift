@@ -188,7 +188,7 @@ struct MemoryView: View {
                             HStack {
                                 VStack(alignment: .leading) {
                                     Text(s.str("title", s.str("key"))).lineLimit(1)
-                                    Text("\(s.str("alias")) · \(s.str("state"))").font(.caption).foregroundStyle(.secondary)
+                                    Text("\(s.str("alias")) · \(Self.stateDE(s.str("state")))").font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 Text(mb(s.num("mb") + s.num("swap_mb"))).font(.callout.monospacedDigit())
@@ -276,6 +276,10 @@ struct MemoryView: View {
             catch { self.error = error.localizedDescription }
             await load()
         }
+    }
+
+    static func stateDE(_ s: String) -> String {
+        switch s { case "busy": return "arbeitet"; case "idle": return "bereit"; case "needs_input": return "wartet auf dich"; case "exited": return "beendet"; default: return s }
     }
 
     private func load() async {

@@ -75,7 +75,7 @@ final class ScreenTests: RelayTestCase {
         shot("live-bildschirm")
         expect("pytest", 4, soft: true)
         for k in ["Esc", "↑", "↓", "Tab", "1"] {
-            if let e = find(k, exact: true), e.isHittable { e.tap(); settle(0.3) }
+            if let e = find(k, exact: true), e.exists, e.frame.maxX < 400, e.frame.minX >= 0 { e.tap(); settle(0.3) }
         }
         settle(0.8)
         shot("live-bildschirm-tasten")
