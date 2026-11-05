@@ -11,14 +11,16 @@ final class SetupTests: RelayTestCase {
         shot("einrichtung-befehl-kopiert")
         // Felder ausfüllen
         let host = app.textFields.matching(NSPredicate(format: "placeholderValue CONTAINS 'Host'")).firstMatch
-        for _ in 0..<3 where !host.isHittable { app.swipeUp() }
+        app.swipeUp()
+        settle(0.5)
         XCTAssertTrue(host.waitForExistence(timeout: 5), "Hostfeld fehlt")
-        host.tap(); host.typeText("127.0.0.1")
+        func focus(_ e: XCUIElement) { e.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).tap(); settle(0.4) }
+        focus(host); host.typeText("127.0.0.1")
         let port = app.textFields["Port"]
-        port.tap(); port.typeText("\u{8}\u{8}" + (env["RELAY_UI_PORT"] ?? "2222"))
+        focus(port); port.typeText("\u{8}\u{8}" + (env["RELAY_UI_PORT"] ?? "2222"))
         shot("einrichtung-port")
         let user = app.textFields["Benutzer"]
-        user.tap(); user.typeText(env["RELAY_UI_USER"] ?? NSUserName())
+        focus(user); user.typeText(env["RELAY_UI_USER"] ?? NSUserName())
         shot("einrichtung-ausgefuellt")
         dismissKeyboard()
         tap("Verbinden", exact: true)

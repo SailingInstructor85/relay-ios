@@ -13,7 +13,7 @@ final class ScreenTests: RelayTestCase {
         settle(0.8); shot("frage-zweite")
         tap("Export als CSV", 2, soft: true)
         settle(0.5); shot("frage-mehrfach")
-        for label in ["Senden", "Antworten", "Fertig"] where tap(label, 1, exact: true, soft: true) { break }
+        tap("Antworten senden", 3, soft: true)
         settle(2); shot("frage-beantwortet")
         XCTAssertTrue(mockReceived("send", where: { $0["steps"] != nil || $0["keys"] != nil }), "Antwort kam nicht beim Mock an")
     }
@@ -45,7 +45,7 @@ final class ScreenTests: RelayTestCase {
         settle(2.5)
         shot("freigabe-prompt")
         expect("Do you want to proceed", 4, soft: true)
-        tap("Yes", exact: true, soft: true)
+        tap("1. Yes", soft: true)
         settle(1.5)
         shot("freigabe-ja")
     }
@@ -74,7 +74,9 @@ final class ScreenTests: RelayTestCase {
         settle(2.5)
         shot("live-bildschirm")
         expect("pytest", 4, soft: true)
-        for k in ["Esc", "↑", "↓", "Tab", "^C", "1"] { tap(k, 1, exact: true, soft: true) }
+        for k in ["Esc", "↑", "↓", "Tab", "1"] {
+            if let e = find(k, exact: true), e.isHittable { e.tap(); settle(0.3) }
+        }
         settle(0.8)
         shot("live-bildschirm-tasten")
         XCTAssertTrue(mockReceived("send", where: { ($0["keys"] as? [String])?.contains("Escape") == true }))

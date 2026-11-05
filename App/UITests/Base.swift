@@ -59,7 +59,7 @@ class RelayTestCase: XCTestCase {
 
     // MARK: finden
 
-    private let kinds: [XCUIElement.ElementType] = [.button, .cell, .staticText, .textField, .textView, .secureTextField, .switch, .menuItem, .segmentedControl, .other]
+    private let kinds: [XCUIElement.ElementType] = [.link, .button, .cell, .staticText, .textField, .textView, .secureTextField, .switch, .menuItem, .segmentedControl, .other]
 
     func find(_ s: String, exact: Bool = false) -> XCUIElement? {
         let pred = exact ? NSPredicate(format: "label == %@ OR identifier == %@ OR value == %@", s, s, s)

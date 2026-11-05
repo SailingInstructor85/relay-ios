@@ -204,7 +204,7 @@ struct ChatView: View {
                     if CameraPicker.available { Button { camera = true } label: { Label("Kamera", systemImage: "camera") } }
                     if UIPasteboard.general.hasImages { Button { Task { await uploadClipboard() } } label: { Label("Bild aus Zwischenablage", systemImage: "doc.on.clipboard") } }
                     Button { importing = true } label: { Label("Datei", systemImage: "doc") }
-                } label: { Image(systemName: "paperclip").font(.title3) }
+                } label: { Image(systemName: "paperclip").font(.title3) }.accessibilityLabel("Anhängen").accessibilityIdentifier("attach")
                 TextField("Nachricht an die Sitzung", text: $input, axis: .vertical)
                     .lineLimit(1...6).focused($focused).accessibilityIdentifier("chatInput")
                     .submitLabel(returnSends ? .send : .return)

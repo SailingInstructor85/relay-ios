@@ -23,11 +23,13 @@ final class ChatTests: RelayTestCase {
             if i % 2 == 0 { settle(0.8) }
         }
         shot("chat-gescrollt")
-        for _ in 1...10 { app.swipeDown(velocity: .fast) }
-        settle(1.5)
+        for _ in 1...40 { if has("Ältere Nachrichten laden", 0.2) { break }; app.swipeDown(velocity: .fast) }
+        settle(1)
         shot("chat-weiter-oben")
-        for _ in 1...20 { app.swipeDown(velocity: .fast) }
-        settle(2)
+        for _ in 1..<4 where tap("Ältere Nachrichten laden", 2, soft: true) {
+            settle(1.5)
+            for _ in 1...30 { if has("Anfang des Gesprächs", 0.2) || has("Ältere Nachrichten laden", 0.2) { break }; app.swipeDown(velocity: .fast) }
+        }
         shot("chat-anfang")
         expect("Anfang des Gesprächs", 4, soft: true)
         XCTAssertTrue(mockReceived("transcript", where: { $0["before"] != nil }), "ältere Seite wurde nie geladen")
@@ -88,6 +90,10 @@ final class ChatTests: RelayTestCase {
         settle(1)
         shot("pfad-vorher")
         // Pfad im Text
+        revealChat("Read · README.md")
+        if let e = find("Read · README.md") {
+            e.tap(); settle(2); shot("werkzeugzeile-pfad-getippt"); tap("Schließen", soft: true)
+        } else { notes.append("Werkzeugzeile mit Pfad nicht gefunden") }
         revealChat("src/main.py")
         if let e = find("src/main.py:3") ?? find("/home/dev/workspace/webapp/src/main.py") {
             e.tap(); settle(2); shot("pfad-getippt")
@@ -125,7 +131,6 @@ final class ChatTests: RelayTestCase {
         XCTAssertTrue(mockReceived("transcript_search"))
         // Treffer antippen springt zur Stelle
         if app.cells.count > 0 { app.cells.firstMatch.tap(); settle(2); shot("chat-suche-sprung") }
-        f.tap()
     }
 
     func test08_SearchFromList() {
