@@ -23,6 +23,12 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private var lastHeard = Date()
     private var started = Date()
     private var watchdog: Task<Void, Never>?
+    private var recognizer: SFSpeechRecognizer?
+    private let sink = RequestSink()
+    private var segment = 0
+    private var segmentText = ""
+    private var committed = ""
+    private var restarts = 0
 
     private let synth = AVSpeechSynthesizer()
     private var pendingUtterances = 0
@@ -49,8 +55,15 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     // MARK: listening
 
-    /// Records until the speaker pauses (1.6 s after the last recognised word), `stopListening()` is called, nothing is
-    /// heard for 7 s, or 45 s pass. Returns the recognised text with the gateway's corrections applied ("" = nothing).
+    /// Pause after the last recognised word that ends the recording (time to think mid-sentence).
+    static let pauseLimit: TimeInterval = 3
+    /// Ends the recording when nothing at all is recognised this long after the start.
+    static let silentStartLimit: TimeInterval = 10
+
+    /// Records until the speaker pauses (`pauseLimit` after the last recognised word), `stopListening()` is called, or
+    /// nothing is heard for `silentStartLimit`. No overall cap: when the recogniser ends a segment on its own (its time
+    /// limit, an error) a new one starts on the same audio and the text is appended. Returns the recognised text with
+    /// the gateway's corrections applied ("" = nothing).
     func listen(locale: String? = nil) async throws -> String {
         stopSpeaking()
         let locale = locale ?? SpeechPrefs.recognitionLocale
@@ -61,38 +74,30 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .duckOthers])
         try session.setActive(true, options: .notifyOthersOnDeactivation)
 
-        let req = SFSpeechAudioBufferRecognitionRequest()
-        req.shouldReportPartialResults = true
-        if recognizer.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
-        req.addsPunctuation = true
-        req.contextualStrings = SpeechVocab.biasing(terms)
-        request = req
+        self.recognizer = recognizer
+        committed = ""
+        partial = ""
+        hyps = []; hypConf = []
+        restarts = 0
+        startSegment()
 
         let input = engine.inputNode
         input.removeTap(onBus: 0)
-        Self.installTap(on: input, into: req)
+        Self.installTap(on: input, into: sink)
         engine.prepare()
-        try engine.start()
+        do { try engine.start() } catch { abortSegment(); throw error }
 
-        partial = ""
-        hyps = []; hypConf = []
         listening = true
         started = Date()
         lastHeard = Date()
-        task = Self.recognize(recognizer, req) { [weak self] text, alts, conf, final in
-            guard let self else { return }
-            if let text, !text.isEmpty { self.partial = text; self.lastHeard = Date(); self.hyps = alts; self.hypConf = conf }
-            if final { self.endListening() }
-        }
         watchdog = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 200_000_000)
                 guard let self, self.listening else { return }
                 let now = Date()
                 let heardSomething = !self.partial.isEmpty
-                if heardSomething && now.timeIntervalSince(self.lastHeard) > 1.6 { self.endListening(); return }
-                if !heardSomething && now.timeIntervalSince(self.started) > 7 { self.endListening(); return }
-                if now.timeIntervalSince(self.started) > 45 { self.endListening(); return }
+                if heardSomething && now.timeIntervalSince(self.lastHeard) > Self.pauseLimit { self.endListening(); return }
+                if !heardSomething && now.timeIntervalSince(self.started) > Self.silentStartLimit { self.endListening(); return }
             }
         }
         let text = await withCheckedContinuation { c in finishListening = c }
@@ -101,24 +106,75 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     func stopListening() { endListening() }
 
+    /// A fresh recognition request and task; the audio tap feeds whichever request `sink` holds.
+    private func startSegment() {
+        guard let recognizer else { return }
+        let req = SFSpeechAudioBufferRecognitionRequest()
+        req.shouldReportPartialResults = true
+        if recognizer.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
+        req.addsPunctuation = true
+        req.contextualStrings = SpeechVocab.biasing(terms)
+        request = req
+        sink.set(req)
+        segment += 1
+        let id = segment
+        segmentText = ""
+        hyps = []; hypConf = []
+        task = Self.recognize(recognizer, req) { [weak self] text, alts, conf, final in
+            guard let self, self.listening, id == self.segment else { return }  // a stale callback of an older segment
+            if let text, !text.isEmpty {
+                self.segmentText = text; self.hyps = alts; self.hypConf = conf
+                self.partial = Self.join(self.committed, text)
+                self.lastHeard = Date()
+                self.restarts = 0
+            }
+            if final { self.segmentEnded() }
+        }
+    }
+
+    /// The recogniser ended a segment while the user still speaks or thinks: keep its text, go on with a new one.
+    /// Gives up after a few segments in a row that recognised nothing (a recogniser that fails at once).
+    private func segmentEnded() {
+        committed = Self.join(committed, bestSegmentText())
+        request?.endAudio()
+        task?.cancel()
+        restarts += 1
+        if restarts > 3 { endListening(); return }
+        startSegment()
+    }
+
+    private func bestSegmentText() -> String {
+        SpeechVocab.pick(hyps, conf: hypConf, terms: SpeechVocab.scoringTerms(terms: terms, corrections: corrections)) ?? segmentText
+    }
+
+    private func abortSegment() {
+        sink.set(nil)
+        request?.endAudio()
+        task?.cancel()
+        request = nil; task = nil
+    }
+
     private func endListening() {
         guard listening else { return }
         listening = false
         watchdog?.cancel(); watchdog = nil
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
-        request?.endAudio()
-        task?.cancel()
-        request = nil; task = nil
-        let text = SpeechVocab.pick(hyps, conf: hypConf, terms: SpeechVocab.scoringTerms(terms: terms, corrections: corrections)) ?? partial
+        let text = Self.join(committed, bestSegmentText())
+        abortSegment()
         finishListening?.resume(returning: text)
         finishListening = nil
     }
 
+    private static func join(_ a: String, _ b: String) -> String {
+        let a = a.trimmingCharacters(in: .whitespaces), b = b.trimmingCharacters(in: .whitespaces)
+        return a.isEmpty ? b : b.isEmpty ? a : a + " " + b
+    }
+
     /// Built outside the main actor: the audio tap runs on a realtime thread.
-    nonisolated private static func installTap(on node: AVAudioInputNode, into req: SFSpeechAudioBufferRecognitionRequest) {
+    nonisolated private static func installTap(on node: AVAudioInputNode, into sink: RequestSink) {
         let format = node.outputFormat(forBus: 0)
-        node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in req.append(buffer) }
+        node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in sink.append(buffer) }
     }
 
     nonisolated private static func recognize(_ r: SFSpeechRecognizer, _ req: SFSpeechAudioBufferRecognitionRequest,
@@ -270,4 +326,12 @@ struct RelayErrorText: LocalizedError {
     let text: String
     init(_ t: String) { text = t }
     var errorDescription: String? { text }
+}
+
+/// The request the audio tap feeds; swapped when a new recognition segment starts. The tap runs on a realtime thread.
+final class RequestSink: @unchecked Sendable {
+    private let lock = NSLock()
+    private var req: SFSpeechAudioBufferRecognitionRequest?
+    func set(_ r: SFSpeechAudioBufferRecognitionRequest?) { lock.lock(); req = r; lock.unlock() }
+    func append(_ b: AVAudioPCMBuffer) { lock.lock(); let r = req; lock.unlock(); r?.append(b) }
 }
