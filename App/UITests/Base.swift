@@ -53,7 +53,8 @@ class RelayTestCase: XCTestCase {
     /// Startet und wartet, bis die Sitzungsliste mit Daten da ist.
     func launchConnected() {
         launch()
-        XCTAssertTrue(has("API Refactoring", 25), "Sitzungsliste nicht geladen")
+        XCTAssertTrue(has("Wartet auf dich", 30), "Sitzungsliste nicht geladen")
+        settle(1)
     }
 
     // MARK: finden
@@ -120,7 +121,25 @@ class RelayTestCase: XCTestCase {
         tap(item, 4)
     }
 
+    /// Scrollt die Liste, bis ein Eintrag sichtbar ist (List rendert nur, was auf dem Bildschirm ist).
+    @discardableResult
+    func reveal(_ s: String) -> Bool {
+        for _ in 0..<3 { if let e = find(s), e.isHittable { return true }; Thread.sleep(forTimeInterval: 0.3) }
+        for _ in 0..<8 {
+            app.swipeUp()
+            if let e = find(s), e.isHittable { return true }
+        }
+        for _ in 0..<10 {
+            app.swipeDown()
+            if let e = find(s), e.isHittable { return true }
+        }
+        return false
+    }
+
+    func row(_ t: String) -> XCUIElement? { reveal(t); return find(t) }
+
     func openSession(_ title: String) {
+        reveal(title)
         tap(title, 8)
         Thread.sleep(forTimeInterval: 1.5)
     }

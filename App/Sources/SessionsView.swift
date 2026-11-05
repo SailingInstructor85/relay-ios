@@ -83,7 +83,7 @@ struct SessionsView: View {
         .onChange(of: search) { _, q in searcher.update(q, model: model) }
         .onChange(of: model.state) { _, _ in searcher.update(search, model: model) }
         .refreshable { await model.refresh() }
-        .navigationTitle("Relay")
+        .navigationTitle("Relay").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {

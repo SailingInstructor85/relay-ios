@@ -6,11 +6,13 @@ final class ListTests: RelayTestCase {
         settle(2)
         shot("liste-oben")
         expect("Wartet auf dich")
-        expect("Arbeitet")
-        expect("Bereit")
         expect("Abrechnung einrichten")
-        expect("Bench-Skript reparieren")
         expect("Datenbank migrieren") // asks: true
+        XCTAssertTrue(reveal("Arbeitet"))
+        XCTAssertTrue(reveal("Bench-Skript reparieren"))
+        XCTAssertTrue(reveal("Bereit"))
+        XCTAssertTrue(reveal("API Refactoring"))
+        reveal("Wartet auf dich")
         expect("brauch", 6, soft: true) // Triage "N brauchen dich"
         expect("RAM", 8, soft: true)
         app.swipeUp()
@@ -39,20 +41,20 @@ final class ListTests: RelayTestCase {
 
     func test03_PinMuteSwipe() {
         launchConnected()
-        let row = find("API Refactoring")!
+        let row = row("API Refactoring")!
         row.swipeRight()
         settle(0.6)
         shot("swipe-rechts")
         tap("Pin", soft: true)
         settle(0.8)
         shot("angepinnt")
-        find("API Refactoring")?.swipeRight()
+        row("API Refactoring")?.swipeRight()
         settle(0.5)
         tap("Stumm", soft: true)
         settle(0.8)
         shot("stumm")
         // Kontextmenü
-        find("API Refactoring")?.press(forDuration: 1.2)
+        row("API Refactoring")?.press(forDuration: 1.2)
         settle(0.8)
         shot("kontextmenue")
         expect("Anheften", 3, soft: true)
@@ -62,7 +64,7 @@ final class ListTests: RelayTestCase {
 
     func test04_CloseAndUndo() {
         launchConnected()
-        find("Datenbank migrieren")?.swipeLeft()
+        row("Datenbank migrieren")?.swipeLeft()
         settle(0.6)
         shot("swipe-links")
         tap("Schließen", soft: true)
@@ -77,7 +79,7 @@ final class ListTests: RelayTestCase {
 
     func test05_CloseBusyAsksConfirm() {
         launchConnected()
-        find("Bench-Skript reparieren")?.swipeLeft()
+        row("Bench-Skript reparieren")?.swipeLeft()
         settle(0.5)
         tap("Schließen", soft: true)
         settle(1)
@@ -88,7 +90,7 @@ final class ListTests: RelayTestCase {
 
     func test06_RenameViaContextMenu() {
         launchConnected()
-        find("API Refactoring")?.press(forDuration: 1.2)
+        row("API Refactoring")?.press(forDuration: 1.2)
         settle(0.8)
         if tap("Umbenennen", soft: true) {
             shot("umbenennen-dialog")
@@ -156,6 +158,7 @@ final class ListTests: RelayTestCase {
         ctl("kick")
         settle(5)
         shot("offline-liste")
+        reveal("API Refactoring")
         expect("API Refactoring")
         ctlRemove("offline")
         tap("Erneut", soft: true)

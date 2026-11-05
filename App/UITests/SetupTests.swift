@@ -11,17 +11,18 @@ final class SetupTests: RelayTestCase {
         shot("einrichtung-befehl-kopiert")
         // Felder ausfüllen
         let host = app.textFields.matching(NSPredicate(format: "placeholderValue CONTAINS 'Host'")).firstMatch
-        if !host.exists { app.swipeUp() }
+        for _ in 0..<3 where !host.isHittable { app.swipeUp() }
         XCTAssertTrue(host.waitForExistence(timeout: 5), "Hostfeld fehlt")
         host.tap(); host.typeText("127.0.0.1")
         let port = app.textFields["Port"]
         port.tap(); port.typeText("\u{8}\u{8}" + (env["RELAY_UI_PORT"] ?? "2222"))
+        shot("einrichtung-port")
         let user = app.textFields["Benutzer"]
         user.tap(); user.typeText(env["RELAY_UI_USER"] ?? NSUserName())
         shot("einrichtung-ausgefuellt")
         dismissKeyboard()
         tap("Verbinden", exact: true)
-        XCTAssertTrue(has("API Refactoring", 30), "nach dem Verbinden keine Sitzungsliste")
+        XCTAssertTrue(has("Wartet auf dich", 30), "nach dem Verbinden keine Sitzungsliste")
         shot("liste-nach-verbinden")
         // Host-Schlüssel gepinnt?
         mainMenu("Einstellungen")
@@ -36,7 +37,7 @@ final class SetupTests: RelayTestCase {
         settle(3)
         shot("nach-kick")
         mainMenu("Neu verbinden")
-        XCTAssertTrue(has("API Refactoring", 20))
+        XCTAssertTrue(has("Wartet auf dich", 20))
         shot("wieder-verbunden")
     }
 }

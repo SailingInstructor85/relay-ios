@@ -1,2 +1,3 @@
 SetupTests
-ChatTests/test01_OpenChatAndRichContent
+ListTests
+ChatTests
