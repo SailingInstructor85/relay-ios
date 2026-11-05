@@ -23,8 +23,10 @@ struct SetupView: View {
                 Text(model.setupCommand).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 HStack {
                     Button { UIPasteboard.general.string = model.setupCommand; flash("Befehl kopiert") } label: { Label("Befehl kopieren", systemImage: "doc.on.doc") }
+                        .buttonStyle(.borderless) // sonst löst ein Tipp in der Zeile beide Knöpfe aus
                     Spacer()
                     ShareLink(item: model.setupCommand) { Label("Teilen", systemImage: "square.and.arrow.up") }
+                        .buttonStyle(.borderless)
                 }
                 Button { UIPasteboard.general.string = model.publicKey; flash("Schlüssel kopiert") } label: { Label("Nur öffentlichen Schlüssel kopieren", systemImage: "key") }
                 if !copied.isEmpty { Text(copied).font(.caption).foregroundStyle(.green) }

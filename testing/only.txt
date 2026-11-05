@@ -1,0 +1,3 @@
+SetupTests
+NewSessionTests/test02_BrowseAndMkdir
+ScreenTests/test07_LiveScreenAndKeyBar
