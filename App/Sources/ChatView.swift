@@ -16,7 +16,17 @@ struct ChatView: View {
     @State private var input = ""
     @State private var sending = false
     @State private var menu: ScreenMenu?
-    @State private var status = ""
+    @State private var runItems: [RunningItem] = []
+    @State private var live: LiveStatus?
+    @State private var preview = ""
+    @State private var runningOpen = false
+    @State private var chatCtx = ChatContext()
+    @State private var summary: SummaryState?
+    @State private var camera = false
+    @State private var dictating = false
+    @State private var vocabLoaded = false
+    @StateObject private var voice = VoiceIO()
+    @ObservedObject private var outbox = Outbox.shared
     @State private var error: String?
     @State private var confirmForce: String?
     @State private var photo: PhotosPickerItem?
@@ -45,18 +55,14 @@ struct ChatView: View {
                             Text("Anfang des Gesprächs").font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.top, 8)
                         }
                         ForEach(messages) { m in MessageRow(m: m, highlighted: m.id == highlight).id(m.id) }
-                        if let s = session, s.state == "busy" {
-                            HStack(spacing: 8) { ProgressView(); Text(status.isEmpty ? "arbeitet…" : status).font(.footnote).foregroundStyle(.secondary) }
-                                .padding(.horizontal)
+                        ForEach(outbox.items(for: key)) { item in
+                            OutboxRow(item: item) { text in input = text; focused = true }
                         }
+                        if let s = session, s.state == "busy" || !runItems.isEmpty { workingLine(s) }
                         if let s = session, s.asksYou, !s.asksText.isEmpty {
                             AsksCard(text: s.asksText) { Task { await model.done(s) } }
                         }
-                        if let m = menu, let s = session {
-                            MenuCard(menu: m, session: s) { await refreshScreen() }
-                        } else if let s = session, let q = s.question {
-                            QuestionCard(q: q)
-                        }
+                        if let s = session { cards(s) }
                         Color.clear.frame(height: 1).id("bottom")
                     }
                     .padding(.vertical, 8)
@@ -72,12 +78,20 @@ struct ChatView: View {
                     }
                     return .handled
                 })
-                .onChange(of: messages.count) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
+                .onChange(of: messages.count) { _, _ in
+                    outbox.sweep(seen: messages.filter { $0.role == "user" }.map(\.text))
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
+                .onChange(of: outbox.items.count) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
                 .onChange(of: menu?.id) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
                 .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
                 .onChange(of: jumpTo) { _, id in
                     if let id { withAnimation { proxy.scrollTo(id, anchor: .top) }; jumpTo = nil }
                 }
+            }
+            if let sm = summary {
+                SummaryCard(state: sm, speaking: voice.speaking, onSpeak: { voice.speak($0) }, onStop: { voice.stopSpeaking() },
+                            onClose: { voice.stopSpeaking(); summary = nil })
             }
             if let e = error { ErrorBanner(text: Binding(get: { e }, set: { error = $0 })).padding(.vertical, 4) }
             if !uploadInfo.isEmpty { Text(uploadInfo).font(.caption).foregroundStyle(.secondary).padding(.top, 4) }
@@ -86,6 +100,17 @@ struct ChatView: View {
         .navigationTitle(session?.name ?? "Sitzung")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarItems }
+        .onChange(of: session?.state) { old, new in
+            if old == "busy" && new != "busy" { Task { await loadContext() } }
+        }
+        .fullScreenCover(isPresented: $camera) {
+            CameraPicker { img in
+                camera = false
+                if let img, let d = img.jpegData(compressionQuality: 0.95) {
+                    Task { await upload(name: "kamera-\(Int(Date().timeIntervalSince1970)).jpg", data: d, photo: true) }
+                }
+            }.ignoresSafeArea()
+        }
         .sheet(isPresented: $showSearch) {
             ChatSearchView(sessionKey: key) { id, index in Task { await jump(to: id, index: index) } }.environmentObject(model)
         }
@@ -110,34 +135,74 @@ struct ChatView: View {
         .onDisappear {
             model.visibleChat = nil
             model.transcriptListeners[sessionKey] = nil
+            voice.stopSpeaking(); voice.stopListening()
             Task { _ = try? await model.rpc("unwatch", ["key": .string(key)]) }
         }
     }
 
     // MARK: input
 
+    private var tool: String { session?.tool ?? "claude" }
+    private var slashChips: [String] { ChatPrefs.slash(tool) }
+    private var slashSuggestions: [String] { SlashCatalog.matches(SlashCatalog.forTool(tool, user: slashChips), input) }
+    private var canSend: Bool { !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending && session != nil }
+
     private var inputBar: some View {
         VStack(spacing: 6) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(["/compact", "/model", "/usage", "/clear", "/resume", "/status", "/effort"], id: \.self) { c in
-                        Button(c) { input = c + " "; focused = true }.font(.caption).buttonStyle(.bordered).buttonBorderShape(.capsule)
+            if !slashSuggestions.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(slashSuggestions, id: \.self) { c in
+                            Button { input = c + " "; focused = true } label: {
+                                Text(c).font(.system(.callout, design: .monospaced)).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
+                            }.buttonStyle(.plain)
+                            Divider()
+                        }
+                    }.padding(.horizontal)
+                }.frame(maxHeight: 190)
+            } else {
+                let quick = ChatPrefs.quickReplies
+                if !quick.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(quick, id: \.self) { q in
+                                Button(q) { Task { await send(q) } }.font(.callout)
+                                    .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.small)
+                                    .disabled(session == nil)
+                            }
+                        }.padding(.horizontal)
                     }
-                    Button { Task { if let s = session { try? await model.sendKeys(s, ["Escape"]); await refreshScreen() } } } label: { Text("Esc") }
-                        .font(.caption).buttonStyle(.bordered).buttonBorderShape(.capsule).tint(.red)
-                }.padding(.horizontal)
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(slashChips, id: \.self) { c in
+                            Button(c) { input = c + " "; focused = true }.font(.caption).buttonStyle(.bordered).buttonBorderShape(.capsule)
+                        }
+                        Button { Task { if let s = session { try? await model.sendKeys(s, ["Escape"]); await refreshScreen() } } } label: { Text("Esc") }
+                            .font(.caption).buttonStyle(.bordered).buttonBorderShape(.capsule).tint(.red)
+                    }.padding(.horizontal)
+                }
+            }
+            if voice.listening {
+                Label(voice.partial.isEmpty ? "Höre zu…" : voice.partial, systemImage: "waveform").font(.footnote)
+                    .foregroundStyle(.red).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal)
             }
             HStack(alignment: .bottom, spacing: 8) {
                 Menu {
-                    PhotosPicker(selection: $photo, matching: .images) { Label("Foto", systemImage: "photo") }
+                    PhotosPicker(selection: $photo, matching: .any(of: [.images, .videos])) { Label("Foto oder Video", systemImage: "photo") }
+                    if CameraPicker.available { Button { camera = true } label: { Label("Kamera", systemImage: "camera") } }
+                    if UIPasteboard.general.hasImages { Button { Task { await uploadClipboard() } } label: { Label("Bild aus Zwischenablage", systemImage: "doc.on.clipboard") } }
                     Button { importing = true } label: { Label("Datei", systemImage: "doc") }
                 } label: { Image(systemName: "paperclip").font(.title3) }
                 TextField("Nachricht an die Sitzung", text: $input, axis: .vertical)
                     .lineLimit(1...6).focused($focused)
                     .padding(8).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
+                Button { Task { await toggleDictation() } } label: {
+                    Image(systemName: voice.listening ? "mic.fill" : "mic").font(.title3).foregroundStyle(voice.listening ? Color.red : Color.accentColor)
+                }.accessibilityLabel(voice.listening ? "Diktat beenden" : "Diktieren")
                 Button { Task { await send(input) } } label: {
                     Image(systemName: sending ? "hourglass" : "arrow.up.circle.fill").font(.system(size: 30))
-                }.disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending || session == nil)
+                }.disabled(!canSend)
             }
             .padding(.horizontal).padding(.bottom, 6)
         }
@@ -145,7 +210,120 @@ struct ChatView: View {
         .background(.bar)
     }
 
+    // MARK: header, working line, cards
+
+    private var headerSubtitle: String {
+        guard let s = session else { return "" }
+        let tokens = chatCtx.tokens > 0 ? chatCtx.tokens : s.context?.tokens
+        let model = chatCtx.model.isEmpty ? (s.context?.model ?? "") : chatCtx.model
+        return ChatHeader.subtitle(model: model, effort: chatCtx.effort, tool: s.tool, cwd: s.cwd, tokens: tokens)
+    }
+
+    @ViewBuilder private var titleView: some View {
+        let label = VStack(spacing: 0) {
+            Text(session?.name ?? "Sitzung").font(.headline).lineLimit(1)
+            Text(headerSubtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+        }
+        if session?.tool == "claude" {
+            Menu {
+                let idle = session?.state != "busy"
+                Section("Modell") {
+                    ForEach(ChatHeader.models, id: \.self) { m in
+                        Button { Task { await switchTo("/model \(m)") } } label: {
+                            if chatCtx.model.contains(m) { Label(m, systemImage: "checkmark") } else { Text(m) }
+                        }.disabled(!idle)
+                    }
+                }
+                Section("Effort") {
+                    ForEach(ChatHeader.efforts, id: \.self) { l in
+                        Button { Task { await switchTo("/effort \(l)") } } label: {
+                            if chatCtx.effort == l { Label(l, systemImage: "checkmark") } else { Text(l) }
+                        }.disabled(!idle)
+                    }
+                }
+                if !idle { Text("Wechsel, wenn die Sitzung idle ist") }
+            } label: { label.foregroundStyle(.primary) }
+        } else {
+            label
+        }
+    }
+
+    private func switchTo(_ cmd: String) async {
+        guard let s = session else { return }
+        do { try await model.send(s, text: cmd); error = nil } catch { self.error = "Nicht umgestellt: \(error.localizedDescription)" }
+    }
+
+    @ViewBuilder private func workingLine(_ s: Session) -> some View {
+        let busy = s.state == "busy"
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                if busy { ProgressView() }
+                VStack(alignment: .leading, spacing: 2) {
+                    if busy {
+                        let info = RunningText.info(live)
+                        Text(((live?.verb ?? "arbeitet") + "… " + info).trimmingCharacters(in: .whitespaces)).font(.footnote).foregroundStyle(.secondary)
+                    }
+                    if !runItems.isEmpty {
+                        Button { withAnimation { runningOpen.toggle() } } label: {
+                            HStack(spacing: 4) {
+                                Text(RunningText.summary(runItems)).font(.caption)
+                                Image(systemName: runningOpen ? "chevron.up" : "chevron.down").font(.caption2)
+                            }
+                        }.buttonStyle(.plain).foregroundStyle(Color.accentColor)
+                    }
+                }
+                Spacer()
+                if busy {
+                    Button { Task { await stop(s) } } label: { Image(systemName: "stop.circle.fill").font(.title2).foregroundStyle(.red) }
+                        .accessibilityLabel("Stoppen")
+                }
+            }
+            if runningOpen {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(runItems) { r in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: RunningText.icon(r.kind)).font(.caption).foregroundStyle(.secondary).frame(width: 18)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(r.label).font(.caption).lineLimit(2)
+                                Text(([RunningText.what(r), RunningText.elapsed(since: r.since, now: Date().timeIntervalSince1970)]
+                                      + (r.activity.isEmpty ? [] : [r.activity])).filter { !$0.isEmpty }.joined(separator: " · "))
+                                    .font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                            }
+                        }
+                    }
+                }
+            }
+            if busy && !preview.isEmpty {
+                Text(preview).font(.footnote).foregroundStyle(.secondary).lineLimit(6)
+                    .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private func stop(_ s: Session) async {
+        do { try await model.stopTurn(s); error = nil; await refreshRunning() } catch { self.error = "Nicht gestoppt: \(error.localizedDescription)" }
+    }
+
+    /// The card at the bottom: the agent's question as a form while it waits, else the menu the TUI shows (a permission
+    /// prompt, a picker). A form that can't be answered by keys falls back to the screen's own menu.
+    @ViewBuilder private func cards(_ s: Session) -> some View {
+        if let q = s.question, menu == nil || menu?.kind == "question" {
+            if AnswerKeys.usable(q) || AnswerKeys.formUsable(q) {
+                QuestionFormCard(q: q, session: s) { await refreshScreen() }.id("\(q.text)#\(q.count)")
+            } else if let m = menu {
+                MenuCard(menu: m, session: s) { await refreshScreen() }
+            } else {
+                QuestionCard(q: q)
+            }
+        } else if let m = menu {
+            MenuCard(menu: m, session: s) { await refreshScreen() }
+        }
+    }
+
     @ToolbarContentBuilder private var toolbarItems: some ToolbarContent {
+        ToolbarItem(placement: .principal) { titleView }
         ToolbarItem(placement: .topBarTrailing) {
             let queue = Triage.queue(model.triageSessions, unread: model.unread, current: key)
             HStack(spacing: 8) {
@@ -161,6 +339,9 @@ struct ChatView: View {
                 if let s = session {
                     if s.liveTmux != nil { Button { showScreen = true } label: { Label("Live-Bildschirm", systemImage: "terminal") } }
                     Button { showSearch = true } label: { Label("Im Verlauf suchen", systemImage: "magnifyingglass") }
+                    Button { Task { await summarize() } } label: { Label("Zusammenfassen", systemImage: "text.alignleft") }
+                        .disabled(summary?.loading == true)
+                    if s.state == "busy" { Button { Task { await stop(s) } } label: { Label("Stoppen", systemImage: "stop.circle") } }
                     Button { model.togglePin(s.key) } label: { Label(model.pinned.contains(s.key) ? "Loslösen" : "Anheften", systemImage: "pin") }
                     Button { model.toggleMute(s.key) } label: {
                         Label(model.muted.contains(s.key) ? "Mitteilungen an" : "Stummschalten", systemImage: model.muted.contains(s.key) ? "bell" : "bell.slash")
@@ -210,7 +391,8 @@ struct ChatView: View {
         while !Task.isCancelled {
             if let s = session {
                 if s.liveTmux != nil && (s.state != "busy" || tick % 2 == 0) { await refreshScreen() }
-                if s.state == "busy" { await refreshRunning() } else { status = "" }
+                if s.state == "busy" || !runItems.isEmpty || tick % 10 == 0 { await refreshRunning() }
+                if s.state != "busy" { live = nil; preview = "" }
             }
             tick += 1
             try? await Task.sleep(nanoseconds: (session?.state == "busy" ? 1_500_000_000 : 2_500_000_000))
@@ -224,6 +406,7 @@ struct ChatView: View {
             messages = r["messages"].array.map(TMessage.from)
             before = r["before"].string
             loadedOnce = true
+            applyContext(r["context"])
         } catch { self.error = error.localizedDescription }
     }
 
@@ -266,29 +449,83 @@ struct ChatView: View {
 
     private func refreshRunning() async {
         guard let r = try? await model.rpc("running", ["key": .string(key)], timeout: 8) else { return }
-        let st = r["status"]
-        var parts: [String] = []
-        if let v = st["verb"].string { parts.append(v) }
-        if let e = st["elapsed"].string { parts.append(e) }
-        if let t = st["tokens"].string { parts.append(t) }
-        let items = r["running"].array.map { $0.str("label", $0.str("kind")) }.filter { !$0.isEmpty }
-        if let last = items.last { parts.append(last) }
-        status = parts.joined(separator: " · ")
+        let items = RunningItem.list(from: r)
+        if items != runItems { runItems = items }
+        live = LiveStatus.from(r)
+        let raw = r.has("preview") ? r.str("preview") : r["status"].str("preview")
+        let last = messages.last { $0.role == "assistant" }?.text ?? ""
+        preview = RunningText.freshPreview(raw, lastReply: last)
     }
 
+    private func applyContext(_ c: JSON) {
+        guard c.object != nil else { return }
+        chatCtx = ChatContext(model: c.str("model"), effort: c.str("effort"), tokens: c["tokens"].int ?? 0)
+    }
+
+    /// Model, effort and context size of the newest request (the `transcript` result's `context`).
+    private func loadContext() async {
+        if let r = try? await model.rpc("transcript", ["key": .string(key), "limit": 1], timeout: 15) { applyContext(r["context"]) }
+    }
+
+    private func summarize() async {
+        guard let s = session else { return }
+        summary = SummaryState(loading: true)
+        do { summary = SummaryState(text: try await model.summarize(s)) }
+        catch { summary = SummaryState(error: error.localizedDescription) }
+    }
+
+    /// Sends at once when the link is up (a quiet one is pinged first); otherwise, or when the link fails meanwhile, the
+    /// message goes into the outbox, which sends it as soon as the Desktop answers (same `client_id`, so never twice).
     private func send(_ text: String, force: Bool = false) async {
         guard let s = session else { return }
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
+        let id = UUID().uuidString
+        func queue() {
+            Outbox.shared.add(id: id, key: s.key, text: t, force: force)
+            if input.trimmingCharacters(in: .whitespacesAndNewlines) == t { input = "" }
+            error = nil
+        }
+        guard model.state == .connected else { queue(); return }
         sending = true; defer { sending = false }
+        guard await model.ensureAlive() else { queue(); return }
         do {
-            try await model.send(s, text: t, force: force)
-            input = ""
+            try await model.send(s, text: t, force: force, clientId: id)
+            if input.trimmingCharacters(in: .whitespacesAndNewlines) == t { input = "" }
             error = nil
             try? await Task.sleep(nanoseconds: 600_000_000)
             await refreshScreen()
-        } catch let e as RelayError where e.remote && (e.message.lowercased().contains("busy") || e.message.lowercased().contains("arbeitet")) {
+        } catch let e as RelayError where e.remote && OutboxLogic.isBusyRefusal(e.message) {
             confirmForce = t
+        } catch {
+            if OutboxLogic.retries(error) { queue() } else { self.error = error.localizedDescription }
+        }
+    }
+
+    // MARK: dictation
+
+    private func join(_ before: String, _ said: String) -> String {
+        before.isEmpty || before.hasSuffix(" ") || before.hasSuffix("\n") ? before + said : before + " " + said
+    }
+
+    /// Mic button: listens until the speaker pauses (or the button is tapped again), then puts the words into the field.
+    /// With "Diktat aufräumen" the Desktop cleans them up in the meantime, unless the user has typed since.
+    private func toggleDictation() async {
+        if voice.listening { voice.stopListening(); return }
+        if let msg = await voice.authorize() { error = msg; return }
+        if !vocabLoaded { vocabLoaded = true; await model.loadVocab(into: voice) }
+        let clean = ChatPrefs.cleanDictation
+        if clean { model.cleanWarm() }
+        let before = input
+        do {
+            let raw = try await voice.listen()
+            guard !raw.isEmpty else { return }
+            let inserted = join(input, raw)
+            input = inserted
+            focused = true
+            if clean, let cleaned = await model.cleanDictation(raw, before: before, session: key), input == inserted {
+                input = join(before, cleaned)
+            }
         } catch { self.error = error.localizedDescription }
     }
 
@@ -296,9 +533,25 @@ struct ChatView: View {
 
     private func uploadPhoto(_ item: PhotosPickerItem) async {
         defer { photo = nil }
+        let stamp = Int(Date().timeIntervalSince1970)
+        if item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) }) {
+            guard let mv = try? await item.loadTransferable(type: PickedMovie.self) else { error = "Video konnte nicht geladen werden"; return }
+            defer { try? FileManager.default.removeItem(at: mv.url) }
+            let size = (try? mv.url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            guard size <= Attach.maxBytes else { error = "Das Video ist größer als 50 MB"; return }
+            guard let data = try? Data(contentsOf: mv.url, options: .mappedIfSafe) else { error = "Video konnte nicht gelesen werden"; return }
+            let ext = mv.url.pathExtension.isEmpty ? "mov" : mv.url.pathExtension
+            await upload(name: "video-\(stamp).\(ext)", data: data)
+            return
+        }
         guard let data = try? await item.loadTransferable(type: Data.self) else { error = "Foto konnte nicht geladen werden"; return }
         let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
-        await upload(name: "foto-\(Int(Date().timeIntervalSince1970)).\(ext)", data: data)
+        await upload(name: "foto-\(stamp).\(ext)", data: data, photo: true, mime: item.supportedContentTypes.first?.preferredMIMEType)
+    }
+
+    private func uploadClipboard() async {
+        guard let img = UIPasteboard.general.image, let d = img.pngData() else { error = "Kein Bild in der Zwischenablage"; return }
+        await upload(name: "zwischenablage-\(Int(Date().timeIntervalSince1970)).png", data: d, photo: true, mime: "image/png")
     }
 
     private func uploadFile(_ url: URL) async {
@@ -308,16 +561,28 @@ struct ChatView: View {
         await upload(name: url.lastPathComponent, data: data)
     }
 
-    private func upload(name: String, data: Data) async {
-        guard data.count <= 50 * 1024 * 1024 else { error = "Datei ist größer als 50 MB"; return }
-        uploadInfo = "Lade \(name) hoch…"
+    /// `photo`: from the picker, the camera or the clipboard; a long edge above 2048 px is scaled down first (GIFs never).
+    private func upload(name: String, data: Data, photo: Bool = false, mime: String? = nil) async {
+        var name = name, data = data
+        if photo { (name, data) = await Task.detached(priority: .userInitiated) { [n = name, d = data] in AttachPrep.prepared(name: n, data: d, mime: mime) }.value }
+        guard data.count <= Attach.maxBytes else { error = "Datei ist größer als 50 MB"; return }
+        let label = name
+        uploadInfo = "Lade \(label) hoch…"
         do {
-            let path = try await model.upload(name: name, data: data) { p in Task { @MainActor in uploadInfo = "Lade \(name) hoch… \(Int(p * 100)) %" } }
-            input = (input.isEmpty ? "" : input + " ") + path + " "
+            let path = try await model.upload(name: label, data: data) { p in Task { @MainActor in uploadInfo = "Lade \(label) hoch… \(Int(p * 100)) %" } }
+            let head = input.trimmingCharacters(in: .whitespacesAndNewlines)
+            input = (head.isEmpty ? "" : head + "\n") + path + "\n"
             uploadInfo = ""
             focused = true
         } catch { uploadInfo = ""; self.error = error.localizedDescription }
     }
+}
+
+/// Model, effort and context size from the newest request of the session.
+struct ChatContext: Equatable {
+    var model = ""
+    var effort = ""
+    var tokens = 0
 }
 
 // MARK: message rendering

@@ -12,7 +12,7 @@ struct RelayApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
-                .onAppear { model.start(); model.requestNotificationPermission() }
+                .onAppear { model.start(); Outbox.shared.start(); model.requestNotificationPermission() }
                 .onChange(of: phase) { _, p in
                     model.setForeground(p == .active)
                     if p == .background {
@@ -41,6 +41,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             let text = (r as? UNTextInputNotificationResponse)?.userText.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !text.isEmpty else { return }
             await BackgroundRefresh.withBackgroundTime { await AppModel.shared.replyFromNotification(key: key, text: text) }
+        case "quick":
+            await BackgroundRefresh.withBackgroundTime { await AppModel.shared.quickFromNotification(key: key) }
         case "done":
             await BackgroundRefresh.withBackgroundTime { await AppModel.shared.doneFromNotification(key: key) }
         case "mute":

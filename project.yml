@@ -34,6 +34,7 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSLocalNetworkUsageDescription: Relay verbindet sich per SSH mit deinem Desktop im lokalen Netz.
+        NSCameraUsageDescription: Mit der Kamera aufgenommene Fotos können an eine Sitzung auf dem Desktop geschickt werden.
         NSPhotoLibraryUsageDescription: Fotos können an eine Sitzung auf dem Desktop geschickt werden.
         NSMicrophoneUsageDescription: Jarvis hört zu, wenn du aufs Mikrofon tippst.
         NSSpeechRecognitionUsageDescription: Deine Sprache wird auf dem iPhone in Text umgewandelt und an Jarvis geschickt.

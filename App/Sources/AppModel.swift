@@ -65,6 +65,9 @@ final class AppModel: ObservableObject {
     private var hasNetwork = true
     private var foreground = true
     var visibleChat: String?
+    /// When the link last carried anything (event or answer): `ensureAlive` pings when it was quiet for a while.
+    var lastTraffic = Date()
+    var isForeground: Bool { foreground }
 
     var pinned: Set<String> {
         get { Set(pinnedRaw.split(separator: "\n").map(String.init)) }
@@ -245,12 +248,15 @@ final class AppModel: ObservableObject {
             for _ in 0..<40 where state == .connecting { try await Task.sleep(nanoseconds: 250_000_000) }
         }
         guard let l = link, l.isOpen else { throw RelayError("Nicht verbunden: \(state.label)") }
-        return try await l.rpc(method, params, timeout: timeout, onProgress: onProgress)
+        let r = try await l.rpc(method, params, timeout: timeout, onProgress: onProgress)
+        lastTraffic = Date()
+        return r
     }
 
     // MARK: events
 
     private func handle(_ ev: JSON) {
+        lastTraffic = Date()
         let seq = ev["seq"].int ?? 0
         let replay = ev.flag("replay")
         defer { if seq > lastSeq { lastSeq = seq }; if seq > 0 || ev.str("type") == "hello_ok" { lastSync = Date().timeIntervalSince1970 } }
@@ -341,7 +347,7 @@ final class AppModel: ObservableObject {
         }
         if ev.flag("desk") && !needs { return }
         if s.key == visibleChat && foreground { return }
-        notify(s, title: title, body: body)
+        notify(s, title: title, body: body, ready: ready && !asks)
     }
 
     private func postDigest() {
@@ -372,20 +378,25 @@ final class AppModel: ObservableObject {
         let done = UNNotificationAction(identifier: "done", title: "Erledigt", options: [])
         let mute = UNNotificationAction(identifier: "mute", title: "Stummschalten", options: [])
         let cat = UNNotificationCategory(identifier: "session", actions: [reply, done, mute], intentIdentifiers: [], options: [])
-        UNUserNotificationCenter.current().setNotificationCategories([cat])
+        // "ready" notifications also carry the first quick reply ("Weiter") as a one-tap action
+        var readyActions = [reply]
+        if let q = ChatPrefs.quickReplies.first { readyActions.append(UNNotificationAction(identifier: "quick", title: q, options: [])) }
+        readyActions += [done, mute]
+        let ready = UNNotificationCategory(identifier: "session-ready", actions: readyActions, intentIdentifiers: [], options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([cat, ready])
     }
 
-    private func notify(_ s: Session, title: String, body: String) {
-        notifyRaw(id: "s-\(s.key)", title: title, body: body, key: s.key)
+    private func notify(_ s: Session, title: String, body: String, ready: Bool = false) {
+        notifyRaw(id: "s-\(s.key)", title: title, body: body, key: s.key, category: ready ? "session-ready" : "session")
     }
 
-    private func notifyRaw(id: String, title: String, body: String, key: String?) {
+    private func notifyRaw(id: String, title: String, body: String, key: String?, category: String = "session") {
         guard notifyEnabled else { return }
         let c = UNMutableNotificationContent()
         c.title = title
         c.body = String(body.prefix(300))
         c.sound = .default
-        if let key { c.userInfo = ["key": key]; c.threadIdentifier = key; c.categoryIdentifier = "session" }
+        if let key { c.userInfo = ["key": key]; c.threadIdentifier = key; c.categoryIdentifier = category }
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: c, trigger: nil))
     }
 
@@ -527,14 +538,16 @@ final class AppModel: ObservableObject {
         try? d.write(to: u, options: .atomic)
     }
 
-    func send(_ s: Session, text: String, force: Bool = false) async throws {
+    func send(_ s: Session, text: String, force: Bool = false, clientId: String? = nil) async throws {
         var p: [String: JSON] = ["text": .string(text), "enter": true, "force": .bool(force)]
+        if let clientId { p["client_id"] = .string(clientId) }
         if s.liveTmux != nil { p["target"] = .string(s.target) } else { p["key"] = .string(s.key) }
         _ = try await rpc("send", .object(p))
     }
 
-    func sendKeys(_ s: Session, _ keys: [String], expectMenu: String? = nil) async throws {
+    func sendKeys(_ s: Session, _ keys: [String], expectMenu: String? = nil, force: Bool = false) async throws {
         var p: [String: JSON] = ["keys": JSON(keys), "enter": false]
+        if force { p["force"] = true }
         if s.liveTmux != nil { p["target"] = .string(s.target) } else { p["key"] = .string(s.key) }
         if let m = expectMenu, !m.isEmpty { p["expect_menu"] = .string(m) }
         _ = try await rpc("send", .object(p))

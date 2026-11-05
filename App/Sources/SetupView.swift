@@ -61,6 +61,7 @@ struct SetupView: View {
                         Button("Alle \(model.muted.count) stummgeschalteten Sitzungen wieder laut") { model.muted = [] }
                     }
                 }
+                ChatSettingsSection()
                 Section("Sicherheit") {
                     Toggle("Mit Face ID sperren", isOn: $model.lockEnabled)
                     Text("Relay sperrt sich, sobald die App in den Hintergrund geht.").font(.caption).foregroundStyle(.secondary)
