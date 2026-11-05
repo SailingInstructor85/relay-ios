@@ -36,6 +36,18 @@ class RelayTestCase: XCTestCase {
         app.launchEnvironment["RELAY_UI_SEED"] = Self.seedHex
         app.launchEnvironment["RELAY_UI_PREFILL"] = prefill ? "1" : "0"
         app.launch()
+        dismissSystemAlerts()
+    }
+
+    /// Systemdialoge (Mitteilungen erlauben usw.) wegtippen.
+    func dismissSystemAlerts() {
+        let sb = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for _ in 0..<3 {
+            Thread.sleep(forTimeInterval: 1.0)
+            let alert = sb.alerts.firstMatch
+            guard alert.exists else { continue }
+            for t in ["Erlauben", "Allow", "Zulassen", "OK"] where alert.buttons[t].exists { alert.buttons[t].tap(); break }
+        }
     }
 
     /// Startet und wartet, bis die Sitzungsliste mit Daten da ist.

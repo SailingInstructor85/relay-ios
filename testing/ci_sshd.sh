@@ -34,4 +34,4 @@ OUT=$(printf '{"type":"hello","since_seq":0,"client":"ci"}\n{"type":"rpc","id":"
 echo "$OUT" | cut -c1-300
 echo "$OUT" | grep -q hello_ok || { echo "FEHLER: kein hello_ok ueber ssh"; sudo tail -30 "$D/sshd.log"; exit 1; }
 echo "ssh-Pruefung ok"
-rm -f "$D/state.json" "$D/rpc.jsonl"; chmod -R a+rwX "$D"
+rm -f "$D/state.json" "$D/rpc.jsonl"; chmod -R a+rwX "$D" 2>/dev/null || true

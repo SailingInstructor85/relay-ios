@@ -120,7 +120,7 @@ jobs:
           xcrun xcresulttool get test-results tests --path Results.xcresult > out/tests.json 2>&1 || true
           xcrun xcresulttool export attachments --path Results.xcresult --output-path out/raw 2>&1 | tail -5 || true
           python3 testing/export_shots.py out/raw out/shots || true
-          cp /tmp/relaymock/mock.log /tmp/relaymock/rpc.jsonl /tmp/relaymock/sshd.log out/ 2>/dev/null || true
+          sudo chmod a+r /tmp/relaymock/* 2>/dev/null; cp /tmp/relaymock/mock.log /tmp/relaymock/rpc.jsonl /tmp/relaymock/sshd.log out/ 2>/dev/null || true
           cp test.log build-sim.log out/ 2>/dev/null || true
           xcrun simctl spawn "$UDID" log show --last 30m --predicate 'process == "Relay"' --style compact > out/relay-app.log 2>&1 || true
           ls out/shots | wc -l
