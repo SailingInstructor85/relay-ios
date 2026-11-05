@@ -28,6 +28,10 @@ struct ScreenView: View {
                 .onChange(of: text) { _, _ in proxy.scrollTo("end", anchor: .bottomLeading) }
             }
             if let m = menu { MenuCard(menu: m, session: session) { await refresh() }.padding(.vertical, 6) }
+            if let h = Handover.label(model.holder(session)) {
+                Text(h + ": " + handoverHint)
+                    .font(.caption).foregroundStyle(.orange).padding(.horizontal, 8).padding(.top, 4)
+            }
             if let e = error { Text(e).font(.caption).foregroundStyle(.red).padding(4) }
             keyBar
             HStack {
@@ -53,6 +57,10 @@ struct ScreenView: View {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
             }
         }
+    }
+
+    private var handoverHint: String {
+        model.holder(session) == Handover.desk ? "Eingabe vom Handy gesperrt, im Chat übernehmen." : "Der PC ist schreibgeschützt."
     }
 
     private var keyBar: some View {
@@ -91,6 +99,7 @@ struct ScreenView: View {
             if t != text { text = t }
             let m = ScreenMenu.from(r["menu"])
             if m?.id != menu?.id || (m == nil) != (menu == nil) { menu = m }
+            if r.has("holder") { model.setHolder(session.key, r.str("holder")) }
             error = nil
         } catch { self.error = error.localizedDescription }
     }

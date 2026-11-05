@@ -156,10 +156,41 @@ struct ChatView: View {
     private var tool: String { session?.tool ?? "claude" }
     private var slashChips: [String] { ChatPrefs.slash(tool) }
     private var slashSuggestions: [String] { SlashCatalog.matches(SlashCatalog.forTool(tool, user: slashChips), input) }
-    private var canSend: Bool { !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending && session != nil }
+    private var holder: String { session.map { model.holder($0) } ?? "" }
+    private var canSend: Bool {
+        !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending && session != nil && !Handover.phoneBlocked(holder)
+    }
+
+    /// Sitzungsübergabe: wer hält die Sitzung? Am PC gehalten sperrt die Eingabe, bis das Handy übernimmt.
+    @ViewBuilder private var handoverBar: some View {
+        if let s = session, s.liveTmux != nil, let label = Handover.label(holder) {
+            HStack(spacing: 8) {
+                Image(systemName: holder == Handover.desk ? "desktopcomputer" : "iphone")
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(label).font(.footnote.weight(.semibold))
+                    Text(holder == Handover.desk ? Handover.deskNote : Handover.phoneNote).font(.caption2).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let title = Handover.takeTitle(holder) {
+                    Button(title) { Task { await takeOver(s, to: Handover.phone) } }.buttonStyle(.borderedProminent).controlSize(.small)
+                } else {
+                    Button("An PC zurückgeben") { Task { await takeOver(s, to: Handover.desk) } }.buttonStyle(.bordered).controlSize(.small)
+                }
+            }
+            .padding(.horizontal).padding(.vertical, 6)
+            .background(Color.orange.opacity(0.15))
+            .accessibilityIdentifier("handoverBar")
+        }
+    }
+
+    private func takeOver(_ s: Session, to: String) async {
+        do { try await model.handover(s, to: to); error = nil }
+        catch { self.error = "Nicht übergeben: \(error.localizedDescription)" }
+    }
 
     private var inputBar: some View {
         VStack(spacing: 6) {
+            handoverBar
             if !slashSuggestions.isEmpty {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -358,6 +389,13 @@ struct ChatView: View {
             Menu {
                 if let s = session {
                     if s.liveTmux != nil { Button { showScreen = true } label: { Label("Live-Bildschirm", systemImage: "terminal") } }
+                    if s.liveTmux != nil, s.alive {
+                        if let title = Handover.takeTitle(model.holder(s)) {
+                            Button { Task { await takeOver(s, to: Handover.phone) } } label: { Label(title, systemImage: "iphone.and.arrow.forward") }
+                        } else {
+                            Button { Task { await takeOver(s, to: Handover.desk) } } label: { Label("An PC zurückgeben", systemImage: "desktopcomputer") }
+                        }
+                    }
                     Button { showSearch = true } label: { Label("Im Verlauf suchen", systemImage: "magnifyingglass") }
                     Button { Task { await summarize() } } label: { Label("Zusammenfassen", systemImage: "text.alignleft") }
                         .disabled(summary?.loading == true)
@@ -464,6 +502,7 @@ struct ChatView: View {
         if let r = try? await model.rpc("screen", ["target": .string(s.target), "lines": 60, "escapes": false, "menu": true], timeout: 10) {
             let m = ScreenMenu.from(r["menu"])
             if m?.id != menu?.id || (m == nil) != (menu == nil) { menu = m }
+            if r.has("holder") { model.setHolder(s.key, r.str("holder")) }
         }
     }
 
@@ -500,6 +539,7 @@ struct ChatView: View {
         guard let s = session else { return }
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
+        if Handover.phoneBlocked(model.holder(s)) { error = Handover.deskNote; return }
         let id = UUID().uuidString
         func queue() {
             Outbox.shared.add(id: id, key: s.key, text: t, force: force)

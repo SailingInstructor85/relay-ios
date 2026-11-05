@@ -370,12 +370,31 @@ def ts_now():
     return time.time()
 
 
+HOLDERS = {}  # session key -> "phone" | "desk" (Sitzungsübergabe; fehlt: offen)
+
+
+def rpc_handover(p):
+    s = find_session(p.get("key") or p.get("target", ""))
+    if not s:
+        raise RpcError("no such live session")
+    to = p.get("to")
+    if to is not None:
+        if to not in ("phone", "desk", "open"):
+            raise RpcError("to must be 'phone', 'desk' or 'open'")
+        if to == "open":
+            HOLDERS.pop(s["key"], None)
+        else:
+            HOLDERS[s["key"]] = to
+    return {"holder": HOLDERS.get(s["key"], ""), "since": None, "pc_clients": 1, "session": s.get("tmux_session", "")}
+
+
 def rpc_ping(p):
     return {}
 
 
 def rpc_list_sessions(p):
-    return {"sessions": current_sessions(bool(p.get("include_dormant")), bool(p.get("include_background")))[: int(p.get("limit", 100))]}
+    rows = current_sessions(bool(p.get("include_dormant")), bool(p.get("include_background")))[: int(p.get("limit", 100))]
+    return {"sessions": [{**r, "holder": HOLDERS[r["key"]]} if r.get("key") in HOLDERS else r for r in rows]}
 
 
 def rpc_accounts(p):
@@ -455,7 +474,7 @@ def rpc_screen(p):
             "$ pytest -q\n.......... [100%]\n10 passed in 0.31s\n\n❯ ")
     if not p.get("escapes", True):
         text = re.sub(r"\x1b\[[0-9;]*m", "", text)
-    return {"text": text, "menu": menu}
+    return {"text": text, "menu": menu, "holder": HOLDERS.get(s["key"], "")}
 
 
 def rpc_running(p):
@@ -475,6 +494,8 @@ def rpc_send(p):
     s = find_session(key)
     if not s:
         raise RpcError("tmux session is gone" if key.startswith("tmux:") else "unknown session")
+    if HOLDERS.get(s["key"]) == "desk":
+        raise RpcError("session is held by the PC: take it over on the phone first (handover to: phone)")
     force = bool(p.get("force"))
     text = p.get("text")
     if text and s["state"] == "busy" and not force and not p.get("target"):
