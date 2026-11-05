@@ -162,11 +162,16 @@ struct TextFileBody: View {
     private let limit = 600_000
 
     var body: some View {
-        ScrollView([.vertical, .horizontal]) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(text).font(.system(.footnote, design: .monospaced)).textSelection(.enabled)
-                if truncated { Text("Gekürzt: nur der Anfang der Datei wird gezeigt.").font(.caption).foregroundStyle(.secondary) }
-            }.padding()
+        GeometryReader { geo in
+            ScrollView([.vertical, .horizontal]) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(text).font(.system(.footnote, design: .monospaced)).textSelection(.enabled)
+                    if truncated { Text("Gekürzt: nur der Anfang der Datei wird gezeigt.").font(.caption).foregroundStyle(.secondary) }
+                }
+                .padding()
+                // oben links ansetzen, auch wenn der Text kürzer als der Bildschirm ist
+                .frame(minWidth: geo.size.width, minHeight: geo.size.height, alignment: .topLeading)
+            }
         }
         .toolbar { ToolbarItem(placement: .bottomBar) { Button { UIPasteboard.general.string = text } label: { Label("Kopieren", systemImage: "doc.on.doc") } } }
         .task {
