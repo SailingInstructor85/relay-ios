@@ -67,113 +67,123 @@ struct SessionsView: View {
         }
     }
 
-    var body: some View {
-        NavigationStack(path: $path) {
-            List {
-                Section {
-                    Picker("Ansicht", selection: $model.showDormant) {
-                        Text("Laufend").tag(false)
-                        Text("Zuletzt").tag(true)
-                    }.pickerStyle(.segmented)
-                }.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                if model.state != .connected { connectionRow }
-                listContent
+    private var listView: some View {
+        List {
+            Section {
+                Picker("Ansicht", selection: $model.showDormant) {
+                    Text("Laufend").tag(false)
+                    Text("Zuletzt").tag(true)
+                }.pickerStyle(.segmented)
+            }.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+            if model.state != .connected { connectionRow }
+            listContent
+        }
+        .listStyle(.insetGrouped)
+        .searchable(text: $search, prompt: "Sitzungen, Gespräche, Jarvis")
+        .onChange(of: search) { _, q in searcher.update(q, model: model) }
+        .onChange(of: model.state) { _, _ in searcher.update(search, model: model) }
+        .refreshable { await model.refresh() }
+        .navigationTitle("Relay")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Menu {
+                    Button { path.append(Dest.jarvis) } label: { Label("Jarvis fragen", systemImage: "waveform") }
+                    Button { path.append(Dest.usage) } label: { Label("Nutzung & Limits", systemImage: "gauge.with.dots.needle.33percent") }
+                    Button { path.append(Dest.memory) } label: { Label("RAM-Monitor", systemImage: "memorychip") }
+                    Button { path.append(Dest.digest) } label: { Label("Was war los", systemImage: "newspaper") }
+                    Button { path.append(Dest.tokens) } label: { Label("Token-Verbrauch", systemImage: "chart.bar") }
+                    Button { path.append(Dest.notices) } label: { Label("Hinweise", systemImage: "bell.badge") }
+                    Button { model.markAllRead() } label: { Label("Alle gelesen", systemImage: "checkmark.circle") }
+                        .disabled(model.unread.isEmpty)
+                    Toggle(isOn: $model.showBackground) { Label("Hintergrundläufe", systemImage: "moon.zzz") }
+                    Button { model.reconnect() } label: { Label("Neu verbinden", systemImage: "arrow.clockwise") }
+                    Button { showPower = true } label: { Label("Desktop ausschalten ...", systemImage: "power") }
+                        .disabled(model.state != .connected)
+                    Button { path.append(Dest.settings) } label: { Label("Einstellungen", systemImage: "gear") }
+                } label: { Image(systemName: "ellipsis.circle") }
             }
-            .listStyle(.insetGrouped)
-            .searchable(text: $search, prompt: "Sitzungen, Gespräche, Jarvis")
-            .onChange(of: search) { _, q in searcher.update(q, model: model) }
-            .onChange(of: model.state) { _, _ in searcher.update(search, model: model) }
-            .refreshable { await model.refresh() }
-            .navigationTitle("Relay")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Button { path.append(Dest.jarvis) } label: { Label("Jarvis fragen", systemImage: "waveform") }
-                        Button { path.append(Dest.usage) } label: { Label("Nutzung & Limits", systemImage: "gauge.with.dots.needle.33percent") }
-                        Button { path.append(Dest.memory) } label: { Label("RAM-Monitor", systemImage: "memorychip") }
-                        Button { path.append(Dest.digest) } label: { Label("Was war los", systemImage: "newspaper") }
-                        Button { path.append(Dest.tokens) } label: { Label("Token-Verbrauch", systemImage: "chart.bar") }
-                        Button { path.append(Dest.notices) } label: { Label("Hinweise", systemImage: "bell.badge") }
-                        Button { model.markAllRead() } label: { Label("Alle gelesen", systemImage: "checkmark.circle") }
-                            .disabled(model.unread.isEmpty)
-                        Toggle(isOn: $model.showBackground) { Label("Hintergrundläufe", systemImage: "moon.zzz") }
-                        Button { model.reconnect() } label: { Label("Neu verbinden", systemImage: "arrow.clockwise") }
-                        Button { showPower = true } label: { Label("Desktop ausschalten ...", systemImage: "power") }
-                            .disabled(model.state != .connected)
-                        Button { path.append(Dest.settings) } label: { Label("Einstellungen", systemImage: "gear") }
-                    } label: { Image(systemName: "ellipsis.circle") }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { path.append(Dest.jarvisListening) } label: { Image(systemName: "mic") }
-                        .accessibilityLabel("Jarvis per Sprache")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showNew = true } label: { Image(systemName: "plus") }.disabled(model.state != .connected)
-                }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { path.append(Dest.jarvisListening) } label: { Image(systemName: "mic") }
+                    .accessibilityLabel("Jarvis per Sprache")
             }
-            .navigationDestination(for: Dest.self) { d in
-                switch d {
-                case .chat(let key): ChatView(sessionKey: key)
-                case .chatSearch(let key, let q): ChatView(sessionKey: key, initialSearch: q)
-                case .settings: SetupView()
-                case .usage: UsageView()
-                case .memory: MemoryView()
-                case .digest: DigestView()
-                case .tokens: TokensView()
-                case .jarvis: JarvisView()
-                case .jarvisListening: JarvisView(autoListen: true)
-                case .notices: NoticeView(ref: nil, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice)
-                case .notice(let ref): NoticeView(ref: ref, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice)
-                }
-            }
-            .sheet(isPresented: $showPower) { PowerView().environmentObject(model) }
-            .sheet(isPresented: $showNew) {
-                NewSessionView { target in
-                    showNew = false
-                    Task { // the placeholder appears shortly after launch
-                        for _ in 0..<20 {
-                            if let s = model.session(for: "tmux:\(target)") { path.append(Dest.chat(s.key)); return }
-                            try? await Task.sleep(nanoseconds: 500_000_000)
-                            await model.refresh()
-                        }
-                    }
-                }.environmentObject(model)
-            }
-            .onChange(of: model.showDormant) { _, _ in Task { await model.refresh() } }
-            .onChange(of: model.showBackground) { _, _ in Task { await model.refresh() } }
-            .onChange(of: model.openChat) { _, key in
-                if let key { path = NavigationPath(); path.append(Dest.chat(key)); model.openChat = nil }
-            }
-            .onChange(of: model.openNotice) { _, ref in
-                if let ref { path = NavigationPath(); path.append(Dest.notice(ref)); model.openNotice = nil }
-            }
-            .onChange(of: model.openJarvis) { _, open in
-                if open { path = NavigationPath(); path.append(Dest.jarvisListening); model.openJarvis = false }
-            }
-            .onAppear {
-                if let ref = model.openNotice { path.append(Dest.notice(ref)); model.openNotice = nil }
-                if model.openJarvis { path.append(Dest.jarvisListening); model.openJarvis = false }
-            }
-            .task { await model.pollTriage() }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                VStack(spacing: 4) {
-                    TriageStrip(openNext: openNext, openUsage: { path.append(Dest.usage) }, openMemory: { path.append(Dest.memory) })
-                    ErrorBanner(text: $model.lastError)
-                }
-            }
-            .safeAreaInset(edge: .bottom) { undoBar }
-            .confirmationDialog("Arbeitende Sitzung stoppen und schließen?", isPresented: $showConfirmClose, titleVisibility: .visible, presenting: confirmClose) { s in
-                Button("Stoppen und schließen", role: .destructive) { model.softClose(s) }
-            }
-            .confirmationDialog("Sitzung töten?", isPresented: $showKill, titleVisibility: .visible, presenting: killTarget) { s in
-                Button("Töten", role: .destructive) { Task { await model.kill(s) } }
-            } message: { _ in Text("Der Terminal der Sitzung wird beendet.") }
-            .alert("Sitzung umbenennen", isPresented: $showRename) {
-                TextField("Name", text: $renameText)
-                Button("Abbrechen", role: .cancel) {}
-                Button("Umbenennen") { if let s = renameTarget { Task { await model.rename(s, to: renameText) } } }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showNew = true } label: { Image(systemName: "plus") }.disabled(model.state != .connected)
             }
         }
+        .task { await model.pollTriage() }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 4) {
+                TriageStrip(openNext: openNext, openUsage: { path.append(Dest.usage) }, openMemory: { path.append(Dest.memory) })
+                ErrorBanner(text: $model.lastError)
+            }
+        }
+        .safeAreaInset(edge: .bottom) { undoBar }
+        .confirmationDialog("Arbeitende Sitzung stoppen und schließen?", isPresented: $showConfirmClose, titleVisibility: .visible, presenting: confirmClose) { s in
+            Button("Stoppen und schließen", role: .destructive) { model.softClose(s) }
+        }
+        .confirmationDialog("Sitzung töten?", isPresented: $showKill, titleVisibility: .visible, presenting: killTarget) { s in
+            Button("Töten", role: .destructive) { Task { await model.kill(s) } }
+        } message: { _ in Text("Der Terminal der Sitzung wird beendet.") }
+        .alert("Sitzung umbenennen", isPresented: $showRename) {
+            TextField("Name", text: $renameText)
+            Button("Abbrechen", role: .cancel) {}
+            Button("Umbenennen") { if let s = renameTarget { Task { await model.rename(s, to: renameText) } } }
+        }
+    }
+
+    private func destinations<V: View>(_ v: V) -> some View {
+        v
+        .navigationDestination(for: Dest.self) { d in
+            switch d {
+            case .chat(let key): ChatView(sessionKey: key)
+            case .chatSearch(let key, let q): ChatView(sessionKey: key, initialSearch: q)
+            case .settings: SetupView()
+            case .usage: UsageView()
+            case .memory: MemoryView()
+            case .digest: DigestView()
+            case .tokens: TokensView()
+            case .jarvis: JarvisView()
+            case .jarvisListening: JarvisView(autoListen: true)
+            case .notices: NoticeView(ref: nil, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice)
+            case .notice(let ref): NoticeView(ref: ref, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice)
+            }
+        }
+        .sheet(isPresented: $showPower) { PowerView().environmentObject(model) }
+        .sheet(isPresented: $showNew) {
+            NewSessionView { target in
+                showNew = false
+                Task { // the placeholder appears shortly after launch
+                    for _ in 0..<20 {
+                        if let s = model.session(for: "tmux:\(target)") { path.append(Dest.chat(s.key)); return }
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        await model.refresh()
+                    }
+                }
+            }.environmentObject(model)
+        }
+    }
+
+    private func handlers<V: View>(_ v: V) -> some View {
+        v
+        .onChange(of: model.showDormant) { _, _ in Task { await model.refresh() } }
+        .onChange(of: model.showBackground) { _, _ in Task { await model.refresh() } }
+        .onChange(of: model.openChat) { _, key in
+            if let key { path = NavigationPath(); path.append(Dest.chat(key)); model.openChat = nil }
+        }
+        .onChange(of: model.openNotice) { _, ref in
+            if let ref { path = NavigationPath(); path.append(Dest.notice(ref)); model.openNotice = nil }
+        }
+        .onChange(of: model.openJarvis) { _, open in
+            if open { path = NavigationPath(); path.append(Dest.jarvisListening); model.openJarvis = false }
+        }
+        .onAppear {
+            if let ref = model.openNotice { path.append(Dest.notice(ref)); model.openNotice = nil }
+            if model.openJarvis { path.append(Dest.jarvisListening); model.openJarvis = false }
+        }
+    }
+
+    var body: some View {
+        NavigationStack(path: $path) { handlers(destinations(listView)) }
     }
 
     private func goNotice(_ g: NoticeLogic.Goto) {
