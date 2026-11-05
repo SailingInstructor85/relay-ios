@@ -37,6 +37,7 @@ struct ChatView: View {
     @State private var showScreen = false
     @State private var showSearch = false
     @State private var initialDone = false
+    @AppStorage("returnSends") private var returnSends = false
     @State private var standTick = 0
     @Environment(\.scenePhase) private var scenePhase
     @State private var highlight: String?
@@ -206,6 +207,8 @@ struct ChatView: View {
                 } label: { Image(systemName: "paperclip").font(.title3) }
                 TextField("Nachricht an die Sitzung", text: $input, axis: .vertical)
                     .lineLimit(1...6).focused($focused)
+                    .submitLabel(returnSends ? .send : .return)
+                    .onSubmit { if returnSends && canSend { Task { await send(input) } } }
                     .padding(8).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
                 Button { Task { await toggleDictation() } } label: {
                     Image(systemName: voice.listening ? "mic.fill" : "mic").font(.title3).foregroundStyle(voice.listening ? Color.red : Color.accentColor)

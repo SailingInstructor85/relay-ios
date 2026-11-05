@@ -24,6 +24,7 @@ struct ChatSettingsSection: View {
     @AppStorage("slash.agy") private var agy = SlashChips.defaults["agy"] ?? ""
     @AppStorage("quickReplies") private var quick = QuickReplies.standard
     @AppStorage("cleanDictation") private var clean = false
+    @AppStorage("returnSends") private var returnSends = false
 
     var body: some View {
         Section("Sitzungen") {
@@ -37,12 +38,15 @@ struct ChatSettingsSection: View {
             }
             Text("Durch | getrennt, höchstens 8. Ein Tipp sendet sofort. Die erste erscheint auch als Aktion an der „fertig“-Mitteilung.")
                 .font(.caption).foregroundStyle(.secondary)
+            Toggle("Return sendet", isOn: $returnSends)
+            Text("Die Eingabetaste zeigt „Senden“ und schickt die Nachricht ab. Zeilenumbruch dann nur noch über die Zwischenablage.")
+                .font(.caption).foregroundStyle(.secondary)
             Toggle("Diktat aufräumen", isOn: $clean)
             Text("Der Desktop korrigiert Verhörer und streicht Füllwörter (kostet Sonnet-Token). Bei Fehler oder Wartezeit bleibt der Rohtext.")
                 .font(.caption).foregroundStyle(.secondary)
             Button("Sitzungs-Einstellungen zurücksetzen") {
                 claude = SlashChips.defaults["claude"] ?? ""; codex = SlashChips.defaults["codex"] ?? ""; agy = SlashChips.defaults["agy"] ?? ""
-                quick = QuickReplies.standard; clean = false
+                quick = QuickReplies.standard; clean = false; returnSends = false
             }
         }
         .onChange(of: quick) { _, _ in AppModel.registerNotificationActions() }
