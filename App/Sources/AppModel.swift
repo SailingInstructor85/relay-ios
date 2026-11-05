@@ -98,12 +98,12 @@ final class AppModel: ObservableObject {
 
     private init() {
         locked = UserDefaults.standard.bool(forKey: "lockEnabled")
+        if let seed = Keychain.get("ssh-seed"), let id = try? Identity(rawSeed: seed) { identity = id }
+        else { let id = Identity(); Keychain.set(id.rawSeed, for: "ssh-seed"); identity = id }
         if let raw = JSON.parse(avatarLookRaw) { look = Avatars.look(from: raw) }
         if let cached = Self.loadSessionCache() {
             for s in cached.array.compactMap(Session.from) { sessions[s.key] = s }
         }
-        if let seed = Keychain.get("ssh-seed"), let id = try? Identity(rawSeed: seed) { identity = id }
-        else { let id = Identity(); Keychain.set(id.rawSeed, for: "ssh-seed"); identity = id }
         monitor.pathUpdateHandler = { [weak self] path in
             Task { @MainActor in
                 guard let self else { return }
