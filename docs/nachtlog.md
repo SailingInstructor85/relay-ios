@@ -29,3 +29,13 @@ Entscheidungen: Senden geht direkt, wenn die Verbindung steht (mit Ping vorher);
 Risiken: App-Code kompiliert in CI, ist aber nicht auf dem Gerät getestet. Die Outbox im Hintergrund hängt an `connectOnce` und `beginBackgroundTask` (ca. 30 s). Kamera braucht `NSCameraUsageDescription` (neu in project.yml). Die Tastenfolgen des Fragenformulars stammen aus Android (Claude Code 2.1.306), neuere TUI-Versionen können abweichen (`expect_question` schützt vor falschen Antworten, nicht vor falschen Tasten). Mikrofon und Vorlesen teilen sich eine Audio-Sitzung mit Jarvis. Paralleler Edit-Konflikt möglich in SetupView, RelayApp, AppModel (kleine Einfügungen).
 
 Commits: 1dbdc27 (Code). CI-Lauf 41938430874 grün (core-tests, ipa).
+
+## Arbeitspaket 4 (Mitteilungen, Ruhezeiten, Hinweise, Freigaben)
+
+Gebaut: Einstellungsabschnitt "Mitteilungen" (fertig Ton/Still/Aus, braucht Eingabe, eigene Züge des Agenten, Still am PC, Ruhezeiten mit zwei Zeitwählern, Aktionen nur bei entsperrtem Gerät), Entscheidungslogik `NotifyPolicy`/`QuietHours` in RelayCore (Notify.swift) mit Tests, "Beendet · Name"-Mitteilung, stille Zustellung (passive, ohne Ton), Replay-Digest mit Richtlinie und 24-h-Grenze, Mitteilungsaktionen "Freigeben" und "Ablehnen". Hinweise (`notice`): Slot je `tag`, Verlauf 14 Tage/100 in notices.json, NoticeView mit Link-Knöpfen und Liste früherer (Menü "Hinweise", Tipp auf Mitteilung). Freigaben (`send_request` nur `executor:desktop`) und Jarvis-Bestätigungen: Streifen oben in jeder Ansicht, Sheet, `send_result`/`confirm`, `phone_request_status` beim Verbinden, Antwort-Outbox, gebündelte gleiche Anfragen. `desktop_sleep`: Banner, Versuch alle 5 min. Standort auf Anfrage (Locator.swift).
+
+Entscheidungen: Hinweis-Aktion "Freigeben" verlangt immer entsperrtes Gerät, unabhängig vom Schalter. Fragen (`asks`) umgehen Ruhezeiten auch bei Zustand idle. `kind:message` wird nicht angezeigt. Standort nur nach Tipp auf die Mitteilung bei geöffneter App (nie automatisch). Notice-Knöpfe für Team/Heute/Briefing/Kalender entfallen (gibt es in iOS nicht). Typ heißt `NotifyAlert` (SwiftUI hat `Alert`). `session_seen` war schon aus WP1 da.
+
+Risiken: nicht auf dem Gerät getestet. Freigabe aus Mitteilung im Hintergrund hängt an `connectOnce` (ca. 30 s Zeit). Banner-Streifen sitzt über der NavigationStack (Statusleisten-Abstand ungetestet). Standort braucht die Berechtigung "beim Verwenden".
+
+Commits: c8d4087 (Code). CI-Lauf 41940804910 grün (core-tests, ipa).
