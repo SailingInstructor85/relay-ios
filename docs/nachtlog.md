@@ -77,3 +77,13 @@ Klasse K, noch nicht "vorhanden" nach diesem Paket: F7 (Fertige Sitzungen vorles
 Risiken: nicht auf dem Gerät getestet. `IntentAuthenticationPolicy` und MetricKit-Diagnosen sind nur kompiliert. Dokumenttyp `public.data` macht Relay in vielen "Öffnen mit"-Listen sichtbar (Rang Alternate). Die Gesprächssuche kostet auf dem PC einen Scan je Anfrage (7 Tage).
 
 Commits: 612f1eb (Code), Folgekorrektur SessionsView und Return sendet siehe Verlauf. CI-Lauf 41948160788: core-tests und ipa grün, `BUILD SUCCEEDED` belegt.
+
+## Simulator-Tests (Nacht 4./5. November 2026)
+
+Ausführlich in `docs/testbericht.md`. Gebaut: Mock-Gateway (`testing/mock_gateway.py`), eigener sshd mit eingeschränktem Testschlüssel auf dem CI-Läufer, Testmodus der App (`-relayUITest`, `UITestMode.swift`), XCUITest-Ziel `RelayUITests` mit 60 Tests über alle Pakete, CI-Job `simulator` mit Export der Screenshots aus der `.xcresult` (Artefakte `simulator-results` und `xcresult`), Doku-Änderungen lösen keinen CI-Lauf mehr aus, `testing/only.txt` wählt einzelne Tests.
+
+Gefunden und behoben (8): Ereignisse toter Verbindungen setzten "Verbunden" (leere Chats, scheiternde Suche, `66d865d`), Kopieren und Teilen in der Einrichtung lösten sich gegenseitig aus (`fef9ca3`), unsichtbarer Titel der Übersicht (`a129571`), Chat-Titel unter der Symbolleiste, Profilfelder ohne Beschriftung und Pluraltexte, englische Zustandswörter im RAM-Monitor (`4bb93b7`), Dateiansicht für Text ohne Rand (`18288ba`), fehlende Beschriftungen (`6ca34d6`).
+
+Nicht testbar: Push bei geschlossener App, Face ID, Spracherkennung, Siri, Kamera, Hintergrundabruf-Timing, echtes Netz (siehe Testbericht).
+
+Ergebnis: Lauf 41991991560 mit 60 von 60 Tests grün, Korrekturen in Lauf 42000379796 (18 Tests grün). Abschlusslauf siehe Testbericht.
