@@ -42,8 +42,8 @@ struct ScreenView: View {
             ToolbarItem(placement: .topBarLeading) { Button("Fertig") { dismiss() } }
             ToolbarItem(placement: .topBarTrailing) {
                 HStack {
-                    Button { fontSize = max(7, fontSize - 1) } label: { Image(systemName: "textformat.size.smaller") }
-                    Button { fontSize = min(16, fontSize + 1) } label: { Image(systemName: "textformat.size.larger") }
+                    Button { fontSize = max(7, fontSize - 1) } label: { Image(systemName: "textformat.size.smaller") }.accessibilityLabel("Schrift kleiner")
+                    Button { fontSize = min(16, fontSize + 1) } label: { Image(systemName: "textformat.size.larger") }.accessibilityLabel("Schrift größer")
                 }
             }
         }

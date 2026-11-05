@@ -82,7 +82,7 @@ final class ScreenTests: RelayTestCase {
         XCTAssertTrue(mockReceived("send", where: { ($0["keys"] as? [String])?.contains("Up") == true }))
         let f = app.textFields["Text tippen (ohne Enter)"]
         if f.exists { f.tap(); f.typeText("ls"); tap("Senden", exact: true, soft: true) }
-        tap("Größer", 1, soft: true)
+        tap("Schrift größer", 1, soft: true)
         shot("live-bildschirm-text")
         tap("Fertig", exact: true, soft: true)
     }
