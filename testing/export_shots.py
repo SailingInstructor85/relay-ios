@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Sortiert die mit `xcresulttool export attachments` exportierten Dateien nach Testklasse und Namen um."""
-import json, os, shutil, sys
+import json, os, re, shutil, sys
 
 src, dst = sys.argv[1], sys.argv[2]
 os.makedirs(dst, exist_ok=True)
@@ -17,8 +17,11 @@ for t in manifest:
         if not f or not os.path.exists(os.path.join(src, f)):
             continue
         ext = os.path.splitext(f)[1]
+        if ext.lower() not in (".png", ".jpg", ".jpeg") and "notes" not in name:
+            continue
         base = name.rsplit("_0_", 1)[0] if "_0_" in name else os.path.splitext(name)[0]
         out = os.path.join(dst, f"{cls}__{t.get('testIdentifier','').split('/')[-1].replace('()','')}__{base}{ext}".replace(" ", "_"))
+        out = re.sub(r'[^A-Za-z0-9_.\-/äöüÄÖÜß]', "_", out)
         shutil.copy(os.path.join(src, f), out)
         n += 1
 print(n, "Anhaenge exportiert")

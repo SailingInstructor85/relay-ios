@@ -103,14 +103,17 @@ jobs:
       - name: UI-Tests
         run: |
           rm -rf Results.xcresult
+          ONLY=""
+          if [ -s testing/only.txt ]; then for t in $(cat testing/only.txt); do ONLY="$ONLY -only-testing:RelayUITests/$t"; done; fi
+          echo "only: $ONLY"
           TEST_RUNNER_RELAY_UI_PORT=2222 TEST_RUNNER_RELAY_UI_USER="$(whoami)" \
           xcodebuild -project Relay.xcodeproj -scheme Relay -configuration Debug \
             -sdk iphonesimulator -destination "id=$UDID" -derivedDataPath build-sim \
-            -resultBundlePath Results.xcresult -parallel-testing-enabled NO \
+            -resultBundlePath Results.xcresult -parallel-testing-enabled NO $ONLY \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             test-without-building > test.log 2>&1 && rc=0 || rc=$?
           echo "$rc" > test.rc
-          grep -E "Test Case .* (passed|failed)|TEST (SUCCEEDED|FAILED)|error:" test.log | tail -150 || true
+          grep -E "Test Case .* (passed|failed)|TEST (SUCCEEDED|FAILED)|error:" test.log | cut -c1-300 | tail -300 || true
           echo "xcodebuild rc=$rc"
       - name: Screenshots exportieren
         if: always()
