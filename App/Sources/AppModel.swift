@@ -37,6 +37,9 @@ final class AppModel: ObservableObject {
     @AppStorage("lockEnabled") var lockEnabled = false
     @AppStorage("lastSync") var lastSync: Double = 0
     @AppStorage("avatarLook") private var avatarLookRaw = ""
+    @AppStorage("lastOpenedKey") var lastOpenedKey = ""
+    @AppStorage("favDirs") private var favDirsRaw = ""
+    @AppStorage("lastAlias") var lastAlias = ""
 
     @Published private(set) var state: ConnState = .off
     @Published private(set) var sessions: [String: Session] = [:]
@@ -51,7 +54,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var cloudError = ""
     @Published private(set) var cloudChecked: Double = 0
     @Published private(set) var look = Avatars.Look()
-    @Published var lastError: String?
+    @Published var lastError: String? { didSet { if let e = lastError, e != oldValue { AppLog.shared.log("warn", "ui", e) } } }
+    @Published private(set) var vpnActive = false
     @Published var openChat: String?   // a session key to navigate to (notification tap)
     @Published var openJarvis = false  // Siri / Action Button shortcut
     @Published var voiceLive = false   // hello_ok.config.voice == "live": the Desktop offers Jarvis Live (not used here)
@@ -59,6 +63,7 @@ final class AppModel: ObservableObject {
     var lastJarvisWarm = Date.distantPast
     var jarvisWarmUnsupported = false
     @Published var locked = false      // Face ID lock shown
+    @Published var incomingFiles: [URL] = []  // "In Relay öffnen": files waiting for a target session
     @Published var openNotice: String? // a notice ref to open (notification tap)
     @Published private(set) var desktopSleepAt: Date?  // `desktop_sleep`: the PC suspends, retry every 5 min
 
@@ -92,6 +97,33 @@ final class AppModel: ObservableObject {
         set { mutedRaw = newValue.sorted().joined(separator: "\n"); objectWillChange.send() }
     }
 
+    var favDirs: [String] {
+        get { FavDirs.decode(favDirsRaw) }
+        set { favDirsRaw = FavDirs.encode(newValue); objectWillChange.send() }
+    }
+
+    /// A file opened in Relay from another app (document type): queued until the user picked a session.
+    func receive(_ url: URL) {
+        guard url.isFileURL else { return }
+        if !incomingFiles.contains(url) { incomingFiles.append(url) }
+    }
+
+    /// Forget the queued files and delete the copies iOS put into our Inbox.
+    func dropIncoming() {
+        for u in incomingFiles where u.path.contains("/Inbox/") { try? FileManager.default.removeItem(at: u) }
+        incomingFiles = []
+    }
+
+    func rememberOpened(_ key: String) { if !key.isEmpty { lastOpenedKey = key } }
+
+    /// The state in words; "Kein Weg zum PC" when only a private LAN address is configured and no VPN is up.
+    var connLabel: String {
+        switch state {
+        case .noNetwork, .error: return ConnText.noRoute(host: host, vpn: vpnActive) ? ConnText.noRouteText : state.label
+        default: return state.label
+        }
+    }
+
     var configured: Bool { ServerConfig(host: host, port: port, user: user).isComplete }
     var publicKey: String { identity.openSSHPublicKey() }
     var setupCommand: String { "notifyd setup key \"\(publicKey)\"" }
@@ -107,6 +139,7 @@ final class AppModel: ObservableObject {
         monitor.pathUpdateHandler = { [weak self] path in
             Task { @MainActor in
                 guard let self else { return }
+                self.vpnActive = path.usesInterfaceType(.other)
                 let had = self.hasNetwork
                 self.hasNetwork = path.status == .satisfied
                 if self.hasNetwork != had { self.reconnect() }
@@ -289,6 +322,7 @@ final class AppModel: ObservableObject {
             desktopSleepAt = nil
             if !missed.isEmpty { postDigest() }
             Approvals.shared.flushReplay()
+            AppLog.shared.flushSaved()
             Task { await Approvals.shared.reconcile() }
         case "session_started":
             if let s = Session.from(ev["session"]) { replacePlaceholder(for: s); sessions[s.key] = s }

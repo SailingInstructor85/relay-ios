@@ -8,6 +8,8 @@ import RelayCore
 struct ChatView: View {
     @EnvironmentObject var model: AppModel
     let sessionKey: String
+    /// From the app-wide search: opens the chat's own search with this query.
+    var initialSearch: String? = nil
 
     @State private var messages: [TMessage] = []
     @State private var before: String?
@@ -34,6 +36,9 @@ struct ChatView: View {
     @State private var uploadInfo = ""
     @State private var showScreen = false
     @State private var showSearch = false
+    @State private var initialDone = false
+    @State private var standTick = 0
+    @Environment(\.scenePhase) private var scenePhase
     @State private var highlight: String?
     @State private var jumpTo: String?
     @State private var viewer: RemoteRef?
@@ -112,7 +117,7 @@ struct ChatView: View {
             }.ignoresSafeArea()
         }
         .sheet(isPresented: $showSearch) {
-            ChatSearchView(sessionKey: key) { id, index in Task { await jump(to: id, index: index) } }.environmentObject(model)
+            ChatSearchView(sessionKey: key, initial: initialSearch ?? "") { id, index in Task { await jump(to: id, index: index) } }.environmentObject(model)
         }
         .sheet(item: $viewer) { r in
             FileViewerView(start: r, base: session?.cwd).environmentObject(model)
@@ -132,6 +137,11 @@ struct ChatView: View {
             Button("Abbrechen", role: .cancel) {}
         }
         .task(id: key) { await openChat() }
+        .onAppear {
+            model.rememberOpened(key)
+            if let q = initialSearch, !q.isEmpty, !initialDone { initialDone = true; showSearch = true }
+        }
+        .onChange(of: scenePhase) { _, p in if p == .active { standTick += 1 } }
         .onDisappear {
             model.visibleChat = nil
             model.transcriptListeners[sessionKey] = nil
@@ -223,6 +233,12 @@ struct ChatView: View {
         let label = VStack(spacing: 0) {
             Text(session?.name ?? "Sitzung").font(.headline).lineLimit(1)
             Text(headerSubtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            if let la = session?.lastActivity, la > 0 {
+                // the clock is read anew on every pass and when the app comes back (a timer alone sleeps with the phone)
+                TimelineView(.periodic(from: .now, by: 30)) { _ in
+                    Text(StandText.text(lastActivity: la, now: Date())).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                }.id(standTick)
+            }
         }
         if session?.tool == "claude" {
             Menu {
@@ -701,7 +717,13 @@ struct ChatSearchView: View {
     let sessionKey: String
     let onPick: (String, Int) -> Void
 
-    @State private var query = ""
+    init(sessionKey: String, initial: String = "", onPick: @escaping (String, Int) -> Void) {
+        self.sessionKey = sessionKey
+        self.onPick = onPick
+        _query = State(initialValue: initial)
+    }
+
+    @State private var query: String
     @State private var hits: [JSON] = []
     @State private var searched = ""
     @State private var searching = false

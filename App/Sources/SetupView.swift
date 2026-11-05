@@ -43,7 +43,7 @@ struct SetupView: View {
                 }.disabled(host.trimmingCharacters(in: .whitespaces).isEmpty || user.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             Section("Status") {
-                HStack { Text("Verbindung"); Spacer(); Text(model.state.label).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
+                HStack { Text("Verbindung"); Spacer(); Text(model.connLabel).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
                 if !model.hostKey.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Gepinnter Host-Schlüssel")
@@ -57,6 +57,10 @@ struct SetupView: View {
                 ChatSettingsSection()
                 SpeechSettingsSection()
                 AgentSettingsSection()
+                Section("Profil") {
+                    NavigationLink { ProfileView() } label: { Label("Persönliche Angaben", systemImage: "person.text.rectangle") }
+                    Text("Name, Adresse, E-Mail für Formulare, gespeichert auf dem Desktop (profile.json).").font(.caption).foregroundStyle(.secondary)
+                }
                 Section("Sicherheit") {
                     Toggle("Mit Face ID sperren", isOn: $model.lockEnabled)
                     Text("Relay sperrt sich, sobald die App in den Hintergrund geht.").font(.caption).foregroundStyle(.secondary)

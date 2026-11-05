@@ -12,6 +12,7 @@ struct RelayApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
+                .onOpenURL { model.receive($0) }
                 .onAppear { model.start(); Outbox.shared.start(); model.requestNotificationPermission() }
                 .onChange(of: phase) { _, p in
                     model.setForeground(p == .active)
@@ -29,6 +30,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         AppModel.registerNotificationActions()
         BackgroundRefresh.register()
+        AppLog.shared.install()
         return true
     }
     func userNotificationCenter(_ c: UNUserNotificationCenter, willPresent n: UNNotification) async -> UNNotificationPresentationOptions {
@@ -92,6 +94,10 @@ struct RootView: View {
             }
         }
         .sheet(isPresented: $approvals.showSheet) { ApprovalSheet() }
+        .sheet(isPresented: Binding(get: { !model.incomingFiles.isEmpty && !model.locked && model.configured },
+                                    set: { if !$0 { model.dropIncoming() } })) {
+            ShareView(files: model.incomingFiles) { model.dropIncoming() }.environmentObject(model)
+        }
     }
 }
 

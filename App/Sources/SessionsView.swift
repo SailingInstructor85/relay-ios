@@ -14,9 +14,10 @@ struct SessionsView: View {
     @State private var showRename = false
     @State private var renameText = ""
     @State private var killTarget: Session?
+    @StateObject private var searcher = ContentSearcher()
     @State private var showKill = false
 
-    enum Dest: Hashable { case chat(String), settings, usage, memory, jarvis, jarvisListening, notices, notice(String), digest, tokens }
+    enum Dest: Hashable { case chat(String), chatSearch(String, String), settings, usage, memory, jarvis, jarvisListening, notices, notice(String), digest, tokens }
 
     private func haystack(_ s: Session) -> String { "\(s.name) \(s.alias) \(s.folder) \(s.cwd)" }
 
@@ -55,7 +56,12 @@ struct SessionsView: View {
             section("Bereit", idle)
             section("Sonstige", other)
         }
-        if all.isEmpty && model.state == .connected {
+        if !search.trimmingCharacters(in: .whitespaces).isEmpty {
+            SearchExtras(searcher: searcher, query: search,
+                         openChat: { key, q in path.append(Dest.chatSearch(key, q)) },
+                         openJarvis: { path.append(Dest.jarvis) })
+        }
+        if all.isEmpty && model.state == .connected && search.trimmingCharacters(in: .whitespaces).isEmpty {
             ContentUnavailableView(model.showDormant ? "Keine letzten Sitzungen" : "Keine Sitzungen", systemImage: "terminal",
                                    description: Text(model.showDormant ? "Beendete und geschlossene Sitzungen erscheinen hier." : "Starte eine neue Sitzung mit +"))
         }
@@ -74,7 +80,9 @@ struct SessionsView: View {
                 listContent
             }
             .listStyle(.insetGrouped)
-            .searchable(text: $search, prompt: "Sitzungen suchen")
+            .searchable(text: $search, prompt: "Sitzungen, Gespräche, Jarvis")
+            .onChange(of: search) { _, q in searcher.update(q, model: model) }
+            .onChange(of: model.state) { _, _ in searcher.update(search, model: model) }
             .refreshable { await model.refresh() }
             .navigationTitle("Relay")
             .toolbar {
@@ -106,6 +114,7 @@ struct SessionsView: View {
             .navigationDestination(for: Dest.self) { d in
                 switch d {
                 case .chat(let key): ChatView(sessionKey: key)
+                case .chatSearch(let key, let q): ChatView(sessionKey: key, initialSearch: q)
                 case .settings: SetupView()
                 case .usage: UsageView()
                 case .memory: MemoryView()
@@ -204,7 +213,7 @@ struct SessionsView: View {
         HStack {
             if model.state == .connecting { ProgressView().padding(.trailing, 4) }
             else { Image(systemName: "bolt.horizontal.circle").foregroundStyle(.orange) }
-            Text(model.state.label).font(.footnote)
+            Text(model.connLabel).font(.footnote)
             Spacer()
             Button("Erneut") { model.reconnect() }.font(.footnote)
         }

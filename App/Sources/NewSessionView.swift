@@ -38,7 +38,7 @@ struct NewSessionView: View {
                         .onSubmit { Task { await find() } }
                     ForEach(found) { d in dirButton(d.path, git: d.isGit) }
                     if query.isEmpty {
-                        ForEach(recent.prefix(10), id: \.self) { p in dirButton(p, git: false) }
+                        ForEach(Array(FavDirs.ordered(favs: model.favDirs, recent: recent).prefix(10 + model.favDirs.count)), id: \.self) { p in dirButton(p, git: false) }
                     }
                     Button { Task { await browse(browsing ?? "~") } } label: { Label("Durchsuchen", systemImage: "folder.badge.gearshape") }
                 }
@@ -75,6 +75,7 @@ struct NewSessionView: View {
                 }
             }
             .task {
+                if alias.isEmpty, !model.lastAlias.isEmpty, model.lastAlias == "auto" || model.accounts.contains(where: { $0.alias == model.lastAlias }) { alias = model.lastAlias }
                 if alias.isEmpty { alias = model.accounts.first { $0.tool == "claude" && $0.loggedIn }?.alias ?? model.accounts.first?.alias ?? "auto" }
                 if let r = try? await model.rpc("recent_dirs", ["limit": 30]) {
                     recent = r["dirs"].array.map { $0.str("path") }.filter { !$0.isEmpty }
@@ -87,14 +88,19 @@ struct NewSessionView: View {
     }
 
     private func dirButton(_ path: String, git: Bool) -> some View {
-        Button { cwd = path } label: {
-            HStack {
-                Image(systemName: git ? "arrow.triangle.branch" : "clock")
-                Text(path.replacingOccurrences(of: "/home/\(model.user)", with: "~")).lineLimit(1).truncationMode(.head)
-                Spacer()
-                if cwd == path { Image(systemName: "checkmark").foregroundStyle(.tint) }
-            }
-        }.foregroundStyle(.primary)
+        HStack {
+            Button { cwd = path } label: {
+                HStack {
+                    Image(systemName: git ? "arrow.triangle.branch" : "clock")
+                    Text(path.replacingOccurrences(of: "/home/\(model.user)", with: "~")).lineLimit(1).truncationMode(.head)
+                    Spacer()
+                    if cwd == path { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                }
+            }.foregroundStyle(.primary).buttonStyle(.borderless)
+            Button { model.favDirs = FavDirs.toggled(model.favDirs, path) } label: {
+                Image(systemName: model.favDirs.contains(path) ? "star.fill" : "star").foregroundStyle(.yellow)
+            }.buttonStyle(.borderless).accessibilityLabel(model.favDirs.contains(path) ? "Favorit entfernen" : "Als Favorit merken")
+        }
     }
 
     private func find() async {
@@ -117,6 +123,7 @@ struct NewSessionView: View {
         launching = true; defer { launching = false }
         do {
             let tmux = try await model.launch(alias: alias, cwd: cwd, prompt: prompt, name: name)
+            model.lastAlias = alias
             onLaunched(tmux)
             dismiss()
         } catch { self.error = error.localizedDescription }

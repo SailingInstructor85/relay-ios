@@ -40,6 +40,12 @@ targets:
         NSSpeechRecognitionUsageDescription: Deine Sprache wird auf dem iPhone in Text umgewandelt und an Jarvis geschickt.
         NSLocationWhenInUseUsageDescription: Relay sendet deinen Standort einmalig an den Desktop, wenn du eine Standortanfrage in der Mitteilung bestätigst.
         NSFaceIDUsageDescription: Relay lässt sich mit Face ID sperren.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Dateien für Relay
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.data, public.content, public.image, public.text]
+        LSSupportsOpeningDocumentsInPlace: false
         UIBackgroundModes: [fetch, audio]
         BGTaskSchedulerPermittedIdentifiers: [dev.relay.ios.refresh]
         ITSAppUsesNonExemptEncryption: false
