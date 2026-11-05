@@ -87,3 +87,5 @@ Gefunden und behoben (8): Ereignisse toter Verbindungen setzten "Verbunden" (lee
 Nicht testbar: Push bei geschlossener App, Face ID, Spracherkennung, Siri, Kamera, Hintergrundabruf-Timing, echtes Netz (siehe Testbericht).
 
 Ergebnis: Lauf 41991991560 mit 60 von 60 Tests grün, Korrekturen in Lauf 42000379796 (18 Tests grün). Abschlusslauf siehe Testbericht.
+
+Abschlusslauf: CI-Lauf 42026658632 (Commit 181a9bd), alle drei Jobs grün (core-tests, ipa, simulator). 60 Tests, dabei schlug `ListTests.test04_CloseAndUndo` einmal fehl ("Datenbank migrieren" nach dem Neustart nicht gefunden) und bestand in der automatischen Wiederholung. Die UI-Tests bleiben also leicht flatterhaft (rund ein Test je Lauf, immer ein anderer, meist spät im Lauf); die Wiederholung fängt das ab.
