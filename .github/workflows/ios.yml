@@ -73,8 +73,18 @@ jobs:
             source.json
 
   simulator:
+    # Vier Teile mit je frischem Simulator: in einem Lauf über 55 Minuten wurde der Simulator gegen Ende träge und
+    # einzelne Tests scheiterten zufällig (testbericht.md). Ein Teil läuft rund 15 Minuten.
     runs-on: macos-latest
-    timeout-minutes: 150
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - { name: info, classes: "InfoTests" }
+          - { name: liste, classes: "ListTests NewSessionTests SetupTests" }
+          - { name: chat, classes: "ChatTests" }
+          - { name: eingabe, classes: "ComposeTests ScreenTests" }
     steps:
       - uses: actions/checkout@v4
       - name: Xcode version
@@ -105,7 +115,15 @@ jobs:
         run: |
           rm -rf Results.xcresult
           ONLY=""
-          if [ -s testing/only.txt ]; then for t in $(cat testing/only.txt); do ONLY="$ONLY -only-testing:RelayUITests/$t"; done; fi
+          if [ -s testing/only.txt ]; then
+            # Auswahl aus only.txt: nur die Einträge, deren Klasse zu diesem Teil gehört
+            for t in $(cat testing/only.txt); do
+              for c in ${{ matrix.shard.classes }}; do if [ "${t%%/*}" = "$c" ]; then ONLY="$ONLY -only-testing:RelayUITests/$t"; fi; done
+            done
+            if [ -z "$ONLY" ]; then echo "only.txt enthält nichts für diesen Teil"; echo 0 > test.rc; exit 0; fi
+          else
+            for c in ${{ matrix.shard.classes }}; do ONLY="$ONLY -only-testing:RelayUITests/$c"; done
+          fi
           echo "only: $ONLY"
           TEST_RUNNER_RELAY_UI_PORT=2222 TEST_RUNNER_RELAY_UI_USER="$(whoami)" \
           xcodebuild -project Relay.xcodeproj -scheme Relay -configuration Debug \
@@ -132,7 +150,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: simulator-results
+          name: simulator-results-${{ matrix.shard.name }}
           path: |
             out/shots
             out/*.json
@@ -142,7 +160,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: xcresult
+          name: xcresult-${{ matrix.shard.name }}
           path: Results.xcresult
       - name: Ergebnis
         run: test "$(cat test.rc)" -eq 0
