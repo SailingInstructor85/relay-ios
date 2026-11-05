@@ -126,7 +126,8 @@ jobs:
           python3 testing/export_shots.py out/raw out/shots || true
           sudo chmod a+r /tmp/relaymock/* 2>/dev/null; cp /tmp/relaymock/mock.log /tmp/relaymock/rpc-all.jsonl /tmp/relaymock/sshd.log out/ 2>/dev/null || true
           cp test.log build-sim.log out/ 2>/dev/null || true
-          xcrun simctl spawn "$UDID" log show --last 30m --predicate 'process == "Relay"' --style compact > out/relay-app.log 2>&1 || true
+          xcrun simctl spawn "$UDID" log show --last 90m --predicate 'process == "Relay" AND (messageType == fault OR messageType == error)' --style compact 2>&1 | tail -n 2000 > out/relay-app-errors.log || true
+          ls -la ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -i relay > out/crash-reports.txt || true
           ls out/shots | wc -l
       - uses: actions/upload-artifact@v4
         if: always()
@@ -136,6 +137,7 @@ jobs:
             out/shots
             out/*.json
             out/*.log
+            out/crash-reports.txt
             out/rpc-all.jsonl
       - uses: actions/upload-artifact@v4
         if: always()
