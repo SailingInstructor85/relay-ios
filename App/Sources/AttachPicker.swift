@@ -30,6 +30,58 @@ struct CameraPicker: UIViewControllerRepresentable {
     }
 }
 
+/// The photo library (PHPickerViewController, runs out of process, needs no permission), shown in a sheet.
+/// Replaces SwiftUI's `.photosPicker(isPresented:)`, which on the iPhone did not open when triggered from the attach
+/// menu (2026-11-05). Calls back with the picked item or nil when cancelled.
+struct PhotoLibraryPicker: UIViewControllerRepresentable {
+    let onPick: (NSItemProvider?) -> Void
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .any(of: [.images, .videos])
+        config.selectionLimit = 1
+        config.preferredAssetRepresentationMode = .compatible  // HEIC arrives as JPEG, HEVC as H.264
+        let p = PHPickerViewController(configuration: config)
+        p.delegate = context.coordinator
+        return p
+    }
+
+    func updateUIViewController(_ vc: PHPickerViewController, context: Context) {}
+    func makeCoordinator() -> Coordinator { Coordinator(onPick) }
+
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let onPick: (NSItemProvider?) -> Void
+        init(_ f: @escaping (NSItemProvider?) -> Void) { onPick = f }
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            onPick(results.first?.itemProvider)
+        }
+    }
+}
+
+/// What the photo library handed over: a video as a temp file, or an image's bytes.
+enum PickedMedia {
+    case movie(URL)
+    case image(Data)
+
+    static func load(_ p: NSItemProvider) async throws -> PickedMedia {
+        if p.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
+            return .movie(try await withCheckedThrowingContinuation { c in
+                _ = p.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, err in
+                    // The file is only valid inside this callback: copy it out first.
+                    guard let url else { c.resume(throwing: err ?? RelayErrorText("Video konnte nicht geladen werden")); return }
+                    let dest = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString)-\(url.lastPathComponent)")
+                    do { try FileManager.default.copyItem(at: url, to: dest); c.resume(returning: dest) } catch { c.resume(throwing: error) }
+                }
+            })
+        }
+        return .image(try await withCheckedThrowingContinuation { c in
+            _ = p.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, err in
+                if let data { c.resume(returning: data) } else { c.resume(throwing: err ?? RelayErrorText("Foto konnte nicht geladen werden")) }
+            }
+        })
+    }
+}
+
 /// A video from the photo picker, copied to a temp file (not into memory) until it is uploaded.
 struct PickedMovie: Transferable {
     let url: URL

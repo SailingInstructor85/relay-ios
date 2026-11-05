@@ -32,7 +32,6 @@ struct ChatView: View {
     @ObservedObject private var outbox = Outbox.shared
     @State private var error: String?
     @State private var confirmForce: String?
-    @State private var photo: PhotosPickerItem?
     @State private var importing = false
     @State private var pickingPhoto = false
     @State private var uploadInfo = ""
@@ -134,8 +133,12 @@ struct ChatView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item]) { result in
             if case .success(let url) = result { Task { await uploadFile(url) } }
         }
-        .photosPicker(isPresented: $pickingPhoto, selection: $photo, matching: .any(of: [.images, .videos]), preferredItemEncoding: .compatible)
-        .onChange(of: photo) { _, item in if let item { Task { await uploadPhoto(item) } } }
+        .sheet(isPresented: $pickingPhoto) {
+            PhotoLibraryPicker { provider in
+                pickingPhoto = false
+                if let provider { Task { await uploadPicked(provider) } }
+            }.ignoresSafeArea()
+        }
         .confirmationDialog("Die Sitzung arbeitet gerade.", isPresented: Binding(get: { confirmForce != nil }, set: { if !$0 { confirmForce = nil } }), titleVisibility: .visible) {
             Button("Trotzdem senden") { if let t = confirmForce { Task { await send(t, force: true) } } }
             Button("Abbrechen", role: .cancel) {}
@@ -203,8 +206,9 @@ struct ChatView: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 Menu {
-                    // A PhotosPicker inside a Menu does not open on iOS; the menu item only sets a flag for .photosPicker below.
-                    Button { pickingPhoto = true } label: { Label("Foto oder Video", systemImage: "photo") }
+                    // A picker inside a Menu does not open on iOS; the menu item sets a flag for the sheet below, a moment
+                    // later so the menu has closed first (presenting while it closes was dropped on the iPhone).
+                    Button { Task { try? await Task.sleep(nanoseconds: 350_000_000); pickingPhoto = true } } label: { Label("Foto oder Video", systemImage: "photo") }
                     if CameraPicker.available { Button { camera = true } label: { Label("Kamera", systemImage: "camera") } }
                     if UIPasteboard.general.hasImages { Button { Task { await uploadClipboard() } } label: { Label("Bild aus Zwischenablage", systemImage: "doc.on.clipboard") } }
                     Button { importing = true } label: { Label("Datei", systemImage: "doc") }
@@ -555,25 +559,26 @@ struct ChatView: View {
 
     // MARK: attachments
 
-    private func uploadPhoto(_ item: PhotosPickerItem) async {
-        defer { photo = nil }
+    private func uploadPicked(_ provider: NSItemProvider) async {
         let stamp = Int(Date().timeIntervalSince1970)
-        if item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) }) {
-            guard let mv = try? await item.loadTransferable(type: PickedMovie.self) else { error = "Video konnte nicht geladen werden"; return }
-            defer { try? FileManager.default.removeItem(at: mv.url) }
-            let size = (try? mv.url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        uploadInfo = "Lade Auswahl…"
+        let media: PickedMedia
+        do { media = try await PickedMedia.load(provider) } catch { uploadInfo = ""; self.error = error.localizedDescription; return }
+        uploadInfo = ""
+        switch media {
+        case .movie(let url):
+            defer { try? FileManager.default.removeItem(at: url) }
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             guard size <= Attach.maxBytes else { error = "Das Video ist größer als 50 MB"; return }
-            guard let data = try? Data(contentsOf: mv.url, options: .mappedIfSafe) else { error = "Video konnte nicht gelesen werden"; return }
-            let ext = mv.url.pathExtension.isEmpty ? "mov" : mv.url.pathExtension
+            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { error = "Video konnte nicht gelesen werden"; return }
+            let ext = url.pathExtension.isEmpty ? "mov" : url.pathExtension
             await upload(name: "video-\(stamp).\(ext)", data: data)
-            return
+        case .image(let data):
+            // The name follows the bytes (with .compatible iOS hands over JPEG for a HEIC original).
+            let type = CGImageSourceCreateWithData(data as CFData, nil).flatMap { CGImageSourceGetType($0) }.flatMap { UTType($0 as String) }
+            let ext = type?.preferredFilenameExtension ?? "jpg"
+            await upload(name: "foto-\(stamp).\(ext)", data: data, photo: true, mime: type?.preferredMIMEType)
         }
-        guard let data = try? await item.loadTransferable(type: Data.self) else { error = "Foto konnte nicht geladen werden"; return }
-        // With .compatible encoding iOS may hand over JPEG for a HEIC original, so the name follows the bytes, not the item.
-        let type = CGImageSourceCreateWithData(data as CFData, nil).flatMap { CGImageSourceGetType($0) }.flatMap { UTType($0 as String) }
-            ?? item.supportedContentTypes.first
-        let ext = type?.preferredFilenameExtension ?? "jpg"
-        await upload(name: "foto-\(stamp).\(ext)", data: data, photo: true, mime: type?.preferredMIMEType)
     }
 
     private func uploadClipboard() async {
