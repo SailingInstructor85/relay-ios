@@ -36,6 +36,7 @@ final class ChatTests: RelayTestCase {
     func test03_MessageMenuAndLinks() {
         launchConnected()
         openSession("API Refactoring")
+        revealChat("Zusammenfassung")
         let msg = find("Zusammenfassung")
         XCTAssertNotNil(msg)
         msg?.press(forDuration: 1.2)
@@ -47,6 +48,7 @@ final class ChatTests: RelayTestCase {
             settle(1); shot("text-auswaehlen"); tap("Schließen", soft: true)
         } else { app.tap() }
         // Menü mit Links
+        revealChat("Zusammenfassung")
         find("Zusammenfassung")?.press(forDuration: 1.2)
         settle(1)
         expect("example.com", 3, soft: true)
@@ -59,21 +61,21 @@ final class ChatTests: RelayTestCase {
         openSession("API Refactoring")
         settle(1)
         // Dateichips: README, main.py, Diagramm, Bericht
-        if tap("README.md", 5, soft: true) {
+        if revealChat("README.md") && tap("README.md", 5, soft: true) {
             settle(2); shot("datei-markdown")
             tap("Schließen", soft: true)
         }
-        if tap("main.py", 5, soft: true) {
+        if revealChat("main.py") && tap("main.py", 5, soft: true) {
             settle(2); shot("datei-code")
             tap("Schließen", soft: true)
         }
-        if tap("diagramm.png", 5, soft: true) {
+        if revealChat("diagramm.png") && tap("diagramm.png", 5, soft: true) {
             settle(2); shot("datei-bild")
             app.windows.firstMatch.doubleTap()
             settle(1); shot("datei-bild-zoom")
             tap("Schließen", soft: true)
         }
-        if tap("bericht.pdf", 5, soft: true) {
+        if revealChat("bericht.pdf") && tap("bericht.pdf", 5, soft: true) {
             settle(3); shot("datei-pdf")
             tap("Schließen", soft: true)
         }
@@ -86,6 +88,7 @@ final class ChatTests: RelayTestCase {
         settle(1)
         shot("pfad-vorher")
         // Pfad im Text
+        revealChat("src/main.py")
         if let e = find("src/main.py:3") ?? find("/home/dev/workspace/webapp/src/main.py") {
             e.tap(); settle(2); shot("pfad-getippt")
         } else { notes.append("Pfad im Text nicht als Element gefunden") }

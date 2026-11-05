@@ -883,8 +883,10 @@ METHODS = {k[4:]: v for k, v in list(globals().items()) if k.startswith("rpc_") 
 def handle_rpc(o):
     rid, method, params = o.get("id"), o.get("method", ""), o.get("params") or {}
     try:
-        with open(os.path.join(DIR, "rpc.jsonl"), "a") as f:
-            f.write(json.dumps({"ts": time.time(), "method": method, "params": params}, ensure_ascii=False)[:4000] + "\n")
+        line = json.dumps({"ts": time.time(), "method": method, "params": params}, ensure_ascii=False)[:4000] + "\n"
+        for fn in ("rpc.jsonl", "rpc-all.jsonl"):
+            with open(os.path.join(DIR, fn), "a") as f:
+                f.write(line)
     except OSError:
         pass
     try:

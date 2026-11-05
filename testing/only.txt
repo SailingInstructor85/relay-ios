@@ -1,3 +1,4 @@
 SetupTests
-ListTests
 ChatTests
+ComposeTests
+ScreenTests

@@ -136,6 +136,17 @@ class RelayTestCase: XCTestCase {
         return false
     }
 
+    /// Im Chat nach oben scrollen, bis ein Element sichtbar ist.
+    @discardableResult
+    func revealChat(_ s: String, max: Int = 30) -> Bool {
+        for i in 0..<max {
+            if let e = find(s), e.isHittable { return true }
+            app.swipeDown(velocity: .fast)
+            if i % 5 == 4 { Thread.sleep(forTimeInterval: 0.6) }
+        }
+        return find(s)?.isHittable ?? false
+    }
+
     func row(_ t: String) -> XCUIElement? { reveal(t); return find(t) }
 
     func openSession(_ title: String) {

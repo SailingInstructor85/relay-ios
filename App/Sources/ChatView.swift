@@ -235,7 +235,7 @@ struct ChatView: View {
     @ViewBuilder private var titleView: some View {
         let label = VStack(spacing: 0) {
             Text(session?.name ?? "Sitzung").font(.headline).lineLimit(1)
-            Text(headerSubtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            Text(headerSubtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
             if let la = session?.lastActivity, la > 0 {
                 // the clock is read anew on every pass and when the app comes back (a timer alone sleeps with the phone)
                 TimelineView(.periodic(from: .now, by: 30)) { _ in
@@ -243,6 +243,7 @@ struct ChatView: View {
                 }.id(standTick)
             }
         }
+        .frame(maxWidth: 190) // die Symbolleiste rechts ist breit; ohne Grenze quillt der Untertitel unter die Knöpfe
         if session?.tool == "claude" {
             Menu {
                 let idle = session?.state != "busy"

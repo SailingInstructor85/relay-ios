@@ -166,15 +166,23 @@ final class AppModel: ObservableObject {
         foreground = fg
         if fg {
             if oneShot != nil { link?.close() } // a background check's link: the main loop takes over
-            else if link?.isOpen != true { reconnect() }
+            else if link?.isOpen != true && state != .connecting { reconnect() }
         }
     }
 
     private func makeLink() -> GatewayLink {
         let cfg = ServerConfig(host: host.trimmingCharacters(in: .whitespaces), port: port, user: user.trimmingCharacters(in: .whitespaces))
-        return GatewayLink(config: cfg, identity: identity, pinnedHostKey: hostKey.isEmpty ? nil : hostKey,
-                           onHostKey: { key in Task { @MainActor in AppModel.shared.hostKey = key } },
-                           onEvent: { ev in Task { @MainActor in AppModel.shared.handle(ev) } })
+        // Ereignisse einer schon ersetzten oder geschlossenen Verbindung dürfen den Zustand nicht mehr ändern
+        // (sonst steht "Verbunden" bei toter Verbindung und jeder Aufruf scheitert mit "Nicht verbunden").
+        let box = LinkBox()
+        let l = GatewayLink(config: cfg, identity: identity, pinnedHostKey: hostKey.isEmpty ? nil : hostKey,
+                            onHostKey: { key in Task { @MainActor in AppModel.shared.hostKey = key } },
+                            onEvent: { ev in Task { @MainActor in
+                                let m = AppModel.shared
+                                if let mine = box.link, m.link === mine { m.handle(ev) }
+                            } })
+        box.link = l
+        return l
     }
 
     // MARK: short connections while in the background (notification actions, background refresh)
@@ -720,3 +728,6 @@ final class AppModel: ObservableObject {
         sessions[ref] ?? sessions.values.first { $0.matches(ref) && !$0.placeholder } ?? sessions.values.first { $0.matches(ref) }
     }
 }
+
+/// Hält die eigene Verbindung für den Ereignis-Rückruf (schwach, damit keine Schleife entsteht).
+final class LinkBox: @unchecked Sendable { weak var link: GatewayLink? }
