@@ -49,3 +49,15 @@ Entscheidungen: Testlauf ist standardmäßig AN (wie im Plan), also passiert bei
 Risiken: nicht auf dem Gerät getestet. Die Texte bei fehlendem Pool-Helfer hängen am Fehlerpräfix "usage helper unavailable". Die Form von `digest` und `session_tokens` stammt aus PROTOCOL.md, nicht aus einer echten Antwort.
 
 Commits: 0d495dd (Code). CI-Lauf Code: 41942770780 grün (core-tests, ipa).
+
+## Arbeitspaket 6 (Jarvis und Stimme)
+
+Gebaut: Abschnitt "Sprache und Stimme" in den Einstellungen (VoicePickerView.swift): Erkennungssprache auto/de/en (gilt für Jarvis und Diktat), Ausgabesprache auto/de/en (bei auto je Satz per Wortheuristik), Tempo 0,5 bis 1,5, Stimme Deutsch und Englisch nur aus installierten Stimmen (premium vor enhanced vor kompakt, Novelty und Eloquence ausgeblendet) mit "Testen", Hinweis auf mehr Stimmen. Das Vorlesen im Nachrichtenmenü nutzt dieselben Einstellungen. Stoppwörter und zwei stille Züge beenden den Gesprächsmodus. "Erkennung korrigieren" im Jarvis-Menü (`voice_vocab_add`, danach `voice_vocab` neu). Vokabular: `contextualStrings` aus `SpeechVocab.biasing`, Wahl unter den Hypothesen mit Begriffsbonus, ganzwörtliche Korrekturen längste Phrase zuerst. Satzweises Vorlesen mit Ziffernregel ("am 4. Oktober"). "Fertige Sitzungen vorlesen" (Einstellung, aus): bei "fertig" im Vordergrund, nicht im geöffneten Chat, nur mit Kopfhörern oder Gesprächsmodus; `speak_summary`, Fallback erste Sätze. Jarvis-Verlauf als jarvis-history.json (200 Einträge) mit "Chat löschen". `voice_timing` (trigger mic/button/follow_up, Stufen heard, first_text, answer). `jarvis_warm` auch beim Fokus aufs Textfeld, höchstens alle 30 s, bei "unknown rpc" nicht erneut. Bei `hello_ok.config.voice == "live"` zeigt Jarvis einen Hinweis. Reine Logik in RelayCore (Speech.swift: SpeechText, SentenceSplitter, Voices, SpeechVocab, JarvisHistory, VoiceMode) mit 7 neuen Tests.
+
+Nicht gebaut: Wake-Word "Hey Jarvis" (F8, iOS erlaubt kein dauerhaftes Mikrofon; Siri-Kurzbefehl und Aktionstaste bleiben), Jarvis Live (F9, braucht Gemini und Sprachkanal auf dem PC), Wake-Koordination (F10).
+
+Entscheidungen: Erkennungssprache "auto" folgt der ersten iPhone-Sprache (Englisch, sonst Deutsch), weil SFSpeechRecognizer keine Sprache selbst erkennt. Vokabular wird nicht auf dem Gerät zwischengespeichert (nur bei Verbindung geladen). Der erste stille Zug im Gesprächsmodus startet das Zuhören einmal neu, der zweite beendet. Die Zeitstufe "heard" enthält die Sprechzeit.
+
+Risiken: nicht auf dem Gerät getestet. Das Vorlesen fertiger Sitzungen läuft im Hintergrund nur, solange die Audio-Sitzung lebt. Die Stimmenliste hängt von den installierten Stimmen ab (leer: Systemvorgabe). Der Text von "unknown rpc" aus dem Gateway ist angenommen.
+
+Commits: 0e8883c (Code). CI-Lauf Code: 41944741044 grün (core-tests, ipa).
