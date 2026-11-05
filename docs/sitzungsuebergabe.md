@@ -87,7 +87,7 @@ Weitere tmux-Optionen: `@relay_holder_since` (Zeitpunkt), `@relay_ro_clients` (w
 1. Soll nach "Am PC zurückholen" das Handy gesperrt sein (jetzt so), oder reicht der Hinweis und beide dürfen weiter tippen?
 2. Passt `Strg-b H`? Oder lieber eine Taste ohne Präfix wie `F12` (würde in jedem Client gelten) oder ein anderer Buchstabe?
 3. Reicht eine Taste statt des gesprochenen oder getippten Satzes? Wenn der Satz wichtig ist: Variante mit Claude-Code-Hook (`UserPromptSubmit`) möglich, braucht eine Änderung an `settings.json` von dir und unterscheidet nicht zwischen PC und Handy.
-4. Soll das Handy automatisch übernehmen, wenn `anwesenheit` "weg" meldet, und der PC automatisch zurück, wenn du wieder da bist (Bildschirm entsperrt)? Technisch über denselben Aufruf machbar, hier nicht gebaut.
+4. ~~Automatisch übernehmen bei Abwesenheit?~~ Entschieden (Martin, 2026-11-05): nein. Übergabe nur auf ausdrücklichen Wunsch, kein Automatismus.
 5. Soll die rote Statuszeile bleiben oder ein ruhigerer Hinweis (nur Meldung beim Tippen)?
 6. Livebetrieb: Die Funktion läuft erst, wenn notifyd aus dem Zweig `uebergabe` (oder nach Merge) startet. Soll ich den Zweig auf `lokal-clear-beendet` zurückführen, wenn du zufrieden bist, und wann den Dienst neu starten?
 7. `relay-hier` als Skript in der Venv ist nach einem Neu-Sync da. Soll es zusätzlich nach `~/.local/bin` verlinkt werden?
