@@ -75,3 +75,5 @@ Entscheidungen: Der Hinweis "Kein Weg zum PC" erscheint nur bei Zustand "Kein Ne
 Klasse K, noch nicht "vorhanden" nach diesem Paket: F7 (Fertige Sitzungen vorlesen) bleibt "teilweise", weil iOS das Vorlesen nur im Vordergrund oder bei lebender Audio-Sitzung zulässt. D4 "fehlt" mit Absicht. Alles andere der Klasse K steht auf "vorhanden"; A2, A5, A10, B4, B5, C19, D2, F4 wurden in diesem Durchgang nachgezogen.
 
 Risiken: nicht auf dem Gerät getestet. `IntentAuthenticationPolicy` und MetricKit-Diagnosen sind nur kompiliert. Dokumenttyp `public.data` macht Relay in vielen "Öffnen mit"-Listen sichtbar (Rang Alternate). Die Gesprächssuche kostet auf dem PC einen Scan je Anfrage (7 Tage).
+
+Commits: 612f1eb (Code), Folgekorrektur SessionsView und Return sendet siehe Verlauf. CI-Lauf 41948160788: core-tests und ipa grün, `BUILD SUCCEEDED` belegt.
