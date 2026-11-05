@@ -11,7 +11,7 @@ final class SetupTests: RelayTestCase {
         shot("einrichtung-befehl-kopiert")
         // Felder ausfüllen
         let host = app.textFields.matching(NSPredicate(format: "placeholderValue CONTAINS 'Host'")).firstMatch
-        app.swipeUp()
+        app.swipeUp(); app.swipeUp()
         settle(0.5)
         XCTAssertTrue(host.waitForExistence(timeout: 5), "Hostfeld fehlt")
         func focus(_ e: XCUIElement) {
@@ -23,9 +23,9 @@ final class SetupTests: RelayTestCase {
             shot("kein-fokus")
         }
         shot("einrichtung-gescrollt")
-        focus(host); host.typeText("127.0.0.1")
+        focus(host); host.typeText("127.0.0.1\n"); settle(0.5)
         let port = app.textFields["Port"]
-        focus(port); port.typeText("\u{8}\u{8}" + (env["RELAY_UI_PORT"] ?? "2222"))
+        focus(port); port.typeText("\u{8}\u{8}" + (env["RELAY_UI_PORT"] ?? "2222") + "\n"); settle(0.5)
         shot("einrichtung-port")
         let user = app.textFields["Benutzer"]
         focus(user); user.typeText(env["RELAY_UI_USER"] ?? NSUserName())

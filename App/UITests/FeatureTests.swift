@@ -35,7 +35,7 @@ final class NewSessionTests: RelayTestCase {
         app.swipeUp(); settle(0.5)
         shot("neu-workspace")
         let name = app.textFields.matching(NSPredicate(format: "placeholderValue CONTAINS 'Name'")).firstMatch
-        if name.exists { name.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).tap(); name.typeText("neuprojekt"); dismissKeyboard() }
+        if name.exists { name.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).tap(); name.typeText("neuprojekt\n"); settle(0.6) }
         for _ in 0..<4 where !has("Neuer Ordner", 0.5) { app.swipeDown() }
         tap("Neuer Ordner", soft: true)
         settle(1.5)
