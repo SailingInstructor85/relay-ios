@@ -53,7 +53,7 @@ class RelayTestCase: XCTestCase {
     /// Startet und wartet, bis die Sitzungsliste mit Daten da ist.
     func launchConnected() {
         launch()
-        XCTAssertTrue(has("Wartet auf dich", 30), "Sitzungsliste nicht geladen")
+        XCTAssertTrue(has("Wartet auf dich", 60), "Sitzungsliste nicht geladen")
         settle(1)
     }
 

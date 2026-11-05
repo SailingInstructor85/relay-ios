@@ -68,3 +68,7 @@ Ergebnis: 8 Fehler behoben (1 schwer, 3 mittel, 4 klein). Fehler in den Tests se
 - Layout wurde nur auf einem iPhone Pro (iOS 26) gesehen. Kleine Geräte, Querformat, Dynamic Type groß und Dunkelmodus sind nicht abgedeckt.
 - `-relayUITest` ist in jedem Build vorhanden. Es wirkt nur mit dem Startargument (nie ohne), löscht dann aber App-Daten. Ein Nutzer kann das nicht versehentlich auslösen.
 - Der feste Test-Seed steht im Quelltext (erfunden, nur für CI, der Schlüssel gilt nur für den eigenen sshd im Lauf).
+
+## Abschlusslauf und Stabilität
+
+Der Lauf 42005893092 (alle 60 Tests) hatte im ersten Versuch einen Fehler in `ComposeTests.test04_OutboxWhenOffline` (UI-Abfrage nach 30 Sekunden Zeitüberschreitung) und im zweiten Versuch einen in `ListTests.test08_ReopenDormant` (Liste nach 30 Sekunden noch nicht da, laut Mock-Log war die Verbindung aber da). Beide Tests liefen in den Läufen davor und danach fehlerfrei, und beide Fehler traten erst nach rund 55 Minuten Laufzeit auf (der Simulator wird gegen Ende träge, "kAXErrorServerNotFound"). Gegenmaßnahme: Warten auf die Liste auf 60 Sekunden verlängert und `xcodebuild` wiederholt fehlgeschlagene Tests einmal (`-retry-tests-on-failure -test-iterations 2`). Der Abschlusslauf steht in `docs/nachtlog.md`.

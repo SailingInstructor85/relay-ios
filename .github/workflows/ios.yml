@@ -110,7 +110,7 @@ jobs:
           TEST_RUNNER_RELAY_UI_PORT=2222 TEST_RUNNER_RELAY_UI_USER="$(whoami)" \
           xcodebuild -project Relay.xcodeproj -scheme Relay -configuration Debug \
             -sdk iphonesimulator -destination "id=$UDID" -derivedDataPath build-sim \
-            -resultBundlePath Results.xcresult -parallel-testing-enabled NO $ONLY \
+            -resultBundlePath Results.xcresult -parallel-testing-enabled NO -retry-tests-on-failure -test-iterations 2 $ONLY \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             test-without-building > test.log 2>&1 && rc=0 || rc=$?
           echo "$rc" > test.rc
