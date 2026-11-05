@@ -39,3 +39,13 @@ Entscheidungen: Hinweis-Aktion "Freigeben" verlangt immer entsperrtes Gerät, un
 Risiken: nicht auf dem Gerät getestet. Freigabe aus Mitteilung im Hintergrund hängt an `connectOnce` (ca. 30 s Zeit). Banner-Streifen sitzt über der NavigationStack (Statusleisten-Abstand ungetestet). Standort braucht die Berechtigung "beim Verwenden".
 
 Commits: c8d4087 (Code). CI-Lauf 41940804910 grün (core-tests, ipa).
+
+## Arbeitspaket 5 (Konten, Nutzung, Cloud, Einstellungen, Desktop-Power)
+
+Gebaut: Nutzung mit Prognose-Zeile ("Reicht bis zum Reset, ca. X % bleiben ungenutzt" oder "leer um HH:MM"), klarer Hinweis, wenn der Pool-Helfer `claude-pool` fehlt (Codex zeigt trotzdem), Abschnitt "Weitere Angaben" (Cloud-Guthaben, Extra Usage, Nutzung je Produkt), Konto-Detailansicht, Aktualisierung alle 120 s. Cloud-Sitzungen (rpc und Event, Fehlertext, leerer Zustand, Tipp öffnet die URL). RAM-Monitor: 10-s-Aktualisierung, Warnband unter 2 GB, relative Balken, Gründe und Texte für Geschlossene, Schließen mit Rückgängig (über `softClose`, Bestätigung bei busy). Einstellungsabschnitt "Jarvis-Agent" (`get_config`/`set_config`, sendet nur geänderte Felder) und "Desktop ausschalten" (Schalter Testlauf). PowerView (Menü "Desktop ausschalten ..."): `power_status`-Vorschau, zweistufig bestätigt, `power_off` und `standby`, Fehlertext des Gateways unverändert. Zusätzlich "Was war los" (`digest`) und "Token-Verbrauch" (`session_tokens`). Reine Logik in RelayCore (Accounts.swift: AccountsText, PowerStatus, OverviewConfig, UsageExtras) mit 5 neuen Tests.
+
+Entscheidungen: Testlauf ist standardmäßig AN (wie im Plan), also passiert beim Ausschalten und Standby nichts, bis Martin den Schalter in den Einstellungen abschaltet. Echtes Ausschalten braucht die NOPASSWD-Regel auf dem PC, die ich nicht angefasst habe; ohne sie zeigt die App den Gateway-Fehler. Standby ist mitgebaut (braucht zusätzlich den Pi zum Wecken). `renew` (G5) und `usage_split` (G3) entfallen (Pool-Helfer nötig); im Konto-Detail steht ein Hinweis. Hibernate-Plan (G14) nur über die WP1-Tags, kein eigener Aufruf. Memory-Zeilen ohne bekannte Sitzung werden ohne Rückgängig sofort geschlossen.
+
+Risiken: nicht auf dem Gerät getestet. Die Texte bei fehlendem Pool-Helfer hängen am Fehlerpräfix "usage helper unavailable". Die Form von `digest` und `session_tokens` stammt aus PROTOCOL.md, nicht aus einer echten Antwort.
+
+Commits: 0d495dd (Code). CI-Lauf Code: 41942770780 grün (core-tests, ipa).
