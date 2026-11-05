@@ -15,7 +15,7 @@ struct SessionsView: View {
     @State private var killTarget: Session?
     @State private var showKill = false
 
-    enum Dest: Hashable { case chat(String), settings, usage, memory, jarvis, jarvisListening }
+    enum Dest: Hashable { case chat(String), settings, usage, memory, jarvis, jarvisListening, notices, notice(String) }
 
     private func haystack(_ s: Session) -> String { "\(s.name) \(s.alias) \(s.folder) \(s.cwd)" }
 
@@ -78,6 +78,7 @@ struct SessionsView: View {
                         Button { path.append(Dest.jarvis) } label: { Label("Jarvis fragen", systemImage: "waveform") }
                         Button { path.append(Dest.usage) } label: { Label("Nutzung & Limits", systemImage: "gauge.with.dots.needle.33percent") }
                         Button { path.append(Dest.memory) } label: { Label("RAM-Monitor", systemImage: "memorychip") }
+                        Button { path.append(Dest.notices) } label: { Label("Hinweise", systemImage: "bell.badge") }
                         Button { model.markAllRead() } label: { Label("Alle gelesen", systemImage: "checkmark.circle") }
                             .disabled(model.unread.isEmpty)
                         Toggle(isOn: $model.showBackground) { Label("Hintergrundläufe", systemImage: "moon.zzz") }
@@ -101,6 +102,8 @@ struct SessionsView: View {
                 case .memory: MemoryView()
                 case .jarvis: JarvisView()
                 case .jarvisListening: JarvisView(autoListen: true)
+                case .notices: NoticeView(ref: nil, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice)
+                case .notice(let ref): NoticeView(ref: ref, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice)
                 }
             }
             .sheet(isPresented: $showNew) {
@@ -120,10 +123,14 @@ struct SessionsView: View {
             .onChange(of: model.openChat) { _, key in
                 if let key { path = NavigationPath(); path.append(Dest.chat(key)); model.openChat = nil }
             }
+            .onChange(of: model.openNotice) { _, ref in
+                if let ref { path = NavigationPath(); path.append(Dest.notice(ref)); model.openNotice = nil }
+            }
             .onChange(of: model.openJarvis) { _, open in
                 if open { path = NavigationPath(); path.append(Dest.jarvisListening); model.openJarvis = false }
             }
             .onAppear {
+                if let ref = model.openNotice { path.append(Dest.notice(ref)); model.openNotice = nil }
                 if model.openJarvis { path.append(Dest.jarvisListening); model.openJarvis = false }
             }
             .task { await model.pollTriage() }
@@ -145,6 +152,15 @@ struct SessionsView: View {
                 Button("Abbrechen", role: .cancel) {}
                 Button("Umbenennen") { if let s = renameTarget { Task { await model.rename(s, to: renameText) } } }
             }
+        }
+    }
+
+    private func goNotice(_ g: NoticeLogic.Goto) {
+        switch g {
+        case .accounts: path.append(Dest.usage)
+        case .jarvis: path.append(Dest.jarvis)
+        case .sessions: path = NavigationPath()
+        case .none: break
         }
     }
 

@@ -38,6 +38,7 @@ targets:
         NSPhotoLibraryUsageDescription: Fotos können an eine Sitzung auf dem Desktop geschickt werden.
         NSMicrophoneUsageDescription: Jarvis hört zu, wenn du aufs Mikrofon tippst.
         NSSpeechRecognitionUsageDescription: Deine Sprache wird auf dem iPhone in Text umgewandelt und an Jarvis geschickt.
+        NSLocationWhenInUseUsageDescription: Relay sendet deinen Standort einmalig an den Desktop, wenn du eine Standortanfrage in der Mitteilung bestätigst.
         NSFaceIDUsageDescription: Relay lässt sich mit Face ID sperren.
         UIBackgroundModes: [fetch, audio]
         BGTaskSchedulerPermittedIdentifiers: [dev.relay.ios.refresh]

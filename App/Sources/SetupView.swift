@@ -53,14 +53,7 @@ struct SetupView: View {
                 }
             }
             if !firstRun {
-                Section("Benachrichtigungen") {
-                    Toggle("Benachrichtigen bei „fertig“ / „wartet“", isOn: $model.notifyEnabled)
-                    Text("iOS hält keine Verbindung im Hintergrund offen. Ist Relay zu, schaut die App ab und zu kurz nach (Hintergrundaktualisierung, iOS bestimmt wann, meist alle 15 bis 60 Minuten). Dafür muss unter Einstellungen → Allgemein → Hintergrundaktualisierung Relay erlaubt sein. Aus einer Mitteilung kannst du direkt antworten, „Erledigt“ setzen oder die Sitzung stummschalten.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    if !model.muted.isEmpty {
-                        Button("Alle \(model.muted.count) stummgeschalteten Sitzungen wieder laut") { model.muted = [] }
-                    }
-                }
+                NotifySettingsSection()
                 ChatSettingsSection()
                 Section("Sicherheit") {
                     Toggle("Mit Face ID sperren", isOn: $model.lockEnabled)

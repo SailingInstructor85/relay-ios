@@ -35,7 +35,34 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         [.banner, .sound, .list]
     }
     func userNotificationCenter(_ c: UNUserNotificationCenter, didReceive r: UNNotificationResponse) async {
-        guard let key = r.notification.request.content.userInfo["key"] as? String else { return }
+        let info = r.notification.request.content.userInfo
+        let tapped = r.actionIdentifier == UNNotificationDefaultActionIdentifier
+        if let req = info["request"] as? String {
+            switch r.actionIdentifier {
+            case "approve": await BackgroundRefresh.withBackgroundTime { await Approvals.shared.fromNotification(request: req, confirm: nil, ok: true) }
+            case "deny": await BackgroundRefresh.withBackgroundTime { await Approvals.shared.fromNotification(request: req, confirm: nil, ok: false) }
+            default: await MainActor.run { Approvals.shared.showSheet = true }
+            }
+            return
+        }
+        if let id = info["confirm"] as? String {
+            switch r.actionIdentifier {
+            case "approve": await BackgroundRefresh.withBackgroundTime { await Approvals.shared.fromNotification(request: nil, confirm: id, ok: true) }
+            case "deny": await BackgroundRefresh.withBackgroundTime { await Approvals.shared.fromNotification(request: nil, confirm: id, ok: false) }
+            default: await MainActor.run { Approvals.shared.showSheet = true }
+            }
+            return
+        }
+        if let ref = info["notice"] as? String, tapped {
+            await MainActor.run { AppModel.shared.openNotice = ref }
+            return
+        }
+        if let id = info["locreq"] as? String, tapped {
+            let exp = Double(info["locexp"] as? String ?? "") ?? 0
+            await MainActor.run { Task { await Locator.shared.fulfil(id: id, expires: exp) } }
+            return
+        }
+        guard let key = info["key"] as? String else { return }
         switch r.actionIdentifier {
         case "reply":
             let text = (r as? UNTextInputNotificationResponse)?.userText.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -55,11 +82,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
 struct RootView: View {
     @EnvironmentObject var model: AppModel
+    @ObservedObject private var approvals = Approvals.shared
     var body: some View {
-        ZStack {
-            if model.configured { SessionsView() } else { NavigationStack { SetupView(firstRun: true) } }
-            if model.locked { LockView() }
+        VStack(spacing: 0) {
+            if model.configured && !model.locked { TopNotices() }
+            ZStack {
+                if model.configured { SessionsView() } else { NavigationStack { SetupView(firstRun: true) } }
+                if model.locked { LockView() }
+            }
         }
+        .sheet(isPresented: $approvals.showSheet) { ApprovalSheet() }
     }
 }
 

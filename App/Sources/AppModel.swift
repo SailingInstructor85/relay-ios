@@ -53,6 +53,8 @@ final class AppModel: ObservableObject {
     @Published var openChat: String?   // a session key to navigate to (notification tap)
     @Published var openJarvis = false  // Siri / Action Button shortcut
     @Published var locked = false      // Face ID lock shown
+    @Published var openNotice: String? // a notice ref to open (notification tap)
+    @Published private(set) var desktopSleepAt: Date?  // `desktop_sleep`: the PC suspends, retry every 5 min
 
     /// Chats that watch a session receive its `transcript_append` here.
     var transcriptListeners: [String: (String, [TMessage]) -> Void] = [:]
@@ -68,6 +70,7 @@ final class AppModel: ObservableObject {
     /// When the link last carried anything (event or answer): `ensureAlive` pings when it was quiet for a while.
     var lastTraffic = Date()
     var isForeground: Bool { foreground }
+    var isConnected: Bool { state == .connected && link?.isOpen == true }
 
     var pinned: Set<String> {
         get { Set(pinnedRaw.split(separator: "\n").map(String.init)) }
@@ -225,7 +228,8 @@ final class AppModel: ObservableObject {
             if link === l { link = nil }
             if Date().timeIntervalSince(started) > 20 { backoff = 2 }
             // wait: backoff, or until a kick / foreground comes back
-            let until = Date().addingTimeInterval(kick ? 0.3 : backoff)
+            // after `desktop_sleep` the PC is gone for a while: try every 5 minutes instead of hammering
+            let until = Date().addingTimeInterval(kick ? 0.3 : (desktopSleepAt != nil ? 300 : backoff))
             while Date() < until && !kick { try? await Task.sleep(nanoseconds: 250_000_000) }
             if !foreground { // background: stay offline until we come back
                 while !foreground && !Task.isCancelled { try? await Task.sleep(nanoseconds: 500_000_000) }
@@ -276,7 +280,10 @@ final class AppModel: ObservableObject {
             sessions = fresh
             accounts = ev["accounts"].array.compactMap(Account.from)
             if let s = ev["seq"].int, s > lastSeq { lastSeq = s }
-            if pendingDigest > 0 { postDigest() }
+            desktopSleepAt = nil
+            if !missed.isEmpty { postDigest() }
+            Approvals.shared.flushReplay()
+            Task { await Approvals.shared.reconcile() }
         case "session_started":
             if let s = Session.from(ev["session"]) { replacePlaceholder(for: s); sessions[s.key] = s }
         case "session_state":
@@ -286,11 +293,13 @@ final class AppModel: ObservableObject {
             onStateChange(s, prev: prev, ev: ev, replay: replay)
         case "session_ended":
             let key = ev.str("session_key")
+            let wasAlive = sessions[key].map { $0.state != "exited" } ?? true
             if var s = Session.from(ev["session"]) ?? sessions[key] {
                 if s.placeholder { sessions[key] = nil; return }
                 s.state = "exited"
                 sessions[s.key] = s
-                if !ev.flag("by_user") && !replay { notify(s, title: "Beendet", body: s.lastMessage) }
+                if !ev.flag("by_user") && wasAlive { onEnded(s, replay: replay, ts: ev.num("ts")) }
+                else if replay { missed[s.key] = nil; missedOrder.removeAll { $0 == s.key } }
             }
         case "session_done":
             let key = ev.str("session_key")
@@ -301,6 +310,7 @@ final class AppModel: ObservableObject {
             // "ready" and "ended" notifications go; a question stays while the session waits
             if let s = session(for: key), s.waits { break }
             clearNotifications(for: key)
+            dropMissed(key)
         case "cloud_sessions":
             cloudSessions = ev["sessions"].array.compactMap(CloudSession.from)
         case "transcript_append":
@@ -308,9 +318,19 @@ final class AppModel: ObservableObject {
             let msgs = ev["messages"].array.map(TMessage.from)
             transcriptListeners.values.forEach { $0(key, msgs) }
         case "notice":
-            if !replay { notifyRaw(id: "notice-\(seq)", title: ev.str("title", "Relay"), body: ev.str("text"), key: nil) }
-        case "needs_confirmation":
-            if !replay { notifyRaw(id: "confirm-\(ev.str("action_id"))", title: "Bestätigung nötig", body: ev.str("description"), key: nil) }
+            let now = Date().timeIntervalSince1970
+            let n = Notice.from(event: ev, now: now)
+            NoticeStore.shared.add(n)
+            if NoticeLogic.show(ts: ev.num("ts"), now: now) {
+                Notifier.post(id: NoticeLogic.slot(tag: n.tag, seq: seq), title: n.title.isEmpty ? "Relay" : n.title, body: n.text,
+                              userInfo: ["notice": n.ref])
+            }
+        case "send_request", "send_resolved", "needs_confirmation", "confirmation_resolved":
+            Approvals.shared.onEvent(ev, replay: replay)
+        case "location_request":
+            Locator.shared.onRequest(ev, replay: replay)
+        case "desktop_sleep":
+            desktopSleepAt = Date(timeIntervalSince1970: ev.num("at", Date().timeIntervalSince1970))
         default: break
         }
     }
@@ -320,49 +340,75 @@ final class AppModel: ObservableObject {
         for (k, old) in sessions where old.placeholder && old.tmuxSession == t { sessions[k] = nil }
     }
 
-    private var pendingDigest = 0
-    private var digestLines: [String] = []
-    private var missed: [String: (title: String, body: String)] = [:]
+    /// Replayed events that would have raised a notification, one per session (the last wins).
+    private struct Missed { var title: String, body: String, line: String, alert: NotifyAlert }
+    private var missed: [String: Missed] = [:]
+    private var missedOrder: [String] = []
+
+    private func addMissed(_ key: String, _ m: Missed) {
+        if missed[key] == nil { missedOrder.append(key) }
+        missed[key] = m
+    }
+
+    private func dropMissed(_ key: String) {
+        missed[key] = nil
+        missedOrder.removeAll { $0 == key }
+    }
+
+    private func alert(_ kind: AlertKind, key: String, ev: StateInfo? = nil) -> NotifyAlert {
+        NotifyPolicy.alert(kind, NotifyDefaults.prefs(), muted: muted.contains(key), ev: ev,
+                           minuteOfDay: QuietHours.minuteOfDay(Date()))
+    }
 
     private func onStateChange(_ s: Session, prev: String?, ev: JSON, replay: Bool) {
         let now = s.state
         let ready = prev == "busy" && now == "idle"
         let needs = now == "needs_input" && prev != "needs_input"
         guard ready || needs else {
-            if now == "busy", ev.str("origin") == "user" { clearNotifications(for: s.key) }
+            if now == "busy", NotifyPolicy.clearsOnBusy(origin: ev.str("origin")) { clearNotifications(for: s.key); dropMissed(s.key) }
             return
         }
         if s.key != visibleChat || !foreground { var u = unread; u.insert(s.key); unread = u }
-        if ev.flag("quiet") { return }
-        let asks = ev.flag("asks")
-        if ready && !asks && ev.str("origin") == "auto" && (ev["tasks"].int ?? 0) > 0 { return }
-        if muted.contains(s.key) { return }
+        // replayed events older than 24 h are not announced
+        if replay, !NoticeLogic.show(ts: ev.num("ts"), now: Date().timeIntervalSince1970) { return }
+        let info = StateInfo.from(ev)
+        let asks = info.asks
+        let al = alert(needs ? .needsInput : .ready, key: s.key, ev: info)
+        if al == .none { if replay { dropMissed(s.key) }; return }
         let title = needs ? "Braucht Eingabe · \(s.name)" : (asks ? "Fragt dich · \(s.name)" : "Fertig · \(s.name)")
         let body = needs ? (ev["message"].string ?? s.question?.text ?? "Wartet auf deine Eingabe") : (asks ? s.asksText : s.lastMessage)
         if replay {
-            pendingDigest += 1
-            digestLines.append("\(s.name): \(needs || asks ? "wartet auf dich" : "fertig")")
-            missed[s.key] = (title, body)
+            addMissed(s.key, Missed(title: title, body: body, line: "\(s.name): \(needs || asks ? "wartet auf dich" : "fertig")", alert: al))
             return
         }
-        if ev.flag("desk") && !needs { return }
         if s.key == visibleChat && foreground { return }
-        notify(s, title: title, body: body, ready: ready && !asks)
+        notify(s, title: title, body: body, ready: ready && !asks, silent: al == .silent)
+    }
+
+    private func onEnded(_ s: Session, replay: Bool, ts: Double) {
+        if replay, !NoticeLogic.show(ts: ts, now: Date().timeIntervalSince1970) { return }
+        let al = alert(.ended, key: s.key)
+        if al == .none { if replay { dropMissed(s.key) }; return }
+        let title = "Beendet · \(s.name)"
+        if replay { addMissed(s.key, Missed(title: title, body: s.lastMessage, line: "\(s.name): beendet", alert: al)); return }
+        if s.key == visibleChat && foreground { return }
+        notify(s, title: title, body: s.lastMessage, silent: al == .silent)
     }
 
     private func postDigest() {
-        let lines = digestLines
-        let n = pendingDigest
-        let each = missed
-        pendingDigest = 0; digestLines = []; missed = [:]
-        guard n > 0 else { return }
+        let each = missedOrder.compactMap { k in missed[k].map { (k, $0) } }
+        missed = [:]; missedOrder = []
+        guard !each.isEmpty else { return }
         if each.count <= 3 { // few: one notification per session, with reply actions
             for (key, m) in each where !(key == visibleChat && foreground) {
-                notifyRaw(id: "s-\(key)", title: m.title, body: m.body, key: key)
+                notifyRaw(id: "s-\(key)", title: m.title, body: m.body, key: key, silent: m.alert == .silent)
             }
             return
         }
-        notifyRaw(id: "digest", title: "Relay: \(n) Änderung\(n == 1 ? "" : "en")", body: lines.suffix(6).joined(separator: "\n"), key: nil)
+        let n = each.count
+        let rings = each.contains { $0.1.alert == .popup }
+        notifyRaw(id: "digest", title: "Relay: \(n) Änderung\(n == 1 ? "" : "en")", body: each.suffix(6).map { $0.1.line }.joined(separator: "\n"),
+                  key: nil, silent: !rings)
     }
 
     // MARK: notifications
@@ -371,33 +417,34 @@ final class AppModel: ObservableObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
-    /// Actions on a session notification: answer inline, mark done, mute the session.
+    /// Actions on a session notification: answer inline, mark done, mute the session; approvals: allow / deny.
+    /// With "Aktionen brauchen entsperrtes Gerät" the actions with input need an unlocked phone.
     static func registerNotificationActions() {
-        let reply = UNTextInputNotificationAction(identifier: "reply", title: "Antworten", options: [],
+        let auth: UNNotificationActionOptions = NotifyDefaults.actionAuth ? [.authenticationRequired] : []
+        let reply = UNTextInputNotificationAction(identifier: "reply", title: "Antworten", options: auth,
                                                   textInputButtonTitle: "Senden", textInputPlaceholder: "Nachricht an die Sitzung")
         let done = UNNotificationAction(identifier: "done", title: "Erledigt", options: [])
         let mute = UNNotificationAction(identifier: "mute", title: "Stummschalten", options: [])
         let cat = UNNotificationCategory(identifier: "session", actions: [reply, done, mute], intentIdentifiers: [], options: [])
         // "ready" notifications also carry the first quick reply ("Weiter") as a one-tap action
         var readyActions = [reply]
-        if let q = ChatPrefs.quickReplies.first { readyActions.append(UNNotificationAction(identifier: "quick", title: q, options: [])) }
+        if let q = ChatPrefs.quickReplies.first { readyActions.append(UNNotificationAction(identifier: "quick", title: q, options: auth)) }
         readyActions += [done, mute]
         let ready = UNNotificationCategory(identifier: "session-ready", actions: readyActions, intentIdentifiers: [], options: [])
-        UNUserNotificationCenter.current().setNotificationCategories([cat, ready])
+        // an approval is never given from a locked phone
+        let approve = UNNotificationAction(identifier: "approve", title: "Freigeben", options: [.authenticationRequired])
+        let deny = UNNotificationAction(identifier: "deny", title: "Ablehnen", options: [.destructive])
+        let approval = UNNotificationCategory(identifier: "approval", actions: [approve, deny], intentIdentifiers: [], options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([cat, ready, approval])
     }
 
-    private func notify(_ s: Session, title: String, body: String, ready: Bool = false) {
-        notifyRaw(id: "s-\(s.key)", title: title, body: body, key: s.key, category: ready ? "session-ready" : "session")
+    private func notify(_ s: Session, title: String, body: String, ready: Bool = false, silent: Bool = false) {
+        notifyRaw(id: "s-\(s.key)", title: title, body: body, key: s.key, category: ready ? "session-ready" : "session", silent: silent)
     }
 
-    private func notifyRaw(id: String, title: String, body: String, key: String?, category: String = "session") {
-        guard notifyEnabled else { return }
-        let c = UNMutableNotificationContent()
-        c.title = title
-        c.body = String(body.prefix(300))
-        c.sound = .default
-        if let key { c.userInfo = ["key": key]; c.threadIdentifier = key; c.categoryIdentifier = category }
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: c, trigger: nil))
+    private func notifyRaw(id: String, title: String, body: String, key: String?, category: String = "session", silent: Bool = false) {
+        Notifier.post(id: id, title: title, body: body, userInfo: key.map { ["key": $0] } ?? [:], category: key == nil ? nil : category,
+                      thread: key, silent: silent)
     }
 
     func clearNotifications(for key: String) {
