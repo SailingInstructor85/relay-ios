@@ -91,3 +91,10 @@ Weitere tmux-Optionen: `@relay_holder_since` (Zeitpunkt), `@relay_ro_clients` (w
 5. Soll die rote Statuszeile bleiben oder ein ruhigerer Hinweis (nur Meldung beim Tippen)?
 6. Livebetrieb: Die Funktion läuft erst, wenn notifyd aus dem Zweig `uebergabe` (oder nach Merge) startet. Soll ich den Zweig auf `lokal-clear-beendet` zurückführen, wenn du zufrieden bist, und wann den Dienst neu starten?
 7. `relay-hier` als Skript in der Venv ist nach einem Neu-Sync da. Soll es zusätzlich nach `~/.local/bin` verlinkt werden?
+
+## Stand 2026-11-06 (Nachtbau 18:30)
+
+- App: Zweig `uebergabe` ist in `nachtbau/2026-11-06-1830` zusammengeführt (`d6e4416`). Gateway: `uebergabe` ist auf `lokal-clear-beendet` zurückgeführt (`8908858`), Tests grün. Der Dienst läuft erst nach einem Neustart von notifyd mit dem neuen Stand (Rückfrage an Martin).
+- Neu: Vor dem Senden in eine Sitzung, die ein Terminal am PC gerade zeigt (`pc_attached` in `list_sessions`, aus `tmux list-clients` ohne `phone-*`) oder die der PC hält, fragt die App „Sitzung vom PC übernehmen?“ mit „Übernehmen und senden“, „Nur senden“ (nicht bei Halter `desk`) und „Abbrechen“. Nichts wird automatisch übernommen. „Nur senden“ gilt für diese Sitzung bis zum Neustart der App.
+- Sitzungen außerhalb von tmux bleiben von der Übergabe ausgeschlossen. Dafür gibt es jetzt `send` mit `move` („Am PC beenden und hier fortsetzen“, siehe feature-parity C21): nach Martins Ja beendet das Gateway die Sitzung am PC und setzt sie in tmux fort. Danach greift die Übergabe wie bei jeder tmux-Sitzung.
+- Antworten auf die offenen Fragen 5 und 7 (Empfehlung des Nachtbaus): 5. Die rote Statuszeile bleibt, solange das Handy hält; sie ist der einzige Hinweis, der am PC ohne Tippen sichtbar ist, und ein Tippen in einen schreibgeschützten Client zeigt sonst nichts an. 7. `relay-hier` nicht nach `~/.local/bin` verlinken; am PC reicht `Strg-b H`, und `python -m notifyd.handover back` läuft ohne Installation. Ein Link wäre eine zweite Stelle, die nach einem Venv-Umzug kaputtgeht.

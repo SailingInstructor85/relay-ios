@@ -33,6 +33,8 @@ struct ChatView: View {
     @ObservedObject private var outbox = Outbox.shared
     @State private var error: String?
     @State private var confirmForce: String?
+    /// Text, der auf die Antwort „Sitzung vom PC übernehmen?“ wartet (Handover.asksBeforeSend).
+    @State private var askTakeover: String?
     @State private var importing = false
     @State private var pickingPhoto = false
     @State private var uploadInfo = ""
@@ -140,6 +142,20 @@ struct ChatView: View {
                 if let provider { Task { await uploadPicked(provider) } }
             }.ignoresSafeArea()
         }
+        .confirmationDialog(Handover.askTitle, isPresented: Binding(get: { askTakeover != nil }, set: { if !$0 { askTakeover = nil } }), titleVisibility: .visible, presenting: askTakeover) { t in
+            Button(Handover.takeAndSend) {
+                askTakeover = nil
+                Task { if let s = session { await takeOver(s, to: Handover.phone) }; await send(t, asked: true) }
+            }
+            if Handover.offersSendOnly(holder: holder) {
+                Button(Handover.sendOnly) {
+                    askTakeover = nil
+                    if let s = session { model.declinedTakeover.insert(s.key) }
+                    Task { await send(t, asked: true) }
+                }
+            }
+            Button("Abbrechen", role: .cancel) { askTakeover = nil }
+        } message: { _ in Text(Handover.askMessage(holder: holder)) }
         .confirmationDialog("Die Sitzung arbeitet gerade.", isPresented: Binding(get: { confirmForce != nil }, set: { if !$0 { confirmForce = nil } }), titleVisibility: .visible) {
             Button("Trotzdem senden") { if let id = confirmForce { Outbox.shared.retry(id, force: true) } }
             Button("Abbrechen", role: .cancel) {}
@@ -549,10 +565,17 @@ struct ChatView: View {
     /// message goes into the outbox, which sends it as soon as the Desktop answers (same `client_id`, so never twice).
     /// A message is never dropped without a word: a refusal because the session works keeps it in the outbox (grey
     /// bubble with "Trotzdem senden", "Bearbeiten", "Verwerfen"), any other refusal leaves it in the field with a banner.
-    private func send(_ text: String, force: Bool = false) async {
+    /// `asked`: the handover question was already answered for this text. Typing into a session a PC terminal shows
+    /// (or the PC holds) first asks "Sitzung vom PC übernehmen?" (Martin, 2026-11-05: never take over by itself).
+    private func send(_ text: String, force: Bool = false, asked: Bool = false) async {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
         guard let s = session else { error = "Nicht gesendet: die Sitzung ist nicht mehr in der Liste."; return }
+        if !asked, s.liveTmux != nil, Handover.asksBeforeSend(holder: model.holder(s), pcAttached: model.pcAttached.contains(s.key),
+                                                              declined: model.declinedTakeover.contains(s.key)) {
+            askTakeover = t
+            return
+        }
         if Handover.phoneBlocked(model.holder(s)) { error = Handover.deskNote; return }
         let id = UUID().uuidString
         func clearField() { if input.trimmingCharacters(in: .whitespacesAndNewlines) == t { input = "" } }

@@ -48,6 +48,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var sessions: [String: Session] = [:]
     /// Wer eine Sitzung hält (Sitzungsübergabe): key -> "phone" | "desk"; fehlt der Eintrag, hält sie niemand.
     @Published private(set) var holders: [String: String] = [:]
+    /// Sitzungen, die ein Terminal am PC gerade zeigt (`pc_attached`): vor dem Tippen fragt die App, ob das Handy übernimmt.
+    @Published private(set) var pcAttached: Set<String> = []
+    /// Sitzungen, für die Martin „Nur senden“ gewählt hat: nicht noch einmal fragen (bis zum Neustart der App).
+    var declinedTakeover: Set<String> = []
     @Published private(set) var accounts: [Account] = []
     @Published var showDormant = false      // "Zuletzt" instead of "Laufend"
     @Published var showBackground = false   // also headless runs
@@ -342,6 +346,7 @@ final class AppModel: ObservableObject {
             for s in ev["sessions"].array.compactMap(Session.from) { fresh[s.key] = s }
             saveSessionCache(ev["sessions"])
             holders = Handover.holders(in: ev["sessions"])
+            pcAttached = Handover.pcAttached(in: ev["sessions"])
             applyConfig(ev["config"])
             // sessions seen elsewhere after their last activity count as read
             var u = unread
@@ -555,6 +560,7 @@ final class AppModel: ObservableObject {
             for s in r["sessions"].array.compactMap(Session.from) { fresh[s.key] = s }
             sessions = fresh
             holders = Handover.holders(in: r["sessions"])
+            pcAttached = Handover.pcAttached(in: r["sessions"])
             lastSync = Date().timeIntervalSince1970
             if !showDormant && !showBackground { saveSessionCache(r["sessions"]) }
         } catch { lastError = error.localizedDescription }

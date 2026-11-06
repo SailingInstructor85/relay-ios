@@ -164,6 +164,7 @@ K = {
     "perm": BASE + "aaaaaaaa-aaaa-4000-8000-00000000000a",
     "panel": BASE + "bbbbbbbb-aaaa-4000-8000-00000000000b",
     "form": BASE + "cccccccc-aaaa-4000-8000-00000000000c",
+    "pc": BASE + "dddddddd-aaaa-4000-8000-00000000000d",
 }
 
 QUESTION = {
@@ -214,6 +215,9 @@ def session_defs():
                          last_activity=n - 1500, last_message="Ein Dialog ist offen."),
         K["form"]: dict(title="Formular im Terminal", cwd=f"{W}", state="needs_input", alive=True, attachable=True, tmux_session="c1-webapp-f0rm",
                         last_activity=n - 300, last_message="Welche Groesse?"),
+        # ein Terminal am PC zeigt die Sitzung (Sitzungsübergabe: die App fragt vor dem Tippen)
+        K["pc"]: dict(title="Nachtlauf planen", cwd=f"{W}", state="idle", alive=True, attachable=True, tmux_session="c1-webapp-pcpc",
+                      last_activity=n - 2400, last_message="Der Plan steht, ich warte auf dein Zeichen.", pc_attached=True),
     }
 
 
@@ -226,7 +230,7 @@ def full_session(key, d):
          "label": d.get("label", "Claude #1"), "cwd": d["cwd"], "title": d["title"], "state": d["state"], "alive": d["alive"],
          "attachable": d["attachable"], "tmux_session": d["tmux_session"], "last_activity": d["last_activity"],
          "last_message": d["last_message"], "duplicates": 1}
-    for k in ("context", "question", "hibernated", "closed", "closed_reason", "background", "asks", "asks_text"):
+    for k in ("context", "question", "hibernated", "closed", "closed_reason", "background", "asks", "asks_text", "pc_attached"):
         if k in d:
             s[k] = d[k]
     return s
