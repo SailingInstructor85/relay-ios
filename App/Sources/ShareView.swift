@@ -2,7 +2,8 @@ import SwiftUI
 import RelayCore
 
 /// "In Relay öffnen" (no Share Extension): a file opened from Files, Mail or another app arrives through `onOpenURL`.
-/// The sheet asks which session gets it, uploads the files and puts their paths into that session.
+/// The sheet asks which session gets it, uploads the files and puts their paths into that session. "Ins Vault
+/// einsortieren" instead starts an agent in the vault folder that files the uploads (`VaultDrop`).
 struct ShareView: View {
     @EnvironmentObject var model: AppModel
     let files: [URL]
@@ -10,6 +11,7 @@ struct ShareView: View {
 
     @State private var query = ""
     @State private var chosen: String?
+    @State private var toVault = false
     @State private var message = ""
     @State private var sending = false
     @State private var progress = ""
@@ -41,16 +43,29 @@ struct ShareView: View {
                     }
                 }
                 Section("Nachricht (optional)") {
-                    TextField("Was soll die Sitzung damit tun?", text: $message, axis: .vertical).lineLimit(1...5)
+                    TextField(toVault ? "Hinweis für den Agenten (worum geht es?)" : "Was soll die Sitzung damit tun?", text: $message, axis: .vertical).lineLimit(1...5)
                 }
-                Section("In welche Sitzung senden?") {
+                Section("Ablegen") {
+                    Button { toVault = true; chosen = nil } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "archivebox")
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Ins Vault einsortieren").lineLimit(1)
+                                Text("Ein Agent legt die Datei in „\(VaultDrop.inbox)“ ab und sortiert sie ein").font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                            }
+                            Spacer()
+                            if toVault { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                        }
+                    }.foregroundStyle(.primary).accessibilityIdentifier("shareVault")
+                }
+                Section("Oder in eine Sitzung senden") {
                     TextField("Sitzung suchen", text: $query).textInputAutocapitalization(.never).autocorrectionDisabled()
                     if targets.isEmpty {
                         Text(model.state == .connected ? "Keine laufende Sitzung gefunden" : "Nicht verbunden: \(model.connLabel)")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     ForEach(targets) { s in
-                        Button { chosen = s.key } label: {
+                        Button { chosen = s.key; toVault = false } label: {
                             HStack(spacing: 10) {
                                 StateDot(state: s.shownState)
                                 VStack(alignment: .leading, spacing: 1) {
@@ -71,20 +86,25 @@ struct ShareView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Abbrechen") { onDone() }.disabled(sending) }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(sending ? "Sende…" : "Senden") { Task { await send(force: false) } }
-                        .disabled(chosen == nil || sending || !ShareLogic.canSend(files: files.count, text: nil, message: message))
+                    Button(sending ? "Sende…" : (toVault ? "Ablegen" : "Senden")) { Task { await send(force: false) } }
+                        .disabled((chosen == nil && !toVault) || sending || !ShareLogic.canSend(files: files.count, text: nil, message: message))
                 }
             }
             .confirmationDialog("Die Sitzung arbeitet gerade.", isPresented: $askForce, titleVisibility: .visible) {
                 Button("Trotzdem senden") { Task { await send(force: true) } }
                 Button("Abbrechen", role: .cancel) {}
             }
-            .onAppear { if chosen == nil { chosen = targets.first?.key } }
+            .onAppear {
+                if chosen == nil && !toVault {
+                    if let first = targets.first { chosen = first.key } else { toVault = true }
+                }
+            }
         }
     }
 
     private func send(force: Bool) async {
-        guard let key = chosen, let s = model.session(for: key) else { return }
+        let s = chosen.flatMap { model.session(for: $0) }
+        guard toVault || s != nil else { return }
         sending = true; error = nil
         defer { sending = false }
         // wait a moment for the link when the app was just started by the share
@@ -106,6 +126,16 @@ struct ShareView: View {
                     Task { @MainActor in progress = "Lade \(n + 1)/\(items.count) \(label) hoch… \(Int(p * 100)) %" }
                 })
             }
+            if toVault {
+                progress = "Starte den Agenten im Vault…"
+                let tmux = try await model.launch(alias: model.defaultLaunchAlias, cwd: model.vaultDir,
+                                                  prompt: VaultDrop.prompt(paths: paths, note: message), name: VaultDrop.name(paths: paths))
+                progress = ""
+                onDone()
+                Task { await model.openLaunched(tmux: tmux) }
+                return
+            }
+            guard let s else { return }
             progress = "Sende an \(s.name)…"
             try await model.send(s, text: ShareLogic.body(message: message, paths: paths, text: nil), force: force)
             progress = ""

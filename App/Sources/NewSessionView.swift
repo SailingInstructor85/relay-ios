@@ -75,8 +75,7 @@ struct NewSessionView: View {
                 }
             }
             .task {
-                if alias.isEmpty, !model.lastAlias.isEmpty, model.lastAlias == "auto" || model.accounts.contains(where: { $0.alias == model.lastAlias }) { alias = model.lastAlias }
-                if alias.isEmpty { alias = model.accounts.first { $0.tool == "claude" && $0.loggedIn }?.alias ?? model.accounts.first?.alias ?? "auto" }
+                if alias.isEmpty { alias = model.defaultLaunchAlias }
                 if let r = try? await model.rpc("recent_dirs", ["limit": 30]) {
                     recent = r["dirs"].array.map { $0.str("path") }.filter { !$0.isEmpty }
                 }

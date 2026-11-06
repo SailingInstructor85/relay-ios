@@ -128,6 +128,35 @@ public enum ShareLogic {
     }
 }
 
+/// "Ins Vault einsortieren": a share target without a session. The files go to the Desktop as uploads; a new agent
+/// session in the vault folder moves them to the inbox folder first and then files them by content (the vault's own
+/// AGENTS.md says how).
+public enum VaultDrop {
+    public static let defaultDir = "~/Dokumente/zweites-gehirn/zweites Gehirn"
+    public static let inbox = "01 Inbox"
+    public static let attachments = "07 Anhänge"
+
+    /// Session name: "Ablage: daniel.pdf" or "Ablage: 3 Dateien".
+    public static func name(paths: [String]) -> String {
+        if paths.count == 1 { return "Ablage: " + (paths[0] as NSString).lastPathComponent }
+        return "Ablage: \(paths.count) Dateien"
+    }
+
+    /// The first message of the filing agent.
+    public static func prompt(paths: [String], note: String) -> String {
+        var lines = ["Neue Dokumente vom iPhone zum Einsortieren ins Vault.", "", "Dateien (Uploads des Gateways):"]
+        lines += paths.map { "- \($0)" }
+        let n = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !n.isEmpty { lines += ["", "Hinweis von Martin: \(n)"] }
+        lines += ["", "Vorgehen:",
+                  "1. Verschiebe jede Datei zuerst nach \"\(inbox)/\" in diesem Vault (verschieben, nicht kopieren).",
+                  "2. Lies sie und erkenne, worum es geht.",
+                  "3. Sortiere sie ein: die Datei nach \"\(attachments)/\", dazu eine kurze Notiz oder ein Link im passenden Bereich. Halte dich an die AGENTS.md des Vaults.",
+                  "4. Melde am Ende knapp: welche Datei, wohin, warum."]
+        return lines.joined(separator: "\n")
+    }
+}
+
 /// Wording of the connection state (Android A10): "Kein Weg zum PC" instead of "Offline" when a private LAN address is
 /// configured and no VPN is up. Words only, nothing is blocked.
 public enum ConnText {

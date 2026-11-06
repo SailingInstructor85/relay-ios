@@ -58,6 +58,22 @@ extension AppModel {
         }
     }
 
+    /// The account for a session started without asking: the last chosen one if still there, else the first logged-in
+    /// Claude account, else "auto".
+    var defaultLaunchAlias: String {
+        if !lastAlias.isEmpty, lastAlias == "auto" || accounts.contains(where: { $0.alias == lastAlias }) { return lastAlias }
+        return accounts.first { $0.tool == "claude" && $0.loggedIn }?.alias ?? accounts.first?.alias ?? "auto"
+    }
+
+    /// Opens the chat of a session just launched (`launch` returns the tmux session; the session itself follows shortly).
+    func openLaunched(tmux target: String) async {
+        for _ in 0..<20 {
+            if let s = session(for: "tmux:\(target)") { openChat = s.key; return }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await refresh()
+        }
+    }
+
     /// Stops the running turn (Esc, also while the session works).
     func stopTurn(_ s: Session) async throws {
         try await sendKeys(s, ["Escape"], force: true)

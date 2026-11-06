@@ -101,4 +101,15 @@ final class SearchTests: XCTestCase {
         XCTAssertTrue(ProfileFields.looksSensitive("DE89 3704 0044 0532 0130 00"))
         XCTAssertFalse(ProfileFields.looksSensitive("Hauptstr. 5"))
     }
+
+    func testVaultDrop() {
+        XCTAssertEqual(VaultDrop.name(paths: ["/u/2026/daniel.pdf"]), "Ablage: daniel.pdf")
+        XCTAssertEqual(VaultDrop.name(paths: ["/a", "/b", "/c"]), "Ablage: 3 Dateien")
+        let p = VaultDrop.prompt(paths: ["/u/daniel.pdf"], note: " Bibel, aufheben ")
+        XCTAssertTrue(p.contains("- /u/daniel.pdf"))
+        XCTAssertTrue(p.contains("Hinweis von Martin: Bibel, aufheben"))
+        XCTAssertTrue(p.contains("\"01 Inbox/\""))
+        XCTAssertTrue(p.contains("\"07 Anhänge/\""))
+        XCTAssertFalse(VaultDrop.prompt(paths: ["/x"], note: "  ").contains("Hinweis"))
+    }
 }

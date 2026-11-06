@@ -10,6 +10,7 @@ struct SetupView: View {
     @State private var port = "22"
     @State private var user = ""
     @State private var copied = ""
+    @AppStorage("vaultDir") private var vaultDir = VaultDrop.defaultDir
 
     var body: some View {
         Form {
@@ -69,6 +70,11 @@ struct SetupView: View {
                 Section("Profil") {
                     NavigationLink { ProfileView() } label: { Label("Persönliche Angaben", systemImage: "person.text.rectangle") }
                     Text("Name, Adresse, E-Mail für Formulare, gespeichert auf dem Desktop (profile.json).").font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Ablage") {
+                    TextField(VaultDrop.defaultDir, text: $vaultDir).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    Text("Vault-Ordner auf dem PC für „Ins Vault einsortieren“ beim Teilen einer Datei. Ein Agent legt sie dort in „\(VaultDrop.inbox)“ ab und sortiert sie ein.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Sicherheit") {
                     Toggle("Mit Face ID sperren", isOn: $model.lockEnabled)

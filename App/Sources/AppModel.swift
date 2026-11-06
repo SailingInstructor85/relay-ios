@@ -42,6 +42,7 @@ final class AppModel: ObservableObject {
     @AppStorage("lastOpenedKey") var lastOpenedKey = ""
     @AppStorage("favDirs") private var favDirsRaw = ""
     @AppStorage("lastAlias") var lastAlias = ""
+    @AppStorage("vaultDir") var vaultDir = VaultDrop.defaultDir   // "Ins Vault einsortieren": the vault folder on the PC
 
     @Published private(set) var state: ConnState = .off
     @Published private(set) var sessions: [String: Session] = [:]
