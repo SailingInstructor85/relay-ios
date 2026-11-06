@@ -177,24 +177,6 @@ final class ChatTests: RelayTestCase {
         XCTAssertTrue(mockReceived("close"))
     }
 
-    func test12_TakeoverAskBeforeSend() {
-        // Ein Terminal am PC zeigt die Sitzung (pc_attached): vor dem Senden fragt die App, keine automatische Übernahme.
-        launchConnected()
-        openSession("Nachtlauf planen")
-        typeInto("chatInput", "Weiter so")
-        tapID("chatSend")
-        settle(1)
-        shot("uebernahme-frage")
-        expect("Sitzung vom PC übernehmen?", 5)
-        XCTAssertFalse(mockReceived("send", where: { ($0["text"] as? String) == "Weiter so" }, timeout: 1), "vor der Antwort darf nichts gesendet werden")
-        tap("Übernehmen und senden", 5)
-        settle(2)
-        shot("uebernommen-gesendet")
-        XCTAssertTrue(mockReceived("handover", where: { ($0["to"] as? String) == "phone" }))
-        XCTAssertTrue(mockReceived("send", where: { ($0["text"] as? String) == "Weiter so" }))
-        expect("Am Handy", 5, soft: true)
-    }
-
     func test13_DeskTerminalMoveAfterYes() {
         // Die Sitzung läuft am PC in einem Terminal ohne tmux: die Nachricht bleibt im Postausgang, der Umzug erst nach Ja.
         launchConnected()

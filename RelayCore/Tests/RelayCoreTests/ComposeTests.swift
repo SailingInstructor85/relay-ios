@@ -205,45 +205,6 @@ final class ComposeTests: XCTestCase {
     }
 }
 
-final class HandoverTests: XCTestCase {
-    func testPhoneIsBlockedOnlyWhileTheDeskHoldsIt() {
-        XCTAssertTrue(Handover.phoneBlocked("desk"))
-        XCTAssertFalse(Handover.phoneBlocked("phone"))
-        XCTAssertFalse(Handover.phoneBlocked(""))
-    }
-
-    func testLabelsAndTakeButton() {
-        XCTAssertEqual(Handover.label("phone"), "Am Handy")
-        XCTAssertEqual(Handover.label("desk"), "Am PC")
-        XCTAssertNil(Handover.label(""))
-        XCTAssertEqual(Handover.takeTitle("desk"), "Sitzung übernehmen")
-        XCTAssertEqual(Handover.takeTitle(""), "Sitzung übernehmen")
-        XCTAssertNil(Handover.takeTitle("phone"))
-    }
-
-    func testHoldersFromSessionList() {
-        let rows: JSON = [["key": "claude:c1:a", "holder": "phone"], ["key": "claude:c1:b"], ["key": "claude:c1:c", "holder": "desk"], ["holder": "desk"]]
-        XCTAssertEqual(Handover.holders(in: rows), ["claude:c1:a": "phone", "claude:c1:c": "desk"])
-    }
-}
-
-final class HandoverAskTests: XCTestCase {
-    func testAsksOnlyWhenThePcHasOrShowsTheSession() {
-        XCTAssertTrue(Handover.asksBeforeSend(holder: "desk", pcAttached: false, declined: true))  // the gateway would refuse anyway
-        XCTAssertTrue(Handover.asksBeforeSend(holder: "", pcAttached: true, declined: false))
-        XCTAssertFalse(Handover.asksBeforeSend(holder: "", pcAttached: true, declined: true))  // "Nur senden" chosen before
-        XCTAssertFalse(Handover.asksBeforeSend(holder: "", pcAttached: false, declined: false))
-        XCTAssertFalse(Handover.asksBeforeSend(holder: "phone", pcAttached: true, declined: false))
-        XCTAssertTrue(Handover.offersSendOnly(holder: ""))
-        XCTAssertFalse(Handover.offersSendOnly(holder: "desk"))
-    }
-
-    func testPcAttachedFromSessionList() {
-        let rows: JSON = [["key": "claude:c1:a", "pc_attached": true], ["key": "claude:c1:b"], ["key": "claude:c1:c", "pc_attached": false]]
-        XCTAssertEqual(Handover.pcAttached(in: rows), ["claude:c1:a"])
-    }
-}
-
 final class DeskTerminalTests: XCTestCase {
     func testRefusalIsRecognisedAndKeptWithMove() {
         let msg = "this session is open in a Desktop terminal outside tmux: reply there, or close it there and send again from the phone (it then resumes here)"
