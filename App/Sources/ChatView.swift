@@ -49,6 +49,8 @@ struct ChatView: View {
     @State private var viewer: RemoteRef?
     @State private var menuMessage: TMessage?
     @FocusState private var focused: Bool
+    /// Lesemodus: Navigationsleiste, Eingabezeile und Tastatur weg, der Verlauf füllt den Bildschirm (ReadingMode).
+    @State private var reading = false
 
     private var session: Session? { model.session(for: sessionKey) }
     private var key: String { session?.key ?? sessionKey }
@@ -107,11 +109,13 @@ struct ChatView: View {
             }
             if let e = error { ErrorBanner(text: Binding(get: { e }, set: { error = $0 })).padding(.vertical, 4) }
             if !uploadInfo.isEmpty { Text(uploadInfo).font(.caption).foregroundStyle(.secondary).padding(.top, 4) }
-            inputBar
+            if ReadingMode.chrome(reading: reading).inputBar { inputBar }
         }
         .navigationTitle(session?.name ?? "Sitzung")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarItems }
+        .toolbar(ReadingMode.chrome(reading: reading).navigationBar ? .visible : .hidden, for: .navigationBar)
+        .overlay(alignment: .topTrailing) { if reading { readingExit } }
         .onChange(of: session?.state) { old, new in
             if old == "busy" && new != "busy" { Task { await loadContext() } }
         }
@@ -412,6 +416,30 @@ struct ChatView: View {
         ToolbarItem(placement: .topBarTrailing) {
             if session?.liveTmux != nil { Button { showScreen = true } label: { Image(systemName: "terminal") } }
         }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { toggleReading() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
+                .accessibilityLabel(ReadingMode.enterLabel).accessibilityIdentifier("readingOn")
+        }
+    }
+
+    // MARK: Lesemodus
+
+    /// Nur der Verlauf, ohne Leisten; die Tastatur geht zu, der Text im Feld bleibt. Neue Nachrichten laufen weiter ein
+    /// (der Verlauf ist derselbe), der Bildschirm bleibt wie beim Zuschauen an (`keepsScreenAwake` gilt für den ganzen Chat).
+    private func toggleReading() {
+        let t = ReadingMode.toggle(reading: reading)
+        if t.closesKeyboard { focused = false }
+        withAnimation { reading = t.reading }
+    }
+
+    /// Der kleine Knopf oben rechts, der die normale Ansicht zurückbringt.
+    private var readingExit: some View {
+        Button { toggleReading() } label: {
+            Image(systemName: "arrow.down.right.and.arrow.up.left").font(.body.weight(.semibold))
+                .padding(10).background(.regularMaterial, in: Circle())
+        }
+        .padding(.trailing, 12).padding(.top, 6)
+        .accessibilityLabel(ReadingMode.exitLabel).accessibilityIdentifier("readingOff")
     }
 
     private func openPath(_ path: String) {

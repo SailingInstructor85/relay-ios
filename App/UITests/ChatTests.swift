@@ -208,4 +208,21 @@ final class ChatTests: RelayTestCase {
         let value = id("chatInput").value as? String ?? ""
         XCTAssertTrue(value.contains("Tastatur zu"), "Text weg: \(value)")
     }
+
+    func test14_ReadingMode() {
+        // Lesemodus: Leisten und Eingabezeile weg, der Verlauf bleibt; der kleine Knopf oben rechts holt alles zurück.
+        launchConnected()
+        openSession("API Refactoring")
+        tapID("readingOn")
+        settle(1.2)
+        shot("lesemodus-an")
+        XCTAssertFalse(id("chatInput").exists, "Eingabezeile im Lesemodus sichtbar")
+        if app.navigationBars.count > 0 { notes.append("Navigationsleiste im Lesemodus noch im Baum (\(app.navigationBars.count))") }
+        expect("Zusammenfassung", 4, soft: true)
+        tapID("readingOff")
+        settle(1.2)
+        shot("lesemodus-aus")
+        XCTAssertTrue(id("chatInput").waitForExistence(timeout: 4), "Eingabezeile nach dem Lesemodus fehlt")
+        XCTAssertTrue(id("readingOn").waitForExistence(timeout: 4), "Lesemodus-Knopf nach dem Lesemodus fehlt")
+    }
 }
