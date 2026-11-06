@@ -412,6 +412,13 @@ public enum RunningText {
     }
 }
 
+// MARK: Tastatur und Lesemodus
+
+/// Die Leiste über der Tastatur im Chat (2026-11-07): ein Knopf schließt sie wieder. Text und Diktat bleiben dabei.
+public enum KeyboardBar {
+    public static let hideLabel = "Tastatur ausblenden"
+}
+
 // MARK: chat header
 
 public enum ChatHeader {
