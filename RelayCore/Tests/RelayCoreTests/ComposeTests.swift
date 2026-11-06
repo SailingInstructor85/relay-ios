@@ -280,3 +280,19 @@ final class KeyboardBarTests: XCTestCase {
         XCTAssertEqual(KeyboardBar.hideLabel, "Tastatur ausblenden")
     }
 }
+
+final class ReadingModeTests: XCTestCase {
+    func testChromeHidesBarsOnlyWhileReading() {
+        XCTAssertEqual(ReadingMode.chrome(reading: false), ReadingMode.Chrome(navigationBar: true, inputBar: true))
+        XCTAssertEqual(ReadingMode.chrome(reading: true), ReadingMode.Chrome(navigationBar: false, inputBar: false))
+    }
+
+    func testToggleClosesTheKeyboardOnlyOnEntering() {
+        let on = ReadingMode.toggle(reading: false)
+        XCTAssertTrue(on.reading); XCTAssertTrue(on.closesKeyboard)
+        let off = ReadingMode.toggle(reading: true)
+        XCTAssertFalse(off.reading); XCTAssertFalse(off.closesKeyboard)
+        XCTAssertEqual(ReadingMode.enterLabel, "Lesemodus")
+        XCTAssertEqual(ReadingMode.exitLabel, "Lesemodus beenden")
+    }
+}

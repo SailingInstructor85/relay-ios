@@ -419,6 +419,26 @@ public enum KeyboardBar {
     public static let hideLabel = "Tastatur ausblenden"
 }
 
+/// Lesemodus im Chat (2026-11-07): Navigationsleiste, Eingabezeile und Tastatur verschwinden, der Verlauf füllt den
+/// Bildschirm; ein kleiner Knopf oben rechts bringt die normale Ansicht zurück.
+public enum ReadingMode {
+    public static let enterLabel = "Lesemodus"
+    public static let exitLabel = "Lesemodus beenden"
+
+    /// Was die Ansicht zeigt.
+    public struct Chrome: Equatable, Sendable {
+        public let navigationBar: Bool, inputBar: Bool
+        public init(navigationBar: Bool, inputBar: Bool) { self.navigationBar = navigationBar; self.inputBar = inputBar }
+    }
+
+    public static func chrome(reading: Bool) -> Chrome {
+        Chrome(navigationBar: !reading, inputBar: !reading)
+    }
+
+    /// Umschalten: in den Lesemodus hinein geht die Tastatur zu (der Text im Feld bleibt), heraus bleibt sie zu.
+    public static func toggle(reading: Bool) -> (reading: Bool, closesKeyboard: Bool) { (!reading, !reading) }
+}
+
 // MARK: chat header
 
 public enum ChatHeader {
