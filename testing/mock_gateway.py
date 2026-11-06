@@ -216,9 +216,8 @@ def session_defs():
                          last_activity=n - 1500, last_message="Ein Dialog ist offen."),
         K["form"]: dict(title="Formular im Terminal", cwd=f"{W}", state="needs_input", alive=True, attachable=True, tmux_session="c1-webapp-f0rm",
                         last_activity=n - 300, last_message="Welche Groesse?"),
-        # ein Terminal am PC zeigt die Sitzung (Sitzungsübergabe: die App fragt vor dem Tippen)
         K["pc"]: dict(title="Nachtlauf planen", cwd=f"{W}", state="idle", alive=True, attachable=True, tmux_session="c1-webapp-pcpc",
-                      last_activity=n - 2400, last_message="Der Plan steht, ich warte auf dein Zeichen.", pc_attached=True),
+                      last_activity=n - 2400, last_message="Der Plan steht, ich warte auf dein Zeichen."),
         # am PC in einem Terminal ohne tmux: send wird abgelehnt, ausser mit move
         K["desk"]: dict(title="Skript ohne tmux", cwd=f"{W}", state="idle", alive=True, attachable=False, tmux_session=None,
                         last_activity=n - 3000, last_message="Das Skript laeuft im Terminal am PC."),
@@ -234,7 +233,7 @@ def full_session(key, d):
          "label": d.get("label", "Claude #1"), "cwd": d["cwd"], "title": d["title"], "state": d["state"], "alive": d["alive"],
          "attachable": d["attachable"], "tmux_session": d["tmux_session"], "last_activity": d["last_activity"],
          "last_message": d["last_message"], "duplicates": 1}
-    for k in ("context", "question", "hibernated", "closed", "closed_reason", "background", "asks", "asks_text", "pc_attached"):
+    for k in ("context", "question", "hibernated", "closed", "closed_reason", "background", "asks", "asks_text"):
         if k in d:
             s[k] = d[k]
     return s
@@ -378,31 +377,12 @@ def ts_now():
     return time.time()
 
 
-HOLDERS = {}  # session key -> "phone" | "desk" (Sitzungsübergabe; fehlt: offen)
-
-
-def rpc_handover(p):
-    s = find_session(p.get("key") or p.get("target", ""))
-    if not s:
-        raise RpcError("no such live session")
-    to = p.get("to")
-    if to is not None:
-        if to not in ("phone", "desk", "open"):
-            raise RpcError("to must be 'phone', 'desk' or 'open'")
-        if to == "open":
-            HOLDERS.pop(s["key"], None)
-        else:
-            HOLDERS[s["key"]] = to
-    return {"holder": HOLDERS.get(s["key"], ""), "since": None, "pc_clients": 1, "session": s.get("tmux_session", "")}
-
-
 def rpc_ping(p):
     return {}
 
 
 def rpc_list_sessions(p):
-    rows = current_sessions(bool(p.get("include_dormant")), bool(p.get("include_background")))[: int(p.get("limit", 100))]
-    return {"sessions": [{**r, "holder": HOLDERS[r["key"]]} if r.get("key") in HOLDERS else r for r in rows]}
+    return {"sessions": current_sessions(bool(p.get("include_dormant")), bool(p.get("include_background")))[: int(p.get("limit", 100))]}
 
 
 def rpc_accounts(p):
@@ -482,7 +462,7 @@ def rpc_screen(p):
             "$ pytest -q\n.......... [100%]\n10 passed in 0.31s\n\n❯ ")
     if not p.get("escapes", True):
         text = re.sub(r"\x1b\[[0-9;]*m", "", text)
-    return {"text": text, "menu": menu, "holder": HOLDERS.get(s["key"], "")}
+    return {"text": text, "menu": menu}
 
 
 def rpc_running(p):
@@ -502,8 +482,6 @@ def rpc_send(p):
     s = find_session(key)
     if not s:
         raise RpcError("tmux session is gone" if key.startswith("tmux:") else "unknown session")
-    if HOLDERS.get(s["key"]) == "desk":
-        raise RpcError("session is held by the PC: take it over on the phone first (handover to: phone)")
     force = bool(p.get("force"))
     text = p.get("text")
     moved = False

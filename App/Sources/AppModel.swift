@@ -46,12 +46,6 @@ final class AppModel: ObservableObject {
 
     @Published private(set) var state: ConnState = .off
     @Published private(set) var sessions: [String: Session] = [:]
-    /// Wer eine Sitzung hält (Sitzungsübergabe): key -> "phone" | "desk"; fehlt der Eintrag, hält sie niemand.
-    @Published private(set) var holders: [String: String] = [:]
-    /// Sitzungen, die ein Terminal am PC gerade zeigt (`pc_attached`): vor dem Tippen fragt die App, ob das Handy übernimmt.
-    @Published private(set) var pcAttached: Set<String> = []
-    /// Sitzungen, für die Martin „Nur senden“ gewählt hat: nicht noch einmal fragen (bis zum Neustart der App).
-    var declinedTakeover: Set<String> = []
     /// „Alle Sitzungen beenden“ (WindDown): der laufende Auftrag des Gateways und sein Stand.
     @Published private(set) var windDownJob: String?
     @Published private(set) var windDownItems: [WindDown.Item] = []
@@ -349,8 +343,6 @@ final class AppModel: ObservableObject {
             var fresh: [String: Session] = [:]
             for s in ev["sessions"].array.compactMap(Session.from) { fresh[s.key] = s }
             saveSessionCache(ev["sessions"])
-            holders = Handover.holders(in: ev["sessions"])
-            pcAttached = Handover.pcAttached(in: ev["sessions"])
             applyConfig(ev["config"])
             // sessions seen elsewhere after their last activity count as read
             var u = unread
@@ -567,8 +559,6 @@ final class AppModel: ObservableObject {
             var fresh: [String: Session] = [:]
             for s in r["sessions"].array.compactMap(Session.from) { fresh[s.key] = s }
             sessions = fresh
-            holders = Handover.holders(in: r["sessions"])
-            pcAttached = Handover.pcAttached(in: r["sessions"])
             lastSync = Date().timeIntervalSince1970
             if !showDormant && !showBackground { saveSessionCache(r["sessions"]) }
         } catch { lastError = error.localizedDescription }
@@ -705,8 +695,6 @@ final class AppModel: ObservableObject {
         _ = try await rpc("send", .object(p))
     }
 
-    func holder(_ s: Session) -> String { holders[s.key] ?? "" }
-
     // MARK: Alle Sitzungen beenden (WindDown, Gateway `wind_down`)
 
     func startWindDown(_ keys: [String]) async throws {
@@ -725,19 +713,6 @@ final class AppModel: ObservableObject {
     }
 
     func clearWindDown() { windDownJob = nil; windDownItems = []; windDownDone = false }
-
-    func setHolder(_ key: String, _ holder: String) {
-        if holder.isEmpty { if holders[key] != nil { holders[key] = nil } } else if holders[key] != holder { holders[key] = holder }
-    }
-
-    /// Sitzungsübergabe (Gateway `handover`): to = "phone" (das Handy übernimmt, der PC wird schreibgeschützt) oder "desk"
-    /// (zurück an den PC; das Gateway nimmt dann keinen Text vom Handy mehr an, bis das Handy wieder übernimmt).
-    func handover(_ s: Session, to: String) async throws {
-        var p: [String: JSON] = ["to": .string(to)]
-        if s.liveTmux != nil { p["target"] = .string(s.target) } else { p["key"] = .string(s.key) }
-        let r = try await rpc("handover", .object(p), timeout: 15)
-        setHolder(s.key, r.str("holder"))
-    }
 
     func sendKeys(_ s: Session, _ keys: [String], expectMenu: String? = nil, force: Bool = false) async throws {
         var p: [String: JSON] = ["keys": JSON(keys), "enter": false]
