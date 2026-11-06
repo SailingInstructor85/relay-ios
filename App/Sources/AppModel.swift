@@ -52,6 +52,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var pcAttached: Set<String> = []
     /// Sitzungen, für die Martin „Nur senden“ gewählt hat: nicht noch einmal fragen (bis zum Neustart der App).
     var declinedTakeover: Set<String> = []
+    /// „Alle Sitzungen beenden“ (WindDown): der laufende Auftrag des Gateways und sein Stand.
+    @Published private(set) var windDownJob: String?
+    @Published private(set) var windDownItems: [WindDown.Item] = []
+    @Published private(set) var windDownDone = false
     @Published private(set) var accounts: [Account] = []
     @Published var showDormant = false      // "Zuletzt" instead of "Laufend"
     @Published var showBackground = false   // also headless runs
@@ -382,6 +386,10 @@ final class AppModel: ObservableObject {
         case "session_done":
             let key = ev.str("session_key")
             sessions[key]?.asks = false
+        case "wind_down":
+            if ev.str("job") == windDownJob { windDownItems = WindDown.apply(ev, to: windDownItems) }
+        case "wind_down_done":
+            if ev.str("job") == windDownJob { windDownDone = true; Task { await refreshWindDown(); await refresh() } }
         case "session_seen":
             let key = ev.str("session_key")
             var u = unread; u.remove(key); unread = u
@@ -698,6 +706,25 @@ final class AppModel: ObservableObject {
     }
 
     func holder(_ s: Session) -> String { holders[s.key] ?? "" }
+
+    // MARK: Alle Sitzungen beenden (WindDown, Gateway `wind_down`)
+
+    func startWindDown(_ keys: [String]) async throws {
+        let r = try await rpc("wind_down", ["keys": JSON(keys), "text": .string(WindDown.message),
+                                            "wait_s": .number(Double(WindDown.defaultWaitSeconds))], timeout: 30)
+        windDownJob = r.str("job")
+        windDownItems = WindDown.items(in: r)
+        windDownDone = r.flag("done")
+    }
+
+    func refreshWindDown() async {
+        guard let job = windDownJob else { return }
+        guard let r = try? await rpc("wind_down_status", ["job": .string(job)], timeout: 15), r.str("job") == job else { return }
+        windDownItems = WindDown.items(in: r)
+        windDownDone = r.flag("done")
+    }
+
+    func clearWindDown() { windDownJob = nil; windDownItems = []; windDownDone = false }
 
     func setHolder(_ key: String, _ holder: String) {
         if holder.isEmpty { if holders[key] != nil { holders[key] = nil } } else if holders[key] != holder { holders[key] = holder }

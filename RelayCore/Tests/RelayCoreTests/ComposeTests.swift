@@ -259,3 +259,57 @@ final class DeskTerminalTests: XCTestCase {
         XCTAssertFalse(OutboxLogic.retried(i, force: true, newId: "3").move)
     }
 }
+
+final class WindDownTests: XCTestCase {
+    private func session(_ key: String, state: String = "idle", alive: Bool = true, tmux: String? = "c1-x-1", tool: String = "claude",
+                         attachable: Bool = true, background: Bool = false, last: Double = 1) -> Session {
+        Session.from(.obj(["key": .string(key), "tool": .string(tool), "state": .string(state), "alive": .bool(alive),
+                           "attachable": .bool(attachable), "tmux_session": tmux.map { .string($0) }, "background": .bool(background),
+                           "last_activity": .number(last), "title": .string("T " + key)]))!
+    }
+
+    func testEligibility() {
+        XCTAssertTrue(WindDown.eligibility(session("claude:c1:a")).selectable)
+        XCTAssertEqual(WindDown.eligibility(session("claude:c1:a")).note, "")
+        XCTAssertEqual(WindDown.eligibility(session("claude:c1:b", state: "busy")).note, "arbeitet gerade, das Ende der Runde wird abgewartet")
+        let desk = WindDown.eligibility(session("claude:c1:c", tmux: nil, attachable: false))
+        XCTAssertTrue(desk.selectable)
+        XCTAssertTrue(desk.note.contains("ohne tmux"))
+        XCTAssertFalse(WindDown.eligibility(session("codex:x1:d", tmux: nil, tool: "codex", attachable: false)).selectable)
+        XCTAssertFalse(WindDown.eligibility(session("claude:c1:e", state: "exited", alive: false, tmux: nil)).selectable)
+        XCTAssertFalse(WindDown.eligibility(session("claude:c1:f", background: true)).selectable)
+        XCTAssertFalse(WindDown.eligibility(session("claude:c1:tmux-x", tmux: "x")).selectable)  // placeholder
+    }
+
+    func testCandidatesOrderAndPreselection() {
+        let busy = session("claude:c1:busy", state: "busy", last: 9), idle = session("claude:c1:idle", last: 5)
+        let codexDesk = session("codex:x1:d", tmux: nil, tool: "codex", attachable: false, last: 7)
+        let gone = session("claude:c1:gone", state: "exited", alive: false, tmux: nil, last: 8)
+        let list = WindDown.candidates([gone, busy, codexDesk, idle])
+        XCTAssertEqual(list.map(\.key), ["claude:c1:idle", "claude:c1:busy", "codex:x1:d"])
+        XCTAssertEqual(WindDown.preselected(list), ["claude:c1:idle", "claude:c1:busy"])
+        XCTAssertEqual(WindDown.confirmTitle(2), "2 Sitzungen beenden?")
+        XCTAssertEqual(WindDown.buttonTitle(1), "Sitzung beenden")
+    }
+
+    func testStatusEventsAndSummary() {
+        let status: JSON = ["job": "j1", "done": false, "items": [["key": "claude:c1:a", "title": "A", "phase": "writing"],
+                                                                    ["key": "claude:c1:b", "title": "B", "phase": "queued"]]]
+        var items = WindDown.items(in: status)
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items[0].statusLine, "schreibt Übergabe")
+        XCTAssertFalse(WindDown.allDone(items))
+        items = WindDown.apply(["type": "wind_down", "job": "j1", "key": "claude:c1:a", "phase": "closed", "handover": "~/x/Notiz.md"], to: items)
+        items = WindDown.apply(["type": "wind_down", "job": "j1", "key": "claude:c1:b", "phase": "timeout", "detail": "nach 600 s"], to: items)
+        XCTAssertTrue(WindDown.allDone(items))
+        XCTAssertEqual(items[0].statusLine, "beendet · Übergabe: ~/x/Notiz.md")
+        XCTAssertEqual(items[0].title, "A")  // the event carried no title: kept
+        let s = WindDown.summary(items)
+        XCTAssertTrue(s.hasPrefix("1 von 2 Sitzungen sauber beendet."))
+        XCTAssertTrue(s.contains("• A: ~/x/Notiz.md"))
+        XCTAssertTrue(s.contains("• B: nicht sauber beendet (Frist abgelaufen) (nach 600 s)"))
+        XCTAssertEqual(WindDown.summary([items[0]]), "Die Sitzung ist sauber beendet.\nÜbergaben:\n• A: ~/x/Notiz.md")
+        XCTAssertTrue(WindDown.message.contains("Übergabe: <Pfad der Übergabe>"))
+        XCTAssertFalse(WindDown.message.contains("—"))
+    }
+}

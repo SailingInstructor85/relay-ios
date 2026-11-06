@@ -152,6 +152,29 @@ final class ListTests: RelayTestCase {
         shot("live-desktop-schlaeft")
     }
 
+    func test11_WindDownAll() {
+        // "Alle Sitzungen beenden": Auswahl mit Abwahl, Bestätigung mit Anzahl, Fortschritt je Sitzung, Zusammenfassung.
+        launchConnected()
+        mainMenu("Alle Sitzungen beenden")
+        settle(1)
+        shot("alle-beenden-auswahl")
+        expect("Sitzungen beenden", 5)
+        expect("arbeitet gerade", 3, soft: true)
+        let toggle = app.switches["API Refactoring"].firstMatch
+        if toggle.waitForExistence(timeout: 3) { toggle.tap(); settle(0.5) }  // eine abwählen
+        shot("alle-beenden-abgewaehlt")
+        tapID("windDownStart")
+        settle(1)
+        shot("alle-beenden-bestaetigen")
+        tap("Ja, jetzt beenden", 5)
+        settle(2)
+        shot("alle-beenden-laeuft")
+        XCTAssertTrue(mockReceived("wind_down", where: { (($0["keys"] as? [Any])?.count ?? 0) >= 2 && !((($0["keys"] as? [String]) ?? []).contains { $0.hasSuffix("000000000002") }) }))
+        expect("sauber beendet", 60)
+        shot("alle-beenden-fertig")
+        expect("Übergabe", 3, soft: true)
+    }
+
     func test10_OfflineList() {
         launchConnected()
         ctl("offline")

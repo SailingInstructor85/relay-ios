@@ -8,6 +8,7 @@ struct SessionsView: View {
     @State private var search = ""
     @State private var showNew = false
     @State private var showPower = false
+    @State private var showWindDown = false
     @State private var confirmClose: Session?
     @State private var showConfirmClose = false
     @State private var renameTarget: Session?
@@ -97,6 +98,8 @@ struct SessionsView: View {
                         .disabled(model.unread.isEmpty)
                     Toggle(isOn: $model.showBackground) { Label("Hintergrundläufe", systemImage: "moon.zzz") }
                     Button { model.reconnect() } label: { Label("Neu verbinden", systemImage: "arrow.clockwise") }
+                    Button { showWindDown = true } label: { Label("Alle Sitzungen beenden ...", systemImage: "xmark.circle") }
+                        .disabled(model.state != .connected)
                     Button { showPower = true } label: { Label("Desktop ausschalten ...", systemImage: "power") }
                         .disabled(model.state != .connected)
                     Button { path.append(Dest.settings) } label: { Label("Einstellungen", systemImage: "gear") }
@@ -149,6 +152,7 @@ struct SessionsView: View {
             }
         }
         .sheet(isPresented: $showPower) { PowerView().environmentObject(model) }
+        .sheet(isPresented: $showWindDown) { WindDownView().environmentObject(model) }
         .sheet(isPresented: $showNew) {
             NewSessionView { target in
                 showNew = false
@@ -380,7 +384,7 @@ struct SessionAvatar: View {
     }
 }
 
-private struct Tag: View {
+struct Tag: View {
     let text: String
     var color: Color = .secondary
     var body: some View {

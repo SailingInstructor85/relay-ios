@@ -538,6 +538,62 @@ def rpc_send(p):
     return {"how": "tmux %" + s.get("tmux_session", "0") if s.get("tmux_session") else "resumed in tmux c1-resumed"}
 
 
+WIND_DOWNS = {}  # job -> {"done", "items": {key: item}}
+WD_PHASES = ["sending", "writing", "closing", "closed"]
+
+
+def rpc_wind_down(p):
+    keys = p.get("keys")
+    if not isinstance(keys, list) or not keys or len(keys) > 50:
+        raise RpcError("keys: 1-50 session keys")
+    job = "wd%d" % (len(WIND_DOWNS) + 1)
+    items = {}
+    for k in keys:
+        s = find_session(k)
+        items[k] = {"key": k, "title": s["title"] if s else "", "alias": s["alias"] if s else "", "tool": s["tool"] if s else "",
+                    "phase": "queued" if s else "error", "detail": "" if s else "no such session: " + k, "handover": "", "since": time.time()}
+    WIND_DOWNS[job] = {"job": job, "done": False, "started": time.time(), "wait_s": int(p.get("wait_s") or 600), "items": items, "summary": ""}
+    threading.Thread(target=wind_down_run, args=(job, p.get("text") or ""), daemon=True).start()
+    return wind_down_view(job)
+
+
+def wind_down_view(job):
+    w = WIND_DOWNS[job]
+    return {**w, "items": list(w["items"].values())}
+
+
+def wind_down_run(job, text):
+    w = WIND_DOWNS[job]
+    for k, it in w["items"].items():
+        if it["phase"] == "error":
+            continue
+        s = find_session(k)
+        phases = (["waiting"] if s and s["state"] == "busy" else []) + WD_PHASES
+        for ph in phases:
+            time.sleep(0.5)
+            it["phase"], it["since"] = ph, time.time()
+            if ph == "closing":
+                it["handover"] = "~/notes/%s.md" % it["title"].replace(" ", "-")
+                mutate(lambda st: st["sent"].append({"key": k, "text": text, "wind_down": job}))
+            if ph == "closed":
+                def f(st, key=k):
+                    st["overrides"].setdefault(key, {}).update(alive=False, state="exited", closed=True, closed_reason="user", tmux_session=None, attachable=False)
+                    st["closed_keys"][key] = time.time()
+                mutate(f)
+            add_event("wind_down", {"job": job, "key": k, "title": it["title"], "phase": ph, "detail": it["detail"], "handover": it["handover"]})
+    good = sum(1 for i in w["items"].values() if i["phase"] == "closed")
+    w["summary"] = "%d von %d Sitzungen sauber beendet." % (good, len(w["items"]))
+    w["done"] = True
+    add_event("wind_down_done", {"job": job, "summary": w["summary"]})
+
+
+def rpc_wind_down_status(p):
+    job = p.get("job") or (next(reversed(WIND_DOWNS)) if WIND_DOWNS else None)
+    if not job or job not in WIND_DOWNS:
+        raise RpcError("unknown job")
+    return wind_down_view(job)
+
+
 def reply_to(key, text):
     def add(st):
         arr = st["extra_msgs"].setdefault(key, [])
