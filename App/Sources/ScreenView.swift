@@ -38,6 +38,7 @@ struct ScreenView: View {
             }.padding(8)
         }
         .navigationTitle(session.name).navigationBarTitleDisplayMode(.inline)
+        .keepsScreenAwake()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { Button("Fertig") { dismiss() } }
             ToolbarItem(placement: .topBarTrailing) {

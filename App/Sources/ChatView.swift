@@ -149,6 +149,7 @@ struct ChatView: View {
             if let q = initialSearch, !q.isEmpty, !initialDone { initialDone = true; showSearch = true }
         }
         .onChange(of: scenePhase) { _, p in if p == .active { standTick += 1 } }
+        .keepsScreenAwake()
         .onDisappear {
             model.visibleChat = nil
             model.transcriptListeners[sessionKey] = nil
