@@ -243,3 +243,19 @@ final class HandoverAskTests: XCTestCase {
         XCTAssertEqual(Handover.pcAttached(in: rows), ["claude:c1:a"])
     }
 }
+
+final class DeskTerminalTests: XCTestCase {
+    func testRefusalIsRecognisedAndKeptWithMove() {
+        let msg = "this session is open in a Desktop terminal outside tmux: reply there, or close it there and send again from the phone (it then resumes here)"
+        XCTAssertTrue(DeskTerminal.isRefusal(msg))
+        XCTAssertFalse(DeskTerminal.isRefusal("session is busy"))
+        XCTAssertFalse(OutboxLogic.isBusyRefusal(msg))
+        let i = OutItem(id: "1", key: "k", text: "hallo", at: 1, state: .failed, error: msg)
+        XCTAssertEqual(OutboxLogic.status(i, connected: true, network: true), DeskTerminal.statusText)
+        let again = OutboxLogic.retried(i, force: nil, newId: "2", move: true)
+        XCTAssertEqual(again.id, "2")
+        XCTAssertTrue(again.move)
+        XCTAssertEqual(OutboxLogic.decode(OutboxLogic.encode([again])), [again])  // survives the disk
+        XCTAssertFalse(OutboxLogic.retried(i, force: true, newId: "3").move)
+    }
+}

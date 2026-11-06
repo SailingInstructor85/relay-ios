@@ -194,4 +194,20 @@ final class ChatTests: RelayTestCase {
         XCTAssertTrue(mockReceived("send", where: { ($0["text"] as? String) == "Weiter so" }))
         expect("Am Handy", 5, soft: true)
     }
+
+    func test13_DeskTerminalMoveAfterYes() {
+        // Die Sitzung läuft am PC in einem Terminal ohne tmux: die Nachricht bleibt im Postausgang, der Umzug erst nach Ja.
+        launchConnected()
+        openSession("Skript ohne tmux")
+        typeInto("chatInput", "Bitte Status melden")
+        tapID("chatSend")
+        settle(1.5)
+        shot("ohne-tmux-abgelehnt")
+        expect("Terminal ohne tmux offen", 5)
+        XCTAssertTrue(mockReceived("send", where: { ($0["text"] as? String) == "Bitte Status melden" && $0["move"] == nil }))
+        tap("Am PC beenden und hier fortsetzen", 5)
+        settle(3)
+        shot("ohne-tmux-umgezogen")
+        XCTAssertTrue(mockReceived("send", where: { ($0["text"] as? String) == "Bitte Status melden" && ($0["move"] as? Bool) == true }, timeout: 12))
+    }
 }

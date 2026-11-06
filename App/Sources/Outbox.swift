@@ -44,8 +44,8 @@ final class Outbox: ObservableObject {
     }
 
     /// A failed one goes again under a new `client_id` (the gateway answers a known id with its first, refusing answer).
-    func retry(_ id: String, force: Bool? = nil) {
-        update { $0.map { $0.id == id ? OutboxLogic.retried($0, force: force, newId: UUID().uuidString) : $0 } }
+    func retry(_ id: String, force: Bool? = nil, move: Bool? = nil) {
+        update { $0.map { $0.id == id ? OutboxLogic.retried($0, force: force, newId: UUID().uuidString, move: move) : $0 } }
     }
 
     func remove(_ id: String) { update { $0.filter { $0.id != id } } }
@@ -108,10 +108,11 @@ final class Outbox: ObservableObject {
     private func deliver(_ item: OutItem) async throws {
         let model = AppModel.shared
         if let s = model.session(for: item.key) {
-            try await model.send(s, text: item.text, force: item.force, clientId: item.id)
+            try await model.send(s, text: item.text, force: item.force, clientId: item.id, move: item.move)
         } else {
-            _ = try await model.rpc("send", ["key": .string(item.key), "text": .string(item.text), "enter": true,
-                                             "force": .bool(item.force), "client_id": .string(item.id)], timeout: 60)
+            _ = try await model.rpc("send", .obj(["key": .string(item.key), "text": .string(item.text), "enter": true,
+                                                  "force": .bool(item.force), "client_id": .string(item.id),
+                                                  "move": item.move ? .bool(true) : nil]), timeout: 60)
         }
     }
 
@@ -150,6 +151,7 @@ struct OutboxRow: View {
                     HStack(spacing: 8) {
                         Button("Wiederholen") { Outbox.shared.retry(item.id) }
                         if OutboxLogic.isBusyRefusal(item.error ?? "") { Button("Trotzdem senden") { Outbox.shared.retry(item.id, force: true) } }
+                        if DeskTerminal.isRefusal(item.error ?? "") { Button(DeskTerminal.moveButton) { Outbox.shared.retry(item.id, move: true) } }
                         Button("Bearbeiten") { onEdit(item.text); Outbox.shared.remove(item.id) }
                         Button("Verwerfen", role: .destructive) { Outbox.shared.remove(item.id) }
                     }.font(.caption).buttonStyle(.bordered).controlSize(.mini)

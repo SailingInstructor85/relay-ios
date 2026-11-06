@@ -35,6 +35,8 @@ struct ChatView: View {
     @State private var confirmForce: String?
     /// Text, der auf die Antwort „Sitzung vom PC übernehmen?“ wartet (Handover.asksBeforeSend).
     @State private var askTakeover: String?
+    /// Postausgang-Kennung der Nachricht, die das Gateway abgelehnt hat, weil die Sitzung am PC ohne tmux läuft (DeskTerminal).
+    @State private var confirmMove: String?
     @State private var importing = false
     @State private var pickingPhoto = false
     @State private var uploadInfo = ""
@@ -156,6 +158,9 @@ struct ChatView: View {
             }
             Button("Abbrechen", role: .cancel) { askTakeover = nil }
         } message: { _ in Text(Handover.askMessage(holder: holder)) }
+        .confirmationDialog(DeskTerminal.dialogTitle, isPresented: Binding(get: { confirmMove != nil }, set: { if !$0 { confirmMove = nil } }), titleVisibility: .visible) {
+            Button(DeskTerminal.moveButton, role: .destructive) { if let id = confirmMove { Outbox.shared.retry(id, move: true) } }
+        } message: { Text(DeskTerminal.dialogMessage) }
         .confirmationDialog("Die Sitzung arbeitet gerade.", isPresented: Binding(get: { confirmForce != nil }, set: { if !$0 { confirmForce = nil } }), titleVisibility: .visible) {
             Button("Trotzdem senden") { if let id = confirmForce { Outbox.shared.retry(id, force: true) } }
             Button("Abbrechen", role: .cancel) {}
@@ -598,6 +603,12 @@ struct ChatView: View {
             clearField()
             error = nil
             confirmForce = id
+        } catch let e as RelayError where e.remote && DeskTerminal.isRefusal(e.message) {
+            // at the PC in a terminal outside tmux: the text waits in the outbox, the move only after his yes
+            Outbox.shared.addRefused(id: id, key: s.key, text: t, error: e.message)
+            clearField()
+            error = nil
+            confirmMove = id
         } catch {
             if OutboxLogic.retries(error) { queue() } else { self.error = error.localizedDescription }
         }
