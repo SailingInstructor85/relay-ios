@@ -109,3 +109,5 @@ Risiken: `UIGestureRecognizer` am Fenster ist nur kompiliert, nicht gesehen; sol
 
 Version: `project.yml` 0.3.1 auf 0.3.2 (`3ff69b3`). Nicht gepusht, kein Tag; das übernimmt das Skript.
 
+CI-Runde 1 (Lauf 42145853158): core-tests, ipa und drei von vier Simulator-Teilen grün. Der Teil „liste“ (ListTests, NewSessionTests, SetupTests) scheiterte mit rc 65, ohne dass ein Testfall lief: „The test runner failed to initialize for UI testing (Timed out while loading Accessibility)“, ein Fehler des Simulators auf dem Läufer, die App wurde nie gestartet. Behoben im Workflow: Startet der Runner nicht (Meldung im Protokoll und kein `Test Case`), wird der Simulator neu gestartet und der Teil einmal wiederholt; echte Testfehler werden nicht wiederholt. Das erste Protokoll landet als `test-versuch1.log` im Artefakt.
+

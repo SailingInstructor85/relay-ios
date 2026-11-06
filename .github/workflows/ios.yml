@@ -125,12 +125,28 @@ jobs:
             for c in ${{ matrix.shard.classes }}; do ONLY="$ONLY -only-testing:RelayUITests/$c"; done
           fi
           echo "only: $ONLY"
-          TEST_RUNNER_RELAY_UI_PORT=2222 TEST_RUNNER_RELAY_UI_USER="$(whoami)" \
-          xcodebuild -project Relay.xcodeproj -scheme Relay -configuration Debug \
-            -sdk iphonesimulator -destination "id=$UDID" -derivedDataPath build-sim \
-            -resultBundlePath Results.xcresult -parallel-testing-enabled NO -retry-tests-on-failure -test-iterations 2 $ONLY \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            test-without-building > test.log 2>&1 && rc=0 || rc=$?
+          run_tests() {
+            rm -rf Results.xcresult
+            TEST_RUNNER_RELAY_UI_PORT=2222 TEST_RUNNER_RELAY_UI_USER="$(whoami)" \
+            xcodebuild -project Relay.xcodeproj -scheme Relay -configuration Debug \
+              -sdk iphonesimulator -destination "id=$UDID" -derivedDataPath build-sim \
+              -resultBundlePath Results.xcresult -parallel-testing-enabled NO -retry-tests-on-failure -test-iterations 2 $ONLY \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+              test-without-building > test.log 2>&1 && rc=0 || rc=$?
+          }
+          run_tests
+          # Startet der Test-Runner selbst nicht ("The test runner failed to initialize for UI testing", meist
+          # "Timed out while loading Accessibility", Lauf 42145853158), ist kein Testfall gelaufen und die App nie
+          # gestartet: Simulator neu starten und den Teil einmal wiederholen. Echte Testfehler werden nicht wiederholt.
+          if [ "$rc" -ne 0 ] && grep -q "failed to initialize for UI testing" test.log && ! grep -q "Test Case '" test.log; then
+            echo "Test-Runner startete nicht, Simulator neu starten und wiederholen"
+            cp test.log test-versuch1.log
+            xcrun simctl shutdown "$UDID" || true
+            sleep 5
+            xcrun simctl boot "$UDID" || true
+            xcrun simctl bootstatus "$UDID" -b
+            run_tests
+          fi
           echo "$rc" > test.rc
           grep -E "Test Case .* (passed|failed)|TEST (SUCCEEDED|FAILED)|error:" test.log | cut -c1-300 | tail -300 || true
           echo "xcodebuild rc=$rc"
@@ -143,7 +159,7 @@ jobs:
           xcrun xcresulttool export attachments --path Results.xcresult --output-path out/raw 2>&1 | tail -5 || true
           python3 testing/export_shots.py out/raw out/shots || true
           sudo chmod a+r /tmp/relaymock/* 2>/dev/null; cp /tmp/relaymock/mock.log /tmp/relaymock/rpc-all.jsonl /tmp/relaymock/sshd.log out/ 2>/dev/null || true
-          cp test.log build-sim.log out/ 2>/dev/null || true
+          cp test.log test-versuch1.log build-sim.log out/ 2>/dev/null || true
           xcrun simctl spawn "$UDID" log show --last 90m --predicate 'process == "Relay" AND (messageType == fault OR messageType == error)' --style compact 2>&1 | tail -n 2000 > out/relay-app-errors.log || true
           ls -la ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -i relay > out/crash-reports.txt || true
           ls out/shots | wc -l
