@@ -204,3 +204,25 @@ final class ComposeTests: XCTestCase {
         XCTAssertFalse(OutboxLogic.retried(queued, force: nil, newId: "n").force)
     }
 }
+
+final class HandoverTests: XCTestCase {
+    func testPhoneIsBlockedOnlyWhileTheDeskHoldsIt() {
+        XCTAssertTrue(Handover.phoneBlocked("desk"))
+        XCTAssertFalse(Handover.phoneBlocked("phone"))
+        XCTAssertFalse(Handover.phoneBlocked(""))
+    }
+
+    func testLabelsAndTakeButton() {
+        XCTAssertEqual(Handover.label("phone"), "Am Handy")
+        XCTAssertEqual(Handover.label("desk"), "Am PC")
+        XCTAssertNil(Handover.label(""))
+        XCTAssertEqual(Handover.takeTitle("desk"), "Sitzung übernehmen")
+        XCTAssertEqual(Handover.takeTitle(""), "Sitzung übernehmen")
+        XCTAssertNil(Handover.takeTitle("phone"))
+    }
+
+    func testHoldersFromSessionList() {
+        let rows: JSON = [["key": "claude:c1:a", "holder": "phone"], ["key": "claude:c1:b"], ["key": "claude:c1:c", "holder": "desk"], ["holder": "desk"]]
+        XCTAssertEqual(Handover.holders(in: rows), ["claude:c1:a": "phone", "claude:c1:c": "desk"])
+    }
+}

@@ -241,7 +241,7 @@ struct SessionsView: View {
     @ViewBuilder private func row(_ s: Session) -> some View {
         NavigationLink(value: Dest.chat(s.key)) {
             SessionRow(s: s, unread: model.unread.contains(s.key), pinned: model.pinned.contains(s.key), muted: model.muted.contains(s.key),
-                       stale: stale, look: model.look, query: search)
+                       stale: stale, look: model.look, query: search, holder: model.holder(s))
         }
         .contextMenu {
             if s.tool == "claude" && s.liveTmux != nil {
@@ -397,6 +397,7 @@ struct SessionRow: View {
     var stale = false
     var look = Avatars.Look()
     var query = ""
+    var holder = ""
 
     /// The title with the letters the search matched in bold.
     private var title: Text {
@@ -444,6 +445,7 @@ struct SessionRow: View {
                     Tag(text: s.alias)
                     Text(s.folder).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     if let c = s.context, c.level != "ok" { Tag(text: "\(c.pct)%", color: c.level == "full" ? .red : .orange) }
+                    if let h = Handover.label(holder) { Tag(text: h, color: holder == Handover.phone ? .orange : .blue) }
                     if s.hibernated { Tag(text: "ruht") }
                     if s.closed { Tag(text: closedText) }
                 }
