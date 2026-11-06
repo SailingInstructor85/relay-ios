@@ -39,8 +39,7 @@ struct SetupView: View {
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                 TextField("Zweite Adresse (optional, z. B. Tailscale)", text: $host2)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                Text("Beide Adressen gehören zum selben PC (gleicher Host-Schlüssel). Die App prüft kurz, welche erreichbar ist, und nimmt die.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("Zweite Adresse desselben PCs (gleicher Host-Schlüssel), die App nimmt die erreichbare.").font(.caption).foregroundStyle(.secondary)
                 TextField("Port", text: $port).keyboardType(.numberPad)
                 TextField("Benutzer", text: $user).textInputAutocapitalization(.never).autocorrectionDisabled()
                 Button(firstRun ? "Verbinden" : "Speichern & neu verbinden") {

@@ -35,6 +35,8 @@ final class SetupTests: RelayTestCase {
         shot("liste-nach-verbinden")
         // Host-Schlüssel gepinnt?
         mainMenu("Einstellungen")
+        // Der Abschnitt "Status" liegt seit der zweiten Adresse unter dem Rand; das Formular rendert nur Sichtbares.
+        reveal("Gepinnter Host-Schlüssel")
         expect("Gepinnter Host-Schlüssel", 6)
         shot("einstellungen-hostkey")
     }
