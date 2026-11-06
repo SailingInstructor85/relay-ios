@@ -175,5 +175,32 @@ final class ComposeTests: XCTestCase {
         XCTAssertFalse(DictationSend.canSend(input: "hi", listening: true, sending: true, hasSession: true))
         XCTAssertFalse(DictationSend.canSend(input: "hi", listening: true, sending: false, hasSession: false))
         XCTAssertEqual(DictationSend.grace, 2, accuracy: 0.001)
+        XCTAssertGreaterThan(DictationSend.stuckAfter, 15)  // longer than the clean-up's own limit
+    }
+
+    func testAfterDictation() {
+        XCTAssertEqual(DictationSend.afterDictation(field: " Foto dazu ", failure: nil), .send("Foto dazu"))
+        XCTAssertEqual(DictationSend.afterDictation(field: "Foto", failure: "Mikro weg"), .send("Foto"))
+        XCTAssertEqual(DictationSend.afterDictation(field: "  ", failure: nil), .nothing("Nichts verstanden, nichts gesendet."))
+        XCTAssertEqual(DictationSend.afterDictation(field: "", failure: "Spracherkennung ist nicht verfügbar."),
+                       .nothing("Nicht gesendet: Spracherkennung ist nicht verfügbar."))
+    }
+
+    func testRefusedOutboxStatus() {
+        let busy = OutItem(id: "1", key: "k", text: "hi", at: 0, state: .failed, error: "session is busy")
+        XCTAssertEqual(OutboxLogic.status(busy, connected: true, network: true), "Nicht gesendet: die Sitzung arbeitet gerade")
+        XCTAssertTrue(OutboxLogic.isBusyRefusal(busy.error ?? ""))
+        let other = OutItem(id: "2", key: "k", text: "hi", at: 0, state: .failed, error: "not sent: a Yes/No dialog is open")
+        XCTAssertEqual(OutboxLogic.status(other, connected: true, network: true), "Nicht gesendet: a Yes/No dialog is open")
+        // a refused message stays on disk and in the chat; only delivered ones are swept
+        XCTAssertEqual(OutboxLogic.sweep([busy], seen: ["hi"], now: 1e9).count, 1)
+        XCTAssertEqual(OutboxLogic.restored([busy]).first?.state, .failed)
+        // "Trotzdem senden": queued with force under a fresh client_id; a queued one keeps its id
+        let again = OutboxLogic.retried(busy, force: true, newId: "n")
+        XCTAssertEqual(again.id, "n"); XCTAssertEqual(again.state, .queued); XCTAssertTrue(again.force); XCTAssertNil(again.error)
+        XCTAssertEqual(again.text, "hi"); XCTAssertEqual(again.key, "k")
+        let queued = OutItem(id: "3", key: "k", text: "x", at: 0, state: .queued, force: false)
+        XCTAssertEqual(OutboxLogic.retried(queued, force: nil, newId: "n").id, "3")
+        XCTAssertFalse(OutboxLogic.retried(queued, force: nil, newId: "n").force)
     }
 }

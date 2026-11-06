@@ -44,6 +44,9 @@ final class SpeechTests: XCTestCase {
     func testPickAndCorrect() {
         XCTAssertEqual(SpeechVocab.pick(["hallo welt", "hallo Relay"], conf: [0.5, 0.45], terms: ["Relay"]), "hallo Relay")
         XCTAssertEqual(SpeechVocab.pick(["a b", "c d"], conf: [], terms: []), "a b")
+        // an alternative that covers only part of what was said never wins, however confident
+        XCTAssertEqual(SpeechVocab.pick(["um Leuten zu zeigen, was wir hier machen", "machen"], conf: [0.4, 0.95], terms: []),
+                       "um Leuten zu zeigen, was wir hier machen")
         let c = [(heard: "rely", meant: "Relay"), (heard: "ge it hub", meant: "GitHub"), (heard: "ge it", meant: "X")]
         XCTAssertEqual(SpeechVocab.correct("Rely und ge it hub, relyx", c), "Relay und GitHub, relyx")
     }
@@ -54,5 +57,22 @@ final class SpeechTests: XCTestCase {
         XCTAssertEqual(back.count, 1)
         XCTAssertEqual(JarvisHistory.search(back, query: "nichts wartet").count, 1)
         XCTAssertTrue(VoiceMode.isLive("live"))
+    }
+
+    func testDictationRestart() {
+        let said = "Ich möchte dir zeigen, was wir hier"
+        // the recogniser started over after a pause: only the words after it come back
+        XCTAssertTrue(DictationText.restarted(previous: said, current: "machen"))
+        XCTAssertTrue(DictationText.restarted(previous: said, current: "Machen, um"))
+        // revisions keep the length or the beginning
+        XCTAssertFalse(DictationText.restarted(previous: said, current: "Ich möchte dir zeigen, was wir hier machen."))
+        XCTAssertFalse(DictationText.restarted(previous: said, current: "Ich möchte"))
+        XCTAssertFalse(DictationText.restarted(previous: said, current: "Ich, möchte dir"))
+        // too little before to tell, or nothing new
+        XCTAssertFalse(DictationText.restarted(previous: "Hallo", current: "Du"))
+        XCTAssertFalse(DictationText.restarted(previous: said, current: ""))
+        XCTAssertEqual(DictationText.join("", "b"), "b")
+        XCTAssertEqual(DictationText.join("a ", " b"), "a b")
+        XCTAssertEqual(DictationText.join("a", ""), "a")
     }
 }

@@ -204,6 +204,14 @@ public enum OutboxLogic {
     /// Offline, link lost, timed out: try again. The gateway saying no won't change by itself.
     public static func retries(_ e: Error) -> Bool { (e as? RelayError).map { !$0.remote } ?? true }
 
+    /// The user's "Wiederholen" or "Trotzdem senden" on a failed item: queued again, with `force` when given. A failed
+    /// one gets a new id, because the gateway answers a known `client_id` with its first (refusing) answer; a queued
+    /// one keeps its id, so a send whose answer got lost is never typed twice.
+    public static func retried(_ i: OutItem, force: Bool?, newId: String) -> OutItem {
+        OutItem(id: i.state == .failed ? newId : i.id, key: i.key, text: i.text, at: i.at, state: .queued, error: nil,
+                tries: i.tries, doneAt: 0, force: force ?? i.force)
+    }
+
     /// The list as it is kept on disk: delivered ones are done, a send cut off by the app's end counts as not sent.
     public static func restored(_ items: [OutItem]) -> [OutItem] {
         items.filter { $0.state != .delivered }.map { i in var c = i; if c.state == .sending { c.state = .queued }; return c }
@@ -231,7 +239,9 @@ public enum OutboxLogic {
     public static func status(_ i: OutItem, connected: Bool, network: Bool) -> String {
         switch i.state {
         case .delivered: return "gesendet"
-        case .failed: return "Nicht gesendet: " + (i.error ?? "abgelehnt").replacingOccurrences(of: "not sent: ", with: "")
+        case .failed:
+            if isBusyRefusal(i.error ?? "") { return "Nicht gesendet: die Sitzung arbeitet gerade" }
+            return "Nicht gesendet: " + (i.error ?? "abgelehnt").replacingOccurrences(of: "not sent: ", with: "")
         case .sending: return "sendet…"
         case .queued:
             if connected { return "sendet…" }
@@ -254,9 +264,24 @@ public enum DictationSend {
     /// Seconds the microphone stays on after "Senden" was tapped.
     public static let grace: TimeInterval = 2
 
+    /// Longest wait after "Senden" during a dictation for the words to arrive (the dictation's end, the clean-up on the
+    /// Desktop); then the button is freed with whatever is in the field, so the chat never stays blocked.
+    public static let stuckAfter: TimeInterval = 25
+
     /// The send button: text in the field, or a running dictation (its words are sent once it ends); never while sending.
     public static func canSend(input: String, listening: Bool, sending: Bool, hasSession: Bool) -> Bool {
         hasSession && !sending && (listening || !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    /// What follows a dictation that ended with "Senden" pending: the field's text goes out, or the user is told why not
+    /// (nothing recognised, or the recogniser's error). Nothing is ever dropped without a word.
+    public enum Outcome: Equatable, Sendable { case send(String), nothing(String) }
+
+    public static func afterDictation(field: String, failure: String?) -> Outcome {
+        let t = field.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !t.isEmpty { return .send(t) }
+        if let f = failure?.trimmingCharacters(in: .whitespacesAndNewlines), !f.isEmpty { return .nothing("Nicht gesendet: \(f)") }
+        return .nothing("Nichts verstanden, nichts gesendet.")
     }
 }
 

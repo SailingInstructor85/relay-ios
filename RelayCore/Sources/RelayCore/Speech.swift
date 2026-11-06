@@ -174,13 +174,17 @@ public enum SpeechVocab {
     }
 
     /// Confidence (rank-based when the recogniser gives none or 0) plus `bonus` per distinct vocabulary term in the hypothesis.
-    public static func pick(_ hyps: [String], conf: [Float], terms: [String], bonus: Float = 0.12) -> String? {
+    /// Hypotheses much shorter than the longest one (under `minShare` of its length) are skipped: an alternative that
+    /// covers only part of what was said must never win over the full one.
+    public static func pick(_ hyps: [String], conf: [Float], terms: [String], bonus: Float = 0.12, minShare: Double = 0.6) -> String? {
         guard !hyps.isEmpty else { return nil }
         var seen = Set<String>()
         let vocab = terms.filter { $0.count >= 3 && seen.insert($0.lowercased()).inserted }
+        let longest = hyps.map(\.count).max() ?? 0
         var best = 0
         var bestScore = -Float.infinity
         for (i, h) in hyps.enumerated() {
+            if Double(h.count) < Double(longest) * minShare { continue }
             let c = (i < conf.count && conf[i] > 0) ? conf[i] : 1 - 0.05 * Float(i)
             let s = c + bonus * Float(vocab.filter { hasWord(h, $0) }.count)
             if s > bestScore + 1e-6 { best = i; bestScore = s }
@@ -222,6 +226,33 @@ public enum SpeechVocab {
 }
 
 /// One exchange with Jarvis, kept on the device.
+/// Partial results of a dictation (SFSpeechRecognizer). After a pause the recogniser sometimes starts over on its own
+/// without reporting `isFinal`: its next partial covers only the words after the pause, and the words before would be
+/// lost. Such a restart is told from an ordinary revision by its shape: the new partial is much shorter than the last
+/// one and does not begin like it.
+public enum DictationText {
+    /// The last partial is kept as committed text when `current` is less than half as long as `previous` (which has at
+    /// least a few words) and does not start with the same letters.
+    public static func restarted(previous: String, current: String) -> Bool {
+        let o = norm(previous), n = norm(current)
+        guard o.count >= 8, !n.isEmpty, n.count * 2 < o.count else { return false }
+        let head = String(n.prefix(min(n.count, 6)))
+        return !o.hasPrefix(head)
+    }
+
+    /// Letters and digits only, lower-cased, one space between words.
+    static func norm(_ s: String) -> String {
+        let kept = s.lowercased().map { ($0.isLetter || $0.isNumber) ? String($0) : " " }.joined()
+        return kept.split(separator: " ").joined(separator: " ")
+    }
+
+    /// `a` and `b` with one space between, either may be empty.
+    public static func join(_ a: String, _ b: String) -> String {
+        let a = a.trimmingCharacters(in: .whitespaces), b = b.trimmingCharacters(in: .whitespaces)
+        return a.isEmpty ? b : b.isEmpty ? a : a + " " + b
+    }
+}
+
 public struct JarvisTurn: Codable, Identifiable, Equatable, Sendable {
     public var id: UUID
     public var q: String

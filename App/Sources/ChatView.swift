@@ -141,8 +141,10 @@ struct ChatView: View {
             }.ignoresSafeArea()
         }
         .confirmationDialog("Die Sitzung arbeitet gerade.", isPresented: Binding(get: { confirmForce != nil }, set: { if !$0 { confirmForce = nil } }), titleVisibility: .visible) {
-            Button("Trotzdem senden") { if let t = confirmForce { Task { await send(t, force: true) } } }
+            Button("Trotzdem senden") { if let id = confirmForce { Outbox.shared.retry(id, force: true) } }
             Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("Die Nachricht wartet im Chat, bis du sie trotzdem sendest, bearbeitest oder verwirfst.")
         }
         .task(id: key) { await openChat() }
         .onAppear {
@@ -506,14 +508,17 @@ struct ChatView: View {
 
     /// Sends at once when the link is up (a quiet one is pinged first); otherwise, or when the link fails meanwhile, the
     /// message goes into the outbox, which sends it as soon as the Desktop answers (same `client_id`, so never twice).
+    /// A message is never dropped without a word: a refusal because the session works keeps it in the outbox (grey
+    /// bubble with "Trotzdem senden", "Bearbeiten", "Verwerfen"), any other refusal leaves it in the field with a banner.
     private func send(_ text: String, force: Bool = false) async {
-        guard let s = session else { return }
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
+        guard let s = session else { error = "Nicht gesendet: die Sitzung ist nicht mehr in der Liste."; return }
         let id = UUID().uuidString
+        func clearField() { if input.trimmingCharacters(in: .whitespacesAndNewlines) == t { input = "" } }
         func queue() {
             Outbox.shared.add(id: id, key: s.key, text: t, force: force)
-            if input.trimmingCharacters(in: .whitespacesAndNewlines) == t { input = "" }
+            clearField()
             error = nil
         }
         guard model.state == .connected else { queue(); return }
@@ -521,12 +526,15 @@ struct ChatView: View {
         guard await model.ensureAlive() else { queue(); return }
         do {
             try await model.send(s, text: t, force: force, clientId: id)
-            if input.trimmingCharacters(in: .whitespacesAndNewlines) == t { input = "" }
+            clearField()
             error = nil
             try? await Task.sleep(nanoseconds: 600_000_000)
             await refreshScreen()
         } catch let e as RelayError where e.remote && OutboxLogic.isBusyRefusal(e.message) {
-            confirmForce = t
+            Outbox.shared.addRefused(id: id, key: s.key, text: t, error: e.message)
+            clearField()
+            error = nil
+            confirmForce = id
         } catch {
             if OutboxLogic.retries(error) { queue() } else { self.error = error.localizedDescription }
         }
@@ -539,7 +547,9 @@ struct ChatView: View {
     }
 
     /// The send button. While dictating, the microphone stays on for `DictationSend.grace` so the last words are still
-    /// recognised; then the dictation ends and `toggleDictation` sends typed and spoken text together.
+    /// recognised; then the dictation ends and `toggleDictation` sends typed and spoken text together. Should the words
+    /// not arrive within `DictationSend.stuckAfter` (a recogniser or clean-up that never answers), the button is freed
+    /// with what is in the field, so the chat never stays blocked.
     private func sendTapped() async {
         guard voice.listening else { await send(input); return }
         guard !sendAfterDictation else { return }
@@ -547,13 +557,25 @@ struct ChatView: View {
         sending = true
         try? await Task.sleep(nanoseconds: UInt64(DictationSend.grace * 1_000_000_000))
         voice.stopListening()
+        let until = Date().addingTimeInterval(DictationSend.stuckAfter)
+        while sendAfterDictation && Date() < until { try? await Task.sleep(nanoseconds: 250_000_000) }
+        if sendAfterDictation {
+            sendAfterDictation = false
+            sending = false
+            dictating = false
+            error = "Das Diktat hat nicht geantwortet. Der Text steht im Feld, bitte noch einmal auf Senden tippen."
+        }
     }
 
     /// Mic button: listens until the speaker pauses (or the button is tapped again), then puts the words into the field.
     /// With "Diktat aufräumen" the Desktop cleans them up in the meantime, unless the user has typed since. When "Senden"
-    /// was tapped during the dictation, the field goes out as soon as the words (cleaned, if wanted) are in it.
+    /// was tapped during the dictation, the field goes out as soon as the words (cleaned, if wanted) are in it; when
+    /// nothing was understood, a banner says so instead of sending nothing in silence.
     private func toggleDictation() async {
         if voice.listening { voice.stopListening(); return }
+        guard !dictating else { return }  // a second tap while the first one still starts (permission, vocabulary)
+        dictating = true
+        defer { dictating = false }
         if let msg = await voice.authorize() { error = msg; return }
         if !vocabLoaded { vocabLoaded = true; await model.loadVocab(into: voice) }
         let clean = ChatPrefs.cleanDictation
@@ -561,18 +583,27 @@ struct ChatView: View {
         let before = input
         sendAfterDictation = false
         var raw = ""
-        do { raw = try await voice.listen() } catch { self.error = error.localizedDescription }
-        let sendNow = sendAfterDictation
-        sendAfterDictation = false
+        var failure: String?
+        do { raw = try await voice.listen() } catch { failure = error.localizedDescription }
         if !raw.isEmpty {
             let inserted = join(input, raw)
             input = inserted
-            if !sendNow { focused = true }
+            if !sendAfterDictation { focused = true }
             if clean, let cleaned = await model.cleanDictation(raw, before: before, session: key), input == inserted {
                 input = join(before, cleaned)
             }
         }
-        if sendNow { sending = false; await send(input) }
+        let sendNow = sendAfterDictation
+        sendAfterDictation = false
+        sending = false
+        if sendNow {
+            switch DictationSend.afterDictation(field: input, failure: failure) {
+            case .send(let t): await send(t)
+            case .nothing(let why): error = why
+            }
+        } else if let failure {
+            error = failure
+        }
     }
 
     // MARK: attachments

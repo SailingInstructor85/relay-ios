@@ -63,8 +63,10 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     /// Records until the speaker pauses (`pauseLimit` after the last recognised word), `stopListening()` is called, or
     /// nothing is heard for `silentStartLimit`. No overall cap: when the recogniser ends a segment on its own (its time
     /// limit, an error) a new one starts on the same audio and the text is appended. Returns the recognised text with
-    /// the gateway's corrections applied ("" = nothing).
+    /// the gateway's corrections applied ("" = nothing). A `listen` still open from an earlier call (a second tap before
+    /// the first one got going) is ended first with what it has, so no caller waits forever.
     func listen(locale: String? = nil) async throws -> String {
+        if listening || finishListening != nil { endListening() }
         stopSpeaking()
         let locale = locale ?? SpeechPrefs.recognitionLocale
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)), recognizer.isAvailable else {
@@ -123,6 +125,10 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         task = Self.recognize(recognizer, req) { [weak self] text, alts, conf, final in
             guard let self, self.listening, id == self.segment else { return }  // a stale callback of an older segment
             if let text, !text.isEmpty {
+                // the recogniser started over after a pause (no `isFinal`): keep what it had before
+                if DictationText.restarted(previous: self.segmentText, current: text) {
+                    self.committed = Self.join(self.committed, self.bestSegmentText())
+                }
                 self.segmentText = text; self.hyps = alts; self.hypConf = conf
                 self.partial = Self.join(self.committed, text)
                 self.lastHeard = Date()
@@ -154,8 +160,9 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         request = nil; task = nil
     }
 
+    /// Ends the recording and hands the text to `listen()`; also wakes a `listen()` whose recording never started.
     private func endListening() {
-        guard listening else { return }
+        guard listening || finishListening != nil else { return }
         listening = false
         watchdog?.cancel(); watchdog = nil
         engine.stop()
@@ -166,10 +173,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         finishListening = nil
     }
 
-    private static func join(_ a: String, _ b: String) -> String {
-        let a = a.trimmingCharacters(in: .whitespaces), b = b.trimmingCharacters(in: .whitespaces)
-        return a.isEmpty ? b : b.isEmpty ? a : a + " " + b
-    }
+    private static func join(_ a: String, _ b: String) -> String { DictationText.join(a, b) }
 
     /// Built outside the main actor: the audio tap runs on a realtime thread.
     nonisolated private static func installTap(on node: AVAudioInputNode, into sink: RequestSink) {

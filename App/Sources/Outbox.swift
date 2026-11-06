@@ -37,12 +37,15 @@ final class Outbox: ObservableObject {
         return i
     }
 
+    /// A message the gateway refused because the session works: kept and shown as failed, with "Trotzdem senden".
+    func addRefused(id: String, key: String, text: String, error: String) {
+        let i = OutItem(id: id, key: key, text: text, at: Date().timeIntervalSince1970, state: .failed, error: error)
+        update { list in list.filter { $0.id != id } + [i] }
+    }
+
+    /// A failed one goes again under a new `client_id` (the gateway answers a known id with its first, refusing answer).
     func retry(_ id: String, force: Bool? = nil) {
-        set(id) { i in
-            var c = i; c.state = .queued; c.error = nil
-            if let f = force { c.force = f }
-            return c
-        }
+        update { $0.map { $0.id == id ? OutboxLogic.retried($0, force: force, newId: UUID().uuidString) : $0 } }
     }
 
     func remove(_ id: String) { update { $0.filter { $0.id != id } } }
