@@ -23,8 +23,9 @@ struct WindDownView: View {
                 if picking { picker } else { progress }
             }
             .safeAreaInset(edge: .bottom) {
-                // The start button sits below the list, not at its end: with many sessions the end is off screen.
-                if picking && !candidates.isEmpty { startBar }
+                // The start button and, later, the result sit below the list, not at its end: with many sessions the
+                // end of the list is off screen.
+                if picking { if !candidates.isEmpty { startBar } } else { resultBar }
             }
             .navigationTitle("Alle Sitzungen beenden")
             .navigationBarTitleDisplayMode(.inline)
@@ -117,6 +118,29 @@ struct WindDownView: View {
         .background(.bar)
     }
 
+    /// While the job runs: how many are through; when it is done: the first line of the summary and "Fertig".
+    private var resultBar: some View {
+        let items = model.windDownItems
+        let through = items.filter { $0.phase.isFinal }.count
+        let allGood = items.allSatisfy { $0.phase.isGood }
+        let firstLine = WindDown.summary(items).components(separatedBy: "\n").first ?? ""
+        return HStack(spacing: 10) {
+            if model.windDownDone {
+                Image(systemName: allGood ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(allGood ? Color.green : Color.orange)
+                Text(firstLine).font(.callout).accessibilityIdentifier("windDownResult")
+                Spacer()
+                Button("Fertig") { model.clearWindDown(); dismiss() }.buttonStyle(.borderedProminent)
+            } else {
+                ProgressView().controlSize(.small)
+                Text("\(through) von \(items.count) Sitzungen durch, das Gateway arbeitet weiter.").font(.callout).foregroundStyle(.secondary)
+                Spacer()
+            }
+        }
+        .padding(.horizontal).padding(.vertical, 8)
+        .background(.bar)
+    }
+
     private func start() async {
         starting = true; defer { starting = false }
         do { try await model.startWindDown(chosen.map(\.key)); error = nil }
@@ -126,6 +150,13 @@ struct WindDownView: View {
     // MARK: progress
 
     @ViewBuilder private var progress: some View {
+        if model.windDownDone {
+            // the result first, the rows below: with many sessions the end of the list is off screen
+            Section("Zusammenfassung") {
+                Text(WindDown.summary(model.windDownItems)).font(.callout).textSelection(.enabled)
+                    .accessibilityIdentifier("windDownSummary")
+            }
+        }
         Section {
             ForEach(model.windDownItems) { i in
                 HStack(alignment: .top, spacing: 10) {
@@ -140,12 +171,6 @@ struct WindDownView: View {
             HStack { Text(model.windDownDone ? "Ergebnis" : "Läuft"); if !model.windDownDone { ProgressView().controlSize(.small) } }
         } footer: {
             if !model.windDownDone { Text("Das Gateway führt das zu Ende, auch wenn die App geschlossen wird.") }
-        }
-        if model.windDownDone {
-            Section("Zusammenfassung") {
-                Text(WindDown.summary(model.windDownItems)).font(.callout).textSelection(.enabled)
-                    .accessibilityIdentifier("windDownSummary")
-            }
         }
     }
 
