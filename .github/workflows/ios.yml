@@ -179,4 +179,16 @@ jobs:
           name: xcresult-${{ matrix.shard.name }}
           path: Results.xcresult
       - name: Ergebnis
-        run: test "$(cat test.rc)" -eq 0
+        # Bei Rot stehen die gescheiterten Testfälle und ihre Meldungen hier im Schritt, damit sie auch in
+        # „gh run view --log-failed“ auftauchen (der Nachtbau sieht nur diesen Auszug, nicht die Artefakte).
+        run: |
+          if [ "$(cat test.rc)" -ne 0 ]; then
+            echo "Gescheiterte Testfälle:"
+            grep -E "Test Case .* failed" test.log | cut -c1-300 | sort -u || true
+            echo "Fehlermeldungen:"
+            grep -E "error: |Erwartet, aber nicht da|Nicht gefunden|Kennung nicht gefunden|Feld fehlt|crashed|Lost connection" test.log | cut -c1-400 | sort -u | tail -60 || true
+            echo "Letzte Mock-Aufrufe:"
+            tail -20 /tmp/relaymock/rpc-all.jsonl 2>/dev/null | cut -c1-300 || true
+            tail -20 /tmp/relaymock/mock.log 2>/dev/null || true
+          fi
+          test "$(cat test.rc)" -eq 0

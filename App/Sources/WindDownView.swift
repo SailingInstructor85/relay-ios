@@ -61,25 +61,33 @@ struct WindDownView: View {
             Section {
                 ForEach(candidates) { s in
                     let e = WindDown.eligibility(s)
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(s.name).lineLimit(1)
-                            HStack(spacing: 6) {
-                                Tag(text: s.alias)
-                                Text(s.folder).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    let on = selected.contains(s.key)
+                    // a row is a button with a check mark (not a Toggle): one tap picks or drops the session
+                    Button {
+                        guard e.selectable else { return }
+                        if on { selected.remove(s.key) } else { selected.insert(s.key) }
+                    } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: e.selectable ? (on ? "checkmark.circle.fill" : "circle") : "minus.circle")
+                                .font(.title3)
+                                .foregroundStyle(e.selectable ? (on ? Color.accentColor : Color.secondary) : Color.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(s.name).lineLimit(1).foregroundStyle(.primary)
+                                HStack(spacing: 6) {
+                                    Tag(text: s.alias)
+                                    Text(s.folder).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                if !e.note.isEmpty { Text(e.note).font(.caption).foregroundStyle(e.selectable ? .orange : .secondary) }
                             }
-                            if !e.note.isEmpty { Text(e.note).font(.caption).foregroundStyle(e.selectable ? .orange : .secondary) }
-                        }
-                        Spacer()
-                        if e.selectable {
-                            Toggle("", isOn: Binding(get: { selected.contains(s.key) },
-                                                     set: { if $0 { selected.insert(s.key) } else { selected.remove(s.key) } }))
-                                .labelsHidden()
-                                .accessibilityLabel(s.name)
-                                .accessibilityIdentifier("windDownToggle:" + s.key)
+                            Spacer(minLength: 0)
                         }
                     }
+                    .buttonStyle(.plain)
+                    .disabled(!e.selectable)
                     .opacity(e.selectable ? 1 : 0.55)
+                    .accessibilityLabel(s.name)
+                    .accessibilityValue(e.selectable ? (on ? "gewählt" : "nicht gewählt") : "nicht wählbar")
+                    .accessibilityIdentifier("windDownPick:" + s.key)
                 }
             } header: {
                 Text("Sitzungen")

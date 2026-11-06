@@ -160,13 +160,15 @@ final class ListTests: RelayTestCase {
         shot("alle-beenden-auswahl")
         expect("Sitzungen beenden", 5)
         expect("arbeitet gerade", 3, soft: true)
-        // eine abwählen: "API Refactoring" (Schlüssel endet auf ...0002), der Schalter trägt den Titel als Label
-        var toggle = app.switches["API Refactoring"].firstMatch
-        if !toggle.waitForExistence(timeout: 3) {
-            toggle = app.switches.matching(identifier: "windDownToggle:claude:c1:22222222-aaaa-4000-8000-000000000002").firstMatch
+        // eine abwählen: "API Refactoring" (Schlüssel endet auf ...0002); die Zeile ist ein Knopf mit Häkchen
+        let pick = id("windDownPick:claude:c1:22222222-aaaa-4000-8000-000000000002")
+        if pick.waitForExistence(timeout: 4) {
+            if pick.isHittable { pick.tap() } else { pick.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+            settle(0.5)
+        } else {
+            notes.append("windDownPick-Kennung fehlt, tippe per Text")
+            tap("API Refactoring", 4)
         }
-        XCTAssertTrue(toggle.waitForExistence(timeout: 3), "Schalter für API Refactoring fehlt")
-        if toggle.exists { toggle.tap(); settle(0.5) }
         shot("alle-beenden-abgewaehlt")
         tapID("windDownStart")  // liegt unter der Liste, immer sichtbar
         settle(1)
