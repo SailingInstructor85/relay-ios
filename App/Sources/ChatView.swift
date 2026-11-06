@@ -27,6 +27,7 @@ struct ChatView: View {
     @State private var summary: SummaryState?
     @State private var camera = false
     @State private var dictating = false
+    @State private var sendAfterDictation = false
     @State private var vocabLoaded = false
     @StateObject private var voice = VoiceIO()
     @ObservedObject private var outbox = Outbox.shared
@@ -163,7 +164,7 @@ struct ChatView: View {
     private var tool: String { session?.tool ?? "claude" }
     private var slashChips: [String] { ChatPrefs.slash(tool) }
     private var slashSuggestions: [String] { SlashCatalog.matches(SlashCatalog.forTool(tool, user: slashChips), input) }
-    private var canSend: Bool { !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending && session != nil }
+    private var canSend: Bool { DictationSend.canSend(input: input, listening: voice.listening, sending: sending, hasSession: session != nil) }
 
     private var inputBar: some View {
         VStack(spacing: 6) {
@@ -217,12 +218,12 @@ struct ChatView: View {
                 TextField("Nachricht an die Sitzung", text: $input, axis: .vertical)
                     .lineLimit(1...6).focused($focused).accessibilityIdentifier("chatInput")
                     .submitLabel(returnSends ? .send : .return)
-                    .onSubmit { if returnSends && canSend { Task { await send(input) } } }
+                    .onSubmit { if returnSends && canSend { Task { await sendTapped() } } }
                     .padding(8).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
                 Button { Task { await toggleDictation() } } label: {
                     Image(systemName: voice.listening ? "mic.fill" : "mic").font(.title3).foregroundStyle(voice.listening ? Color.red : Color.accentColor)
                 }.accessibilityLabel(voice.listening ? "Diktat beenden" : "Diktieren")
-                Button { Task { await send(input) } } label: {
+                Button { Task { await sendTapped() } } label: {
                     Image(systemName: sending ? "hourglass" : "arrow.up.circle.fill").font(.system(size: 30))
                 }.disabled(!canSend).accessibilityLabel("Senden").accessibilityIdentifier("chatSend")
             }
@@ -537,8 +538,20 @@ struct ChatView: View {
         before.isEmpty || before.hasSuffix(" ") || before.hasSuffix("\n") ? before + said : before + " " + said
     }
 
+    /// The send button. While dictating, the microphone stays on for `DictationSend.grace` so the last words are still
+    /// recognised; then the dictation ends and `toggleDictation` sends typed and spoken text together.
+    private func sendTapped() async {
+        guard voice.listening else { await send(input); return }
+        guard !sendAfterDictation else { return }
+        sendAfterDictation = true
+        sending = true
+        try? await Task.sleep(nanoseconds: UInt64(DictationSend.grace * 1_000_000_000))
+        voice.stopListening()
+    }
+
     /// Mic button: listens until the speaker pauses (or the button is tapped again), then puts the words into the field.
-    /// With "Diktat aufräumen" the Desktop cleans them up in the meantime, unless the user has typed since.
+    /// With "Diktat aufräumen" the Desktop cleans them up in the meantime, unless the user has typed since. When "Senden"
+    /// was tapped during the dictation, the field goes out as soon as the words (cleaned, if wanted) are in it.
     private func toggleDictation() async {
         if voice.listening { voice.stopListening(); return }
         if let msg = await voice.authorize() { error = msg; return }
@@ -546,16 +559,20 @@ struct ChatView: View {
         let clean = ChatPrefs.cleanDictation
         if clean { model.cleanWarm() }
         let before = input
-        do {
-            let raw = try await voice.listen()
-            guard !raw.isEmpty else { return }
+        sendAfterDictation = false
+        var raw = ""
+        do { raw = try await voice.listen() } catch { self.error = error.localizedDescription }
+        let sendNow = sendAfterDictation
+        sendAfterDictation = false
+        if !raw.isEmpty {
             let inserted = join(input, raw)
             input = inserted
-            focused = true
+            if !sendNow { focused = true }
             if clean, let cleaned = await model.cleanDictation(raw, before: before, session: key), input == inserted {
                 input = join(before, cleaned)
             }
-        } catch { self.error = error.localizedDescription }
+        }
+        if sendNow { sending = false; await send(input) }
     }
 
     // MARK: attachments

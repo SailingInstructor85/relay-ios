@@ -246,6 +246,20 @@ public enum OutboxLogic {
     }
 }
 
+// MARK: dictation and sending
+
+/// "Senden" while dictating: the button stays active, the microphone stays on for `grace` so the recogniser catches
+/// the last words, then typed and spoken text go out together.
+public enum DictationSend {
+    /// Seconds the microphone stays on after "Senden" was tapped.
+    public static let grace: TimeInterval = 2
+
+    /// The send button: text in the field, or a running dictation (its words are sent once it ends); never while sending.
+    public static func canSend(input: String, listening: Bool, sending: Bool, hasSession: Bool) -> Bool {
+        hasSession && !sending && (listening || !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+}
+
 // MARK: attachments
 
 public enum Attach {

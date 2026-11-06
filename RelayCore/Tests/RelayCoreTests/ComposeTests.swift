@@ -167,4 +167,13 @@ final class ComposeTests: XCTestCase {
                        "opus 5.5 · low effort · Claude · ~/relay · 120k ctx")
         XCTAssertEqual(ChatHeader.subtitle(model: "", effort: "", tool: "codex", cwd: "", tokens: nil), "Codex")
     }
+
+    func testSendWhileDictating() {
+        XCTAssertTrue(DictationSend.canSend(input: "", listening: true, sending: false, hasSession: true))
+        XCTAssertTrue(DictationSend.canSend(input: " hi ", listening: false, sending: false, hasSession: true))
+        XCTAssertFalse(DictationSend.canSend(input: "  ", listening: false, sending: false, hasSession: true))
+        XCTAssertFalse(DictationSend.canSend(input: "hi", listening: true, sending: true, hasSession: true))
+        XCTAssertFalse(DictationSend.canSend(input: "hi", listening: true, sending: false, hasSession: false))
+        XCTAssertEqual(DictationSend.grace, 2, accuracy: 0.001)
+    }
 }
