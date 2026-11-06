@@ -151,6 +151,29 @@ final class InfoTests: RelayTestCase {
         expect("example.com", 3, soft: true)
     }
 
+    /// Eine Rückfrage eines Agenten (notice mit tag rueckfrage:…): Antwortfeld, Antwort geht per inbox_put zum PC.
+    func test20_AgentQuestion() {
+        launchConnected()
+        ctl("trigger_rueckfrage")
+        settle(3)
+        mainMenu("Hinweise")
+        settle(1.5)
+        expect("Rückfrage R1", 4, soft: true)
+        tap("Rückfrage R1", soft: true)
+        settle(1.5)
+        shot("rueckfrage-detail")
+        expect("Soll ich die alte Route", 3, soft: true)
+        typeInto("questionAnswer", "Ja, weg damit")
+        dismissKeyboard()
+        tap("Antworten", 3, exact: true, soft: true)
+        settle(2)
+        shot("rueckfrage-beantwortet")
+        XCTAssertTrue(mockReceived("inbox_put", where: { p in
+            ((p["items"] as? [[String: Any]])?.first?["app"] as? String) == "rueckfrage" && ((p["items"] as? [[String: Any]])?.first?["text"] as? String) == "Ja, weg damit"
+        }))
+        expect("Beantwortet", 4, soft: true)
+    }
+
     func test09_ApprovalStrip() {
         launchConnected()
         ctl("trigger_send_request")

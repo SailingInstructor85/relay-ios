@@ -55,8 +55,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             }
             return
         }
-        if let ref = info["notice"] as? String, tapped {
-            await MainActor.run { AppModel.shared.openNotice = ref }
+        if let ref = info["notice"] as? String {
+            if r.actionIdentifier == "answer" || r.actionIdentifier == "yes" {
+                let typed = (r as? UNTextInputNotificationResponse)?.userText.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let text = r.actionIdentifier == "yes" ? "ja" : typed
+                await BackgroundRefresh.withBackgroundTime { await AppModel.shared.answerFromNotification(ref: ref, text: text) }
+            } else if tapped {
+                await MainActor.run { AppModel.shared.openNotice = ref }
+            }
             return
         }
         if let id = info["locreq"] as? String, tapped {

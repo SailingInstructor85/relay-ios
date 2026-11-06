@@ -83,4 +83,34 @@ extension AppModel {
     func answer(_ params: JSON) async throws {
         _ = try await rpc("send", params, timeout: 30)
     }
+
+    /// The answer to an agent's question (a notice with tag `rueckfrage:<agent>:R<n>`): one inbox item (`inbox_put`,
+    /// kind notification, app rueckfrage) that `rueckfrage warten` on the Desktop picks up. From a notification
+    /// (`background`) a short link of its own is opened first; in the foreground the main loop keeps the link. Returns
+    /// nil once the Desktop has it, else what went wrong (the answer is then still in the field).
+    func answerQuestion(ref: String, text: String, background: Bool = false) async -> String? {
+        guard let n = NoticeStore.shared.get(ref), let q = Rueckfrage.question(n), q.wantsAnswer else {
+            return "Diese Rückfrage ist nicht mehr auf dem iPhone."
+        }
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return "Die Antwort ist leer." }
+        if background && state != .connected { _ = await connectOnce() }
+        guard state == .connected else { return "Nicht verbunden: die Antwort konnte nicht zum PC." }
+        let item = Rueckfrage.answerItem(agent: q.agent, id: q.id, answer: t, now: Date().timeIntervalSince1970)
+        do { _ = try await rpc("inbox_put", ["kind": .string("notification"), "items": .array([item])], timeout: 30) }
+        catch { return "Antwort nicht angekommen: \(error.localizedDescription)" }
+        NoticeStore.shared.setAnswer(ref: ref, t)
+        Notifier.remove([NoticeLogic.slot(tag: n.tag, seq: 0)])
+        return nil
+    }
+
+    /// "Antworten" or "Ja" on the question's notification (the background link is closed again afterwards). A failure
+    /// comes back as a notification, so the answer is never lost in silence.
+    func answerFromNotification(ref: String, text: String) async {
+        if let why = await answerQuestion(ref: ref, text: text, background: true) {
+            Notifier.post(id: "rueckfrage-fail-\(ref)", title: "Antwort nicht angekommen", body: "\(why) Antwort: \(text)",
+                          userInfo: ["notice": ref])
+        }
+        releaseBackground()
+    }
 }

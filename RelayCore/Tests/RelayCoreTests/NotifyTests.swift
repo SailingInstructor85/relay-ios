@@ -152,4 +152,45 @@ final class NotifyTests: XCTestCase {
         XCTAssertTrue(ConfirmRules.fresh(ts: 1000, now: 1000 + 600))
         XCTAssertFalse(ConfirmRules.fresh(ts: 1000, now: 1000 + 3600))
     }
+
+    func testAgentQuestion() {
+        XCTAssertEqual(Rueckfrage.parse(tag: "rueckfrage:relay-ios:R1")?.agent, "relay-ios")
+        XCTAssertEqual(Rueckfrage.parse(tag: "rueckfrage:relay-ios:r12")?.id, "R12")
+        XCTAssertEqual(Rueckfrage.parse(tag: "meldung:stellen:M2")?.id, "M2")
+        XCTAssertNil(Rueckfrage.parse(tag: "rueckfrage:relay-ios:M2"))
+        XCTAssertNil(Rueckfrage.parse(tag: "rueckfrage:relay-ios:Rx"))
+        XCTAssertNil(Rueckfrage.parse(tag: "backup"))
+        XCTAssertNil(Rueckfrage.parse(tag: nil))
+
+        let n = Notice(ref: "s7", ts: 1, title: "Rückfrage R1 · relay-ios",
+                       text: "Soll ich die alte Route löschen?\nKontext: Seit 2024 ungenutzt.\nEmpfehlung: ja",
+                       source: "relay-ios", tag: "rueckfrage:relay-ios:R1")
+        let q = Rueckfrage.question(n)
+        XCTAssertEqual(q, AgentQuestion(agent: "relay-ios", id: "R1", question: "Soll ich die alte Route löschen?",
+                                        context: "Seit 2024 ungenutzt.", recommendation: "ja"))
+        XCTAssertEqual(Rueckfrage.quickAnswer(q!), "ja")
+        XCTAssertEqual(Rueckfrage.category(q!), "rueckfrage-ja")
+        XCTAssertEqual(Rueckfrage.title(q!), "Rückfrage R1 von relay-ios")
+
+        let plain = Notice(ref: "s8", ts: 1, title: "", text: "Weiter mit Plan B?", source: "", tag: "rueckfrage:a:R2")
+        let p = Rueckfrage.question(plain)!
+        XCTAssertEqual(p.question, "Weiter mit Plan B?"); XCTAssertEqual(p.recommendation, "")
+        XCTAssertNil(Rueckfrage.quickAnswer(p)); XCTAssertEqual(Rueckfrage.category(p), "rueckfrage")
+
+        let m = Rueckfrage.question(Notice(ref: "s9", ts: 1, title: "Fertig", text: "", source: "", tag: "meldung:a:M1"))!
+        XCTAssertFalse(m.wantsAnswer); XCTAssertEqual(m.question, "Fertig"); XCTAssertNil(Rueckfrage.category(m))
+        XCTAssertNil(Rueckfrage.question(Notice(ref: "s1", ts: 1, title: "", text: "", source: "", tag: "backup")))
+
+        let item = Rueckfrage.answerItem(agent: "relay-ios", id: "R1", answer: "ja", now: 1700000000.5)
+        XCTAssertEqual(item.str("id"), "rueckfrage|relay-ios|R1|1700000000500")
+        XCTAssertEqual(item.str("app"), "rueckfrage"); XCTAssertEqual(item.str("text"), "ja")
+        XCTAssertEqual(item.num("ts"), 1700000000.5, accuracy: 0.001)
+
+        // the answer survives a replay of the same notice and the round trip to disk
+        var answered = n; answered.answer = "ja"
+        let kept = NoticeLogic.merge([answered], n, now: 2)
+        XCTAssertEqual(kept.first?.answer, "ja")
+        XCTAssertEqual(NoticeLogic.decode(NoticeLogic.encode(kept)).first?.answer, "ja")
+        XCTAssertNil(NoticeLogic.decode(NoticeLogic.encode([n])).first?.answer)
+    }
 }

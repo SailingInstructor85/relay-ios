@@ -9,7 +9,7 @@ Environment:
 Control files in $MOCK_DIR/control (the UI tests or the CI script create them):
   offline        new connections end at once with an error; running ones are cut
   kick           running connections end (the file is removed by the first one)
-  trigger_<n>    emit a live event once: finish_busy, new_input, notice, send_request,
+  trigger_<n>    emit a live event once: finish_busy, new_input, notice, rueckfrage, send_request,
                  cloud, desktop_sleep, location, end_session
 Logs: $MOCK_DIR/rpc.jsonl (every request received), $MOCK_DIR/mock.log (text).
 """
@@ -920,6 +920,10 @@ def trigger(name):
                                      "message": "Darf ich die alte Route loeschen?"})
     elif name == "notice":
         add_event("notice", {"title": "Backup braucht neuen Login", "text": "Der naechtliche Backup-Job meldet: Anmeldung abgelaufen. Mehr Infos unter https://example.com/backup", "source": "backup", "tag": "backup"})
+    elif name == "rueckfrage":  # an agent's question while the user is away (~/.agents/bin/rueckfrage neu)
+        add_event("notice", {"title": "Rückfrage R1 · relay-ios",
+                             "text": "Soll ich die alte Route löschen?\nKontext: Die Route wird seit 2024 nicht mehr genutzt.\nEmpfehlung: ja",
+                             "source": "relay-ios", "tag": "rueckfrage:relay-ios:R1"})
     elif name == "send_request":
         add_event("send_request", {"request_id": "req-1", "kind": "mail", "executor": "desktop", "text": "Hallo Frau Muster,\n\nanbei die Rechnung.", "summary": "E-Mail an frau@example.com senden", "requested_by": "Jarvis", "expires_at": time.time() + 3600})
     elif name == "cloud":

@@ -392,9 +392,12 @@ final class AppModel: ObservableObject {
             let now = Date().timeIntervalSince1970
             let n = Notice.from(event: ev, now: now)
             NoticeStore.shared.add(n)
-            if NoticeLogic.show(ts: ev.num("ts"), now: now) {
-                Notifier.post(id: NoticeLogic.slot(tag: n.tag, seq: seq), title: n.title.isEmpty ? "Relay" : n.title, body: n.text,
-                              userInfo: ["notice": n.ref])
+            let answered = NoticeStore.shared.get(n.ref)?.answer != nil  // a replayed question already answered
+            if NoticeLogic.show(ts: ev.num("ts"), now: now), !answered {
+                // an agent's question: the notification carries the question and an "Antworten" field
+                let q = Rueckfrage.question(n)
+                Notifier.post(id: NoticeLogic.slot(tag: n.tag, seq: seq), title: n.title.isEmpty ? (q.map(Rueckfrage.title) ?? "Relay") : n.title,
+                              body: q?.question ?? n.text, userInfo: ["notice": n.ref], category: q.flatMap(Rueckfrage.category))
             }
         case "send_request", "send_resolved", "needs_confirmation", "confirmation_resolved":
             Approvals.shared.onEvent(ev, replay: replay)
@@ -507,7 +510,13 @@ final class AppModel: ObservableObject {
         let approve = UNNotificationAction(identifier: "approve", title: "Freigeben", options: [.authenticationRequired])
         let deny = UNNotificationAction(identifier: "deny", title: "Ablehnen", options: [.destructive])
         let approval = UNNotificationCategory(identifier: "approval", actions: [approve, deny], intentIdentifiers: [], options: [])
-        UNUserNotificationCenter.current().setNotificationCategories([cat, ready, approval])
+        // an agent's question (rueckfrage): answer in the notification; "Ja" takes the agent's recommendation
+        let answer = UNTextInputNotificationAction(identifier: "answer", title: "Antworten", options: auth,
+                                                   textInputButtonTitle: "Senden", textInputPlaceholder: "Antwort an den Agenten")
+        let yes = UNNotificationAction(identifier: "yes", title: "Ja (Empfehlung)", options: auth)
+        let question = UNNotificationCategory(identifier: "rueckfrage", actions: [answer], intentIdentifiers: [], options: [])
+        let questionYes = UNNotificationCategory(identifier: "rueckfrage-ja", actions: [yes, answer], intentIdentifiers: [], options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([cat, ready, approval, question, questionYes])
     }
 
     private func notify(_ s: Session, title: String, body: String, ready: Bool = false, silent: Bool = false) {

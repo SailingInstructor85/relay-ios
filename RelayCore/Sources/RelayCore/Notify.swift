@@ -99,21 +99,25 @@ public struct Notice: Sendable, Equatable, Identifiable {
     public let ts: Double
     public let title: String, text: String, source: String
     public let tag: String?, handoff: String?, member: String?
-    public init(ref: String, ts: Double, title: String, text: String, source: String, tag: String? = nil, handoff: String? = nil, member: String? = nil) {
+    /// The user's answer to an agent's question (`Rueckfrage`), once it reached the Desktop.
+    public var answer: String?
+    public init(ref: String, ts: Double, title: String, text: String, source: String, tag: String? = nil, handoff: String? = nil,
+                member: String? = nil, answer: String? = nil) {
         self.ref = ref; self.ts = ts; self.title = title; self.text = text; self.source = source
-        self.tag = tag; self.handoff = handoff; self.member = member
+        self.tag = tag; self.handoff = handoff; self.member = member; self.answer = answer
     }
 
     public func json() -> JSON {
         JSON.obj(["ref": .string(ref), "ts": .number(ts), "title": .string(title), "text": .string(text), "source": .string(source),
-                  "tag": tag.map { .string($0) }, "handoff": handoff.map { .string($0) }, "member": member.map { .string($0) }])
+                  "tag": tag.map { .string($0) }, "handoff": handoff.map { .string($0) }, "member": member.map { .string($0) },
+                  "answer": answer.map { .string($0) }])
     }
     public static func from(json o: JSON) -> Notice? {
         let ref = o.str("ref")
         guard !ref.isEmpty else { return nil }
         func opt(_ k: String) -> String? { let s = o.str(k); return s.isEmpty ? nil : s }
         return Notice(ref: ref, ts: o.num("ts"), title: o.str("title"), text: o.str("text"), source: o.str("source"),
-                      tag: opt("tag"), handoff: opt("handoff"), member: opt("member"))
+                      tag: opt("tag"), handoff: opt("handoff"), member: opt("member"), answer: opt("answer"))
     }
     /// From a `notice` event: the gateway's seq names it.
     public static func from(event ev: JSON, now: Double) -> Notice {
@@ -139,9 +143,12 @@ public enum NoticeLogic {
         return "notice#\(seq)"
     }
 
-    /// `n` into the kept list: newest first, each ref once, the last 14 days, at most 100.
+    /// `n` into the kept list: newest first, each ref once, the last 14 days, at most 100. A notice that comes again
+    /// (replay) keeps the answer already given.
     public static func merge(_ list: [Notice], _ n: Notice, now: Double) -> [Notice] {
-        ([n] + list.filter { $0.ref != n.ref })
+        var n = n
+        if n.answer == nil, let old = list.first(where: { $0.ref == n.ref }) { n.answer = old.answer }
+        return ([n] + list.filter { $0.ref != n.ref })
             .filter { now - $0.ts < Double(keepDays) * 86_400 }
             .sorted { $0.ts > $1.ts }
             .prefix(keep).map { $0 }
@@ -199,6 +206,87 @@ public enum NoticeLogic {
 
     public static func encode(_ list: [Notice]) -> String { JSON.array(list.map { $0.json() }).serialized() }
     public static func decode(_ text: String) -> [Notice] { JSON.parse(text)?.array.compactMap { Notice.from(json: $0) } ?? [] }
+}
+
+/// A question an agent on the Desktop asks while the user is away (`~/.agents/bin/rueckfrage neu`), or a report
+/// (`rueckfrage meldung`). Both reach the phone as a `notice` (`notifyd phone notify`) whose tag names them:
+/// `rueckfrage:<agent>:R<n>` for a question, `meldung:<agent>:M<n>` for a report. The notice text carries the question
+/// and, each on its own line, "Kontext: …" and "Empfehlung: …".
+public struct AgentQuestion: Sendable, Equatable {
+    public let agent: String, id: String
+    public let question: String, context: String, recommendation: String
+    public init(agent: String, id: String, question: String, context: String = "", recommendation: String = "") {
+        self.agent = agent; self.id = id; self.question = question; self.context = context; self.recommendation = recommendation
+    }
+    /// A question wants an answer; a report (M…) is only shown.
+    public var wantsAnswer: Bool { id.hasPrefix("R") }
+}
+
+public enum Rueckfrage {
+    /// The inbox app name the answer travels under (`inbox_put`, kind `notification`, app `rueckfrage`).
+    public static let app = "rueckfrage"
+
+    /// "rueckfrage:relay-ios:R1" -> (relay-ios, R1); "meldung:relay-ios:M2" -> (relay-ios, M2); anything else nil.
+    public static func parse(tag: String?) -> (agent: String, id: String)? {
+        guard let tag else { return nil }
+        let parts = tag.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 3, !parts[1].isEmpty else { return nil }
+        let id = parts[2].uppercased()
+        let kind = parts[0].lowercased()
+        let numbered = id.count >= 2 && id.dropFirst().allSatisfy(\.isNumber)
+        guard numbered else { return nil }
+        if kind == "rueckfrage" && id.hasPrefix("R") { return (parts[1], id) }
+        if kind == "meldung" && id.hasPrefix("M") { return (parts[1], id) }
+        return nil
+    }
+
+    /// The question of a notice, when it is one (its tag says so), with context and recommendation split off the text.
+    public static func question(_ n: Notice) -> AgentQuestion? {
+        guard let parsed = parse(tag: n.tag) else { return nil }
+        var q: [String] = [], ctx: [String] = [], rec: [String] = []
+        var current = 0  // 0 question, 1 context, 2 recommendation
+        for raw in n.text.components(separatedBy: "\n") {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if let r = label(line, "Kontext") { current = 1; ctx.append(r); continue }
+            if let r = label(line, "Empfehlung") { current = 2; rec.append(r); continue }
+            switch current { case 1: ctx.append(line); case 2: rec.append(line); default: q.append(line) }
+        }
+        func joined(_ l: [String]) -> String { l.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines) }
+        var question = joined(q)
+        if question.isEmpty { question = n.title }
+        return AgentQuestion(agent: parsed.agent, id: parsed.id, question: question, context: joined(ctx), recommendation: joined(rec))
+    }
+
+    private static func label(_ line: String, _ name: String) -> String? {
+        for prefix in ["**\(name):**", "\(name):"] where line.lowercased().hasPrefix(prefix.lowercased()) {
+            return String(line.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        }
+        return nil
+    }
+
+    /// "Rückfrage R1 von relay-ios" / "Meldung M2 von relay-ios" (when the notice has no title of its own).
+    public static func title(_ q: AgentQuestion) -> String {
+        (q.wantsAnswer ? "Rückfrage " : "Meldung ") + q.id + " von " + q.agent
+    }
+
+    /// The one-tap answer when the agent made a recommendation ("ja" accepts it), else nil.
+    public static func quickAnswer(_ q: AgentQuestion) -> String? {
+        q.wantsAnswer && !q.recommendation.isEmpty ? "ja" : nil
+    }
+
+    /// The notification category: with a text field to answer, plus "Ja" when there is a recommendation.
+    public static func category(_ q: AgentQuestion) -> String? {
+        guard q.wantsAnswer else { return nil }
+        return quickAnswer(q) != nil ? "rueckfrage-ja" : "rueckfrage"
+    }
+
+    /// The inbox item that carries the answer back (`inbox_put`, kind `notification`): the Desktop's `rueckfrage warten`
+    /// reads it through `notifyd phone inbox --kind notification --app rueckfrage` (or the inbox's JSONL files).
+    public static func answerItem(agent: String, id: String, answer: String, now: Double) -> JSON {
+        .object(["id": .string("rueckfrage|\(agent)|\(id)|\(Int(now * 1000))"), "ts": .number(now),
+                 "app": .string(app), "app_label": .string("Rückfrage"), "title": .string("\(agent) \(id)"),
+                 "text": .string(answer), "conversation": .string(agent), "has_reply": .bool(false)])
+    }
 }
 
 /// A `send_request` event: the Desktop asks for an approval (mail, invite, post, order, payment).

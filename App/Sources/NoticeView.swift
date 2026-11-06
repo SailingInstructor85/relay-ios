@@ -22,6 +22,13 @@ final class NoticeStore: ObservableObject {
     }
 
     func get(_ ref: String) -> Notice? { items.first { $0.ref == ref } }
+
+    /// The answer that reached the Desktop, kept with the notice.
+    func setAnswer(ref: String, _ answer: String) {
+        guard let i = items.firstIndex(where: { $0.ref == ref }) else { return }
+        items[i].answer = answer
+        if let u = Self.url, let d = NoticeLogic.encode(items).data(using: .utf8) { try? d.write(to: u, options: .atomic) }
+    }
 }
 
 /// One notice in full (links as buttons), or the list alone. Below the notice: the earlier ones.
@@ -31,6 +38,9 @@ struct NoticeView: View {
     var onGo: (NoticeLogic.Goto) -> Void
     @ObservedObject private var store = NoticeStore.shared
     @Environment(\.openURL) private var openURL
+    @State private var answer = ""
+    @State private var answering = false
+    @State private var answerError: String?
 
     private func when(_ ts: Double) -> String {
         Date(timeIntervalSince1970: ts).formatted(date: .abbreviated, time: .shortened)
@@ -44,9 +54,10 @@ struct NoticeView: View {
                 Text("Dieser Hinweis ist nicht mehr auf dem iPhone (Relay behält sie \(NoticeLogic.keepDays) Tage).").foregroundStyle(.secondary)
             }
             if let n {
+                let q = Rueckfrage.question(n)
                 Section {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(n.title.isEmpty ? "Relay" : n.title).font(.title3.weight(.semibold)).textSelection(.enabled)
+                        Text(n.title.isEmpty ? (q.map(Rueckfrage.title) ?? "Relay") : n.title).font(.title3.weight(.semibold)).textSelection(.enabled)
                         Text([n.source, when(n.ts)].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
                     }
                     ForEach(Array(NoticeLogic.lines(n.text).enumerated()), id: \.offset) { _, l in
@@ -64,6 +75,7 @@ struct NoticeView: View {
                         Button(goLabel(go)) { onGo(go) }.buttonStyle(.bordered)
                     }
                 }
+                if let q, q.wantsAnswer { answerSection(n, q) }
             }
             if !earlier.isEmpty {
                 Section(n != nil || ref != nil ? "Früher" : "Hinweise") {
@@ -86,6 +98,34 @@ struct NoticeView: View {
         }
         .navigationTitle(ref == nil ? "Hinweise" : (n?.source.isEmpty == false ? n!.source : "Hinweis"))
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// An agent's question: the answer goes back to the Desktop (`rueckfrage`); "Ja" takes the recommendation.
+    @ViewBuilder private func answerSection(_ n: Notice, _ q: AgentQuestion) -> some View {
+        Section("Antwort") {
+            if let a = n.answer {
+                Label("Beantwortet: \(a)", systemImage: "checkmark.circle").foregroundStyle(.secondary)
+            } else {
+                TextField("Antwort an \(q.agent)", text: $answer, axis: .vertical).lineLimit(1...4)
+                    .accessibilityIdentifier("questionAnswer")
+                HStack(spacing: 10) {
+                    if let quick = Rueckfrage.quickAnswer(q) {
+                        Button("Ja (Empfehlung)") { Task { await send(n.ref, quick) } }.buttonStyle(.borderedProminent)
+                    }
+                    Button("Antworten") { Task { await send(n.ref, answer) } }.buttonStyle(.bordered)
+                        .disabled(answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if answering { ProgressView().controlSize(.small) }
+                }.disabled(answering)
+                if let e = answerError { Text(e).font(.footnote).foregroundStyle(.red) }
+            }
+        }
+    }
+
+    private func send(_ ref: String, _ text: String) async {
+        answering = true
+        defer { answering = false }
+        answerError = await AppModel.shared.answerQuestion(ref: ref, text: text)
+        if answerError == nil { answer = "" }
     }
 
     private func goLabel(_ g: NoticeLogic.Goto) -> String {
