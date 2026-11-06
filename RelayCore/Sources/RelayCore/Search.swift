@@ -140,6 +140,8 @@ public enum ConnText {
     }
 
     public static func noRoute(host: String, vpn: Bool) -> Bool { isPrivateLAN(host) && !vpn }
+    /// With a second address (a VPN one) there may be a way after all: only when every address is a private LAN one.
+    public static func noRoute(hosts: [String], vpn: Bool) -> Bool { !hosts.isEmpty && hosts.allSatisfy(isPrivateLAN) && !vpn }
     public static let noRouteText = "Kein Weg zum PC (privates Netz, kein VPN)"
 }
 

@@ -26,6 +26,8 @@ final class AppModel: ObservableObject {
 
     // settings
     @AppStorage("host") var host = ""
+    @AppStorage("host2") var host2 = ""          // second address of the same PC (VPN); the reachable one is used
+    @AppStorage("lastGoodHost") var lastGoodHost = ""
     @AppStorage("port") var port = 22
     @AppStorage("user") var user = ""
     @AppStorage("hostKey") var hostKey = ""
@@ -56,6 +58,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var look = Avatars.Look()
     @Published var lastError: String? { didSet { if let e = lastError, e != oldValue { AppLog.shared.log("warn", "ui", e) } } }
     @Published private(set) var vpnActive = false
+    @Published private(set) var activeHost = ""   // the address the current link uses (with two configured)
     @Published var openChat: String?   // a session key to navigate to (notification tap)
     @Published var openJarvis = false  // Siri / Action Button shortcut
     @Published var voiceLive = false   // hello_ok.config.voice == "live": the Desktop offers Jarvis Live (not used here)
@@ -116,12 +119,25 @@ final class AppModel: ObservableObject {
 
     func rememberOpened(_ key: String) { if !key.isEmpty { lastOpenedKey = key } }
 
-    /// The state in words; "Kein Weg zum PC" when only a private LAN address is configured and no VPN is up.
+    /// The state in words; "Kein Weg zum PC" when only private LAN addresses are configured and no VPN is up.
     var connLabel: String {
         switch state {
-        case .noNetwork, .error: return ConnText.noRoute(host: host, vpn: vpnActive) ? ConnText.noRouteText : state.label
+        case .noNetwork, .error: return ConnText.noRoute(hosts: hosts, vpn: vpnActive) ? ConnText.noRouteText : state.label
         default: return state.label
         }
+    }
+
+    /// The PC's addresses (primary, optional second one), cleaned.
+    var hosts: [String] { HostChoice.candidates([host, host2]) }
+
+    /// The address for the next connect: with two of them, a 3 s TCP probe of both (the one that worked last time is
+    /// tried first in the fallback), the first to answer wins; nobody answering keeps the usual order.
+    private func chooseHost() async -> String {
+        let c = hosts
+        guard c.count > 1 else { return c.first ?? host.trimmingCharacters(in: .whitespaces) }
+        let ordered = HostChoice.order(candidates: c, lastGood: lastGoodHost)
+        let hit = await Reach.first(of: ordered, port: port, timeout: 3)
+        return HostChoice.pick(candidates: c, reachable: hit.map { [$0] } ?? [], lastGood: lastGoodHost) ?? ordered[0]
     }
 
     var configured: Bool { ServerConfig(host: host, port: port, user: user).isComplete }
@@ -170,8 +186,9 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func makeLink() -> GatewayLink {
-        let cfg = ServerConfig(host: host.trimmingCharacters(in: .whitespaces), port: port, user: user.trimmingCharacters(in: .whitespaces))
+    private func makeLink(host: String) -> GatewayLink {
+        activeHost = host
+        let cfg = ServerConfig(host: host, port: port, user: user.trimmingCharacters(in: .whitespaces))
         // Ereignisse einer schon ersetzten oder geschlossenen Verbindung dürfen den Zustand nicht mehr ändern
         // (sonst steht "Verbunden" bei toter Verbindung und jeder Aufruf scheitert mit "Nicht verbunden").
         let box = LinkBox()
@@ -198,13 +215,14 @@ final class AppModel: ObservableObject {
             reconnect()
         } else if oneShot == nil {
             link?.close()
-            let l = makeLink()
-            link = l
             state = .connecting
-            let hello = Hello.make(sinceSeq: lastSeq, pinned: Array(pinned), appVersion: Self.appVersion)
+            // the task is set before the first await, so a second caller sees it and only waits below
             oneShot = Task { [weak self] in
-                try? await l.run(hello: hello)
                 guard let self else { return }
+                let l = self.makeLink(host: await self.chooseHost())
+                self.link = l
+                let hello = Hello.make(sinceSeq: self.lastSeq, pinned: Array(self.pinned), appVersion: Self.appVersion)
+                try? await l.run(hello: hello)
                 if self.link === l { self.link = nil; if !self.foreground { self.state = .off } }
                 self.oneShot = nil
             }
@@ -264,7 +282,7 @@ final class AppModel: ObservableObject {
             while oneShot != nil { try? await Task.sleep(nanoseconds: 100_000_000) }
             state = .connecting
             kick = false
-            let l = makeLink()
+            let l = makeLink(host: await chooseHost())
             link = l
             let started = Date()
             let hello = Hello.make(sinceSeq: lastSeq, pinned: Array(pinned), appVersion: Self.appVersion)
@@ -316,6 +334,7 @@ final class AppModel: ObservableObject {
         switch ev.str("type") {
         case "hello_ok":
             state = .connected
+            if lastGoodHost != activeHost { lastGoodHost = activeHost }
             var fresh: [String: Session] = [:]
             for s in ev["sessions"].array.compactMap(Session.from) { fresh[s.key] = s }
             saveSessionCache(ev["sessions"])
