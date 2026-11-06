@@ -11,7 +11,9 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Sitzungsliste** über alle Konten: zuerst „Wartet auf dich“, dann „Arbeitet“, „Bereit“ und „Beendet“; dazu Suche,
   Anheften, „Erledigt“ (Wischen nach rechts) und Schließen (Wischen nach links)
 - **Chat pro Sitzung:** Transkript mit Nachladen älterer Nachrichten, Live-Anhänge (`watch`), eingeklappte
-  Werkzeugaufrufe, Codeblöcke, Statuszeile während die Sitzung arbeitet
+  Werkzeugaufrufe, Codeblöcke, Statuszeile während die Sitzung arbeitet. Lesemodus über den Knopf oben rechts
+  (Leisten und Tastatur weg, der Verlauf füllt den Bildschirm). Die Tastatur schließt ein Knopf in der Leiste über ihr,
+  ein Tipp in den Verlauf oder Wischen nach unten.
 - **Antwortkarten** für Fragen, Auswahllisten (`/model`, Berechtigungsabfragen, Plan-Freigabe) und Panels (`/usage`,
   `/status`), mit `expect_menu`, damit eine veraltete Karte keinen neuen Dialog beantwortet
 - **Live-Bildschirm** (tmux-Aufnahme) mit Tastenleiste: Esc, Enter, Pfeiltasten, Tab, Ctrl-C, Ziffern
