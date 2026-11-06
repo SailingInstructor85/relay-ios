@@ -15,11 +15,16 @@ struct WindDownView: View {
 
     private var candidates: [Session] { WindDown.candidates(Array(model.sessions.values)) }
     private var chosen: [Session] { candidates.filter { selected.contains($0.key) } }
+    private var picking: Bool { model.windDownJob == nil }
 
     var body: some View {
         NavigationStack {
             List {
-                if model.windDownJob != nil { progress } else { picker }
+                if picking { picker } else { progress }
+            }
+            .safeAreaInset(edge: .bottom) {
+                // The start button sits below the list, not at its end: with many sessions the end is off screen.
+                if picking && !candidates.isEmpty { startBar }
             }
             .navigationTitle("Alle Sitzungen beenden")
             .navigationBarTitleDisplayMode(.inline)
@@ -69,7 +74,9 @@ struct WindDownView: View {
                         if e.selectable {
                             Toggle("", isOn: Binding(get: { selected.contains(s.key) },
                                                      set: { if $0 { selected.insert(s.key) } else { selected.remove(s.key) } }))
-                                .labelsHidden().accessibilityLabel(s.name)
+                                .labelsHidden()
+                                .accessibilityLabel(s.name)
+                                .accessibilityIdentifier("windDownToggle:" + s.key)
                         }
                     }
                     .opacity(e.selectable ? 1 : 0.55)
@@ -79,15 +86,27 @@ struct WindDownView: View {
             } footer: {
                 Text("Jede gewählte Sitzung bekommt die Abschlussnachricht: Offenes festhalten (Stand, offene Punkte, nächster Schritt in die Projektnotiz oder Übergabe), dann wird sie beendet. Arbeitende Sitzungen werden nicht abgebrochen, das Gateway wartet das Ende der Runde ab. Stellt ein Agent eine Rückfrage, bleibt seine Sitzung offen.")
             }
-            if let e = error { Section { Text(e).foregroundStyle(.red).font(.callout) } }
-            Section {
-                Button(role: .destructive) { confirm = true } label: {
-                    HStack { if starting { ProgressView().padding(.trailing, 4) }; Label(WindDown.buttonTitle(chosen.count), systemImage: "xmark.circle") }
-                }
-                .disabled(chosen.isEmpty || starting || model.state != .connected)
-                .accessibilityIdentifier("windDownStart")
-            }
         }
+    }
+
+    /// Always visible while picking: the count of chosen sessions and the button that asks for the confirmation.
+    private var startBar: some View {
+        VStack(spacing: 6) {
+            if let e = error { Text(e).font(.caption).foregroundStyle(.red).multilineTextAlignment(.center) }
+            Button(role: .destructive) { confirm = true } label: {
+                HStack {
+                    if starting { ProgressView().padding(.trailing, 4) }
+                    Label(WindDown.buttonTitle(chosen.count), systemImage: "xmark.circle")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .disabled(chosen.isEmpty || starting || model.state != .connected)
+            .accessibilityIdentifier("windDownStart")
+        }
+        .padding(.horizontal).padding(.vertical, 8)
+        .background(.bar)
     }
 
     private func start() async {

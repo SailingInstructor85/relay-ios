@@ -156,14 +156,19 @@ final class ListTests: RelayTestCase {
         // "Alle Sitzungen beenden": Auswahl mit Abwahl, Bestätigung mit Anzahl, Fortschritt je Sitzung, Zusammenfassung.
         launchConnected()
         mainMenu("Alle Sitzungen beenden")
-        settle(1)
+        settle(1.5)
         shot("alle-beenden-auswahl")
         expect("Sitzungen beenden", 5)
         expect("arbeitet gerade", 3, soft: true)
-        let toggle = app.switches["API Refactoring"].firstMatch
-        if toggle.waitForExistence(timeout: 3) { toggle.tap(); settle(0.5) }  // eine abwählen
+        // eine abwählen: "API Refactoring" (Schlüssel endet auf ...0002), der Schalter trägt den Titel als Label
+        var toggle = app.switches["API Refactoring"].firstMatch
+        if !toggle.waitForExistence(timeout: 3) {
+            toggle = app.switches.matching(identifier: "windDownToggle:claude:c1:22222222-aaaa-4000-8000-000000000002").firstMatch
+        }
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3), "Schalter für API Refactoring fehlt")
+        if toggle.exists { toggle.tap(); settle(0.5) }
         shot("alle-beenden-abgewaehlt")
-        tapID("windDownStart")
+        tapID("windDownStart")  // liegt unter der Liste, immer sichtbar
         settle(1)
         shot("alle-beenden-bestaetigen")
         tap("Ja, jetzt beenden", 5)
@@ -173,6 +178,7 @@ final class ListTests: RelayTestCase {
         expect("sauber beendet", 60)
         shot("alle-beenden-fertig")
         expect("Übergabe", 3, soft: true)
+        tap("Fertig", 3, exact: true, soft: true)
     }
 
     func test10_OfflineList() {
