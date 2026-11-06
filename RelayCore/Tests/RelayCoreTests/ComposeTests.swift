@@ -274,3 +274,9 @@ final class WindDownTests: XCTestCase {
         XCTAssertFalse(WindDown.message.contains("—"))
     }
 }
+
+final class KeyboardBarTests: XCTestCase {
+    func testHideButtonLabel() {
+        XCTAssertEqual(KeyboardBar.hideLabel, "Tastatur ausblenden")
+    }
+}

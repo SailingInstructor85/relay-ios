@@ -78,6 +78,8 @@ struct ChatView: View {
                     .padding(.vertical, 8)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                // ein Tipp in den Verlauf schließt die Tastatur; Text und laufendes Diktat bleiben (nur der Fokus geht)
+                .simultaneousGesture(TapGesture().onEnded { if focused { focused = false } })
                 .environment(\.chatActions, ChatActions(
                     openPath: { p in openPath(p) },
                     openFile: { viewer = $0 },
@@ -229,6 +231,14 @@ struct ChatView: View {
                     .submitLabel(returnSends ? .send : .return)
                     .onSubmit { if returnSends && canSend { Task { await sendTapped() } } }
                     .padding(8).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
+                    .toolbar {
+                        // die Leiste über der Tastatur: ein Knopf, der sie wieder schließt (sonst bleibt sie beim Lesen offen)
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button { focused = false } label: { Image(systemName: "keyboard.chevron.compact.down") }
+                                .accessibilityLabel(KeyboardBar.hideLabel).accessibilityIdentifier("hideKeyboard")
+                        }
+                    }
                 Button { Task { await toggleDictation() } } label: {
                     Image(systemName: voice.listening ? "mic.fill" : "mic").font(.title3).foregroundStyle(voice.listening ? Color.red : Color.accentColor)
                 }.accessibilityLabel(voice.listening ? "Diktat beenden" : "Diktieren")

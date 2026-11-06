@@ -192,4 +192,20 @@ final class ChatTests: RelayTestCase {
         shot("ohne-tmux-umgezogen")
         XCTAssertTrue(mockReceived("send", where: { ($0["text"] as? String) == "Bitte Status melden" && ($0["move"] as? Bool) == true }, timeout: 12))
     }
+
+    func test12_HideKeyboard() {
+        // Tastatur offen, Knopf in der Leiste über der Tastatur schließt sie, der getippte Text bleibt im Feld.
+        launchConnected()
+        openSession("API Refactoring")
+        typeInto("chatInput", "Tastatur zu")
+        settle(0.8)
+        shot("tastatur-offen")
+        XCTAssertTrue(app.keyboards.count > 0 || id("hideKeyboard").exists, "Tastatur nicht offen")
+        tapID("hideKeyboard")
+        settle(1)
+        shot("tastatur-zu")
+        XCTAssertEqual(app.keyboards.count, 0, "Tastatur noch offen")
+        let value = id("chatInput").value as? String ?? ""
+        XCTAssertTrue(value.contains("Tastatur zu"), "Text weg: \(value)")
+    }
 }
