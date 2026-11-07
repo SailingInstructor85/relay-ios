@@ -28,6 +28,13 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Hintergrundaktualisierung:** Ist die App zu, verbindet sie sich ab und zu kurz und meldet Verpasstes. iOS bestimmt
   den Zeitpunkt, meist alle 15 bis 60 Minuten.
 - **Suche im Verlauf** einer Sitzung, ein Treffer springt an die Stelle im Chat
+- **Vorlesen auf Knopfdruck:** Lautsprecher-Symbol unter jeder Agentenantwort, „Letzte Antwort vorlesen“ im
+  Sitzungsmenü, Leiste mit Pause und Stopp über der Eingabe. „Frage vorlesen“ liest nur die Frage mit Optionen und
+  Empfehlung vor (Langdruck-Menü, Sitzungsmenü, Fragekarten, Rückfragen unter „Hinweise“). Codeblöcke werden
+  übersprungen, Pfade beim Dateinamen genannt, Links als „Link“.
+- **Routinen** (Menü → „Routinen“): Routinen des Gateways mit Zeitplan, letztem Lauf, Schalter, „Jetzt ausführen“
+  und den systemd-Timern des PCs; „Neue Routine“ in Worten an den Chef-Agenten. Braucht einen `team:`-Block in der
+  Gateway-Konfiguration, sonst zeigt die App „Routinen im Gateway nicht eingerichtet“ (Einrichtung: `docs/routinen.md`).
 - **Sperre mit Face ID** (Einstellungen → Sicherheit)
 
 Noch nicht enthalten, weil iOS es nicht zulässt oder weil es später kommt: ein dauerhaft lauschendes Wake-Word
