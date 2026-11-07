@@ -41,6 +41,7 @@ struct NoticeView: View {
     @State private var answer = ""
     @State private var answering = false
     @State private var answerError: String?
+    @ObservedObject private var reader = SpeechOut.shared
 
     private func when(_ ts: Double) -> String {
         Date(timeIntervalSince1970: ts).formatted(date: .abbreviated, time: .shortened)
@@ -74,6 +75,7 @@ struct NoticeView: View {
                     if go != .none {
                         Button(goLabel(go)) { onGo(go) }.buttonStyle(.bordered)
                     }
+                    readButtons(n, q)
                 }
                 if let q, q.wantsAnswer { answerSection(n, q) }
             }
@@ -98,6 +100,19 @@ struct NoticeView: View {
         }
         .navigationTitle(ref == nil ? "Hinweise" : (n?.source.isEmpty == false ? n!.source : "Hinweis"))
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// Vorlesen des Hinweises; bei einer Rückfrage dazu „Frage vorlesen“: nur Frage und Empfehlung, ohne Kontext.
+    @ViewBuilder private func readButtons(_ n: Notice, _ q: AgentQuestion?) -> some View {
+        HStack(spacing: 10) {
+            Button { reader.toggle(n.text) } label: {
+                Label(reader.speaking ? "Vorlesen beenden" : "Vorlesen", systemImage: reader.speaking ? "speaker.slash" : "speaker.wave.2")
+            }.buttonStyle(.bordered)
+            if let q, q.wantsAnswer {
+                Button { reader.speak(ReadAloud.spoken(q)) } label: { Label("Frage vorlesen", systemImage: "questionmark.bubble") }
+                    .buttonStyle(.bordered)
+            }
+        }
     }
 
     /// An agent's question: the answer goes back to the Desktop (`rueckfrage`); "Ja" takes the recommendation.

@@ -6,6 +6,8 @@ struct ChatActions {
     var openPath: (String) -> Void = { _ in }
     var openFile: (RemoteRef) -> Void = { _ in }
     var menu: (TMessage) -> Void = { _ in }
+    /// Reads a text aloud (the small speaker under an answer).
+    var speak: (String) -> Void = { _ in }
 }
 
 private struct ChatActionsKey: EnvironmentKey { static let defaultValue = ChatActions() }

@@ -93,6 +93,8 @@ struct QuestionFormCard: View {
                     .background(done ? Color.green.opacity(0.25) : Color.secondary.opacity(0.18), in: Capsule())
                 }
             }
+            Spacer(minLength: 0)
+            SpeakQuestionButton { SpeechOut.shared.speak(ReadAloud.spoken(question: q)) }
         }
     }
 

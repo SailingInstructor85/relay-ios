@@ -30,6 +30,8 @@ struct ChatView: View {
     @State private var sendAfterDictation = false
     @State private var vocabLoaded = false
     @StateObject private var voice = VoiceIO()
+    /// Vorlesen auf Knopfdruck: eine Antwort, die letzte Antwort oder nur die Frage (ReadAloud), mit Pause und Stopp.
+    @ObservedObject private var reader = SpeechOut.shared
     @ObservedObject private var outbox = Outbox.shared
     @State private var error: String?
     @State private var confirmForce: String?
@@ -72,7 +74,7 @@ struct ChatView: View {
                         }
                         if let s = session, s.state == "busy" || !runItems.isEmpty { workingLine(s) }
                         if let s = session, s.asksYou, !s.asksText.isEmpty {
-                            AsksCard(text: s.asksText) { Task { await model.done(s) } }
+                            AsksCard(text: s.asksText, speak: { reader.speak($0) }) { Task { await model.done(s) } }
                         }
                         if let s = session { cards(s) }
                         Color.clear.frame(height: 1).id("bottom")
@@ -85,7 +87,8 @@ struct ChatView: View {
                 .environment(\.chatActions, ChatActions(
                     openPath: { p in openPath(p) },
                     openFile: { viewer = $0 },
-                    menu: { menuMessage = $0 }))
+                    menu: { menuMessage = $0 },
+                    speak: { reader.speak($0) }))
                 .environment(\.openURL, OpenURLAction { url in
                     MainActor.assumeIsolated {
                         LinkRouter.open(url.absoluteString, base: session?.cwd, onFile: { viewer = $0 }, onError: { error = $0 })
@@ -107,6 +110,7 @@ struct ChatView: View {
                 SummaryCard(state: sm, speaking: voice.speaking, onSpeak: { voice.speak($0) }, onStop: { voice.stopSpeaking() },
                             onClose: { voice.stopSpeaking(); summary = nil })
             }
+            if reader.speaking { ReadAloudBar(reader: reader) }
             if let e = error { ErrorBanner(text: Binding(get: { e }, set: { error = $0 })).padding(.vertical, 4) }
             if !uploadInfo.isEmpty { Text(uploadInfo).font(.caption).foregroundStyle(.secondary).padding(.top, 4) }
             if ReadingMode.chrome(reading: reading).inputBar { inputBar }
@@ -167,7 +171,7 @@ struct ChatView: View {
         .onDisappear {
             model.visibleChat = nil
             model.transcriptListeners[sessionKey] = nil
-            voice.stopSpeaking(); voice.stopListening()
+            voice.stopSpeaking(); voice.stopListening(); reader.stop()
             Task { _ = try? await model.rpc("unwatch", ["key": .string(key)]) }
         }
     }
@@ -368,11 +372,19 @@ struct ChatView: View {
             } else if let m = menu {
                 MenuCard(menu: m, session: s) { await refreshScreen() }
             } else {
-                QuestionCard(q: q)
+                QuestionCard(q: q, speak: { reader.speak($0) })
             }
         } else if let m = menu {
             MenuCard(menu: m, session: s) { await refreshScreen() }
         }
+    }
+
+    /// Was „Frage vorlesen“ sagt: die offene Frage der Sitzung (Karte) mit Optionen, sonst ihr Wartetext, sonst die Frage
+    /// in der letzten Antwort (ReadAloud.question). Nil, wenn nichts gefragt ist.
+    private var spokenQuestion: String? {
+        if let q = session?.question { return ReadAloud.spoken(question: q) }
+        if let s = session, s.asksYou, !s.asksText.isEmpty { return ReadAloud.cleaned(s.asksText) }
+        return ReadAloud.lastAnswer(messages).flatMap { ReadAloud.question(in: $0.text) }
     }
 
     @ToolbarContentBuilder private var toolbarItems: some ToolbarContent {
@@ -394,6 +406,15 @@ struct ChatView: View {
                     Button { showSearch = true } label: { Label("Im Verlauf suchen", systemImage: "magnifyingglass") }
                     Button { Task { await summarize() } } label: { Label("Zusammenfassen", systemImage: "text.alignleft") }
                         .disabled(summary?.loading == true)
+                    if let last = ReadAloud.lastAnswer(messages) {
+                        Button { reader.speak(last.text) } label: { Label("Letzte Antwort vorlesen", systemImage: "speaker.wave.2") }
+                    }
+                    if let q = spokenQuestion {
+                        Button { reader.speak(q) } label: { Label("Frage vorlesen", systemImage: "questionmark.bubble") }
+                    }
+                    if reader.speaking {
+                        Button { reader.stop() } label: { Label("Vorlesen beenden", systemImage: "speaker.slash") }
+                    }
                     if s.state == "busy" { Button { Task { await stop(s) } } label: { Label("Stoppen", systemImage: "stop.circle") } }
                     Button { model.togglePin(s.key) } label: { Label(model.pinned.contains(s.key) ? "Loslösen" : "Anheften", systemImage: "pin") }
                     Button { model.toggleMute(s.key) } label: {
@@ -756,9 +777,19 @@ struct MessageRow: View {
                         ForEach(m.files, id: \.path) { f in FileChip(ref: RemoteRef(f), onOpen: actions.openFile) }
                     }
                 }
+                if !m.text.isEmpty { speakButton }
             }
             .padding(.horizontal)
         }
+    }
+
+    /// Das kleine Lautsprecher-Symbol unter einer Antwort: liest sie vor (Langdruck-Menü: auch nur die Frage).
+    private var speakButton: some View {
+        Button { actions.speak(m.text) } label: {
+            Image(systemName: "speaker.wave.2").font(.caption).foregroundStyle(.secondary).padding(.vertical, 2)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Vorlesen")
     }
 
     private func pathButton(_ t: ToolCall, path: String) -> some View {
@@ -798,10 +829,15 @@ struct MessageRow: View {
 
 struct AsksCard: View {
     let text: String
+    var speak: ((String) -> Void)? = nil
     let done: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Die Sitzung fragt dich", systemImage: "questionmark.bubble").font(.subheadline.weight(.semibold))
+            HStack {
+                Label("Die Sitzung fragt dich", systemImage: "questionmark.bubble").font(.subheadline.weight(.semibold))
+                Spacer()
+                if let speak { SpeakQuestionButton { speak(text) } }
+            }
             Text(text).font(.callout)
             Button("Erledigt", action: done).buttonStyle(.bordered)
         }
@@ -810,11 +846,26 @@ struct AsksCard: View {
     }
 }
 
+/// „Frage vorlesen“ an einer Fragekarte: nur die Frage mit ihren Optionen, nicht der Rest des Chats.
+struct SpeakQuestionButton: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) { Image(systemName: "speaker.wave.2") }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Frage vorlesen")
+    }
+}
+
 struct QuestionCard: View {
     let q: Question
+    var speak: ((String) -> Void)? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label(q.header.isEmpty ? "Frage" : q.header, systemImage: "questionmark.circle").font(.subheadline.weight(.semibold))
+            HStack {
+                Label(q.header.isEmpty ? "Frage" : q.header, systemImage: "questionmark.circle").font(.subheadline.weight(.semibold))
+                Spacer()
+                if let speak { SpeakQuestionButton { speak(ReadAloud.spoken(question: q)) } }
+            }
             Text(q.text)
             ForEach(Array(q.options.enumerated()), id: \.offset) { i, o in
                 Text("\(i + 1). \(o.label)").font(.callout)
