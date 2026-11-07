@@ -151,7 +151,8 @@ struct OutboxRow: View {
                 }
                 if item.state == .failed {
                     HStack(spacing: 8) {
-                        Button("Wiederholen") { Outbox.shared.retry(item.id) }
+                        // stuck in the PC's input field: a retry would type it twice there
+                        if !SubmitCheck.isStuck(item.error ?? "") { Button("Wiederholen") { Outbox.shared.retry(item.id) } }
                         if OutboxLogic.isBusyRefusal(item.error ?? "") { Button("Trotzdem senden") { Outbox.shared.retry(item.id, force: true) } }
                         if DeskTerminal.isRefusal(item.error ?? "") { Button(DeskTerminal.moveButton) { onMove(item.id) } }
                         Button("Bearbeiten") { onEdit(item.text); Outbox.shared.remove(item.id) }

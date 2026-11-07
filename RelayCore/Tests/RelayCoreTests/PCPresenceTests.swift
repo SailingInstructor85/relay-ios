@@ -51,3 +51,18 @@ final class PCPresenceTests: XCTestCase {
         XCTAssertEqual(PCPresence.of(list["claude:c1:s1"]!), .open)
     }
 }
+
+final class SubmitCheckTests: XCTestCase {
+    func testStuckMessageFromGateway() {
+        let m = "not sent: the text is still in the input field at the PC (Enter did not go through)"
+        XCTAssertTrue(SubmitCheck.isStuck(m))
+        XCTAssertFalse(SubmitCheck.isStuck("session is busy"))
+        XCTAssertEqual(SubmitCheck.display(m), SubmitCheck.short)
+        XCTAssertEqual(SubmitCheck.display("tmux pane %3 no longer exists"), "tmux pane %3 no longer exists")
+        XCTAssertFalse(SubmitCheck.text.contains("—"))
+        let item = OutItem(id: "1", key: "k", text: "hallo", at: 0, state: .failed, error: m)
+        XCTAssertEqual(OutboxLogic.status(item, connected: true, network: true), "Nicht abgeschickt: " + SubmitCheck.short)
+        let row = WindDown.Item(key: "k", title: "A", phase: .error, detail: m)
+        XCTAssertEqual(row.statusLine, "Fehler, bleibt offen · " + SubmitCheck.short)
+    }
+}

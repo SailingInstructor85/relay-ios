@@ -52,3 +52,19 @@ public enum PCPresence: Equatable {
         return true
     }
 }
+
+/// Das Gateway sendet Text und Enter getrennt und prüft danach das Eingabefeld der Sitzung am PC (2026-11-07,
+/// „Nachricht bleibt im Eingabefeld stehen“). Steht der Text nach zwei Enter noch da, meldet es einen Fehler. Der Text
+/// ist dann am PC eingetippt, aber nicht abgeschickt: Erneutes Senden vom Handy würde ihn doppelt eintippen.
+public enum SubmitCheck {
+    /// Die Meldung des Gateways (`tmux.send_text`), an der die App den Fall erkennt.
+    public static func isStuck(_ message: String) -> Bool { message.lowercased().contains("still in the input field") }
+
+    public static let text = "Nicht abgeschickt: Der Text steht am PC im Eingabefeld, das Enter kam nicht an. Nicht noch einmal senden, sonst steht er doppelt da. Im Live-Bildschirm „Enter“ tippen oder am PC Enter drücken."
+
+    /// Kurzform für Zeilen (Alle Sitzungen beenden).
+    public static let short = "Text steht am PC im Eingabefeld, Enter kam nicht an"
+
+    /// Gateway-Meldung für die Anzeige: dieser Fall auf Deutsch, alles andere unverändert.
+    public static func display(_ message: String) -> String { isStuck(message) ? short : message }
+}

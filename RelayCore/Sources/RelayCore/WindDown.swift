@@ -61,7 +61,7 @@ public enum WindDown {
             var s = phase.label
             if phase == .closed, !handover.isEmpty { s += " · Übergabe: " + handover }
             if phase == .timeout, !handover.isEmpty { s += " · Übergabe: " + handover }
-            if !detail.isEmpty, phase == .error || phase == .question || phase == .timeout { s += " · " + detail }
+            if !detail.isEmpty, phase == .error || phase == .question || phase == .timeout { s += " · " + SubmitCheck.display(detail) }
             return s
         }
     }

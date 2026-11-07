@@ -653,6 +653,11 @@ struct ChatView: View {
             UsageRecorder.shared.content("chat", "abgelehnt (PC ohne tmux)", session: s.key, kind: "text", text: t)
             clearField()
             error = nil
+        } catch let e as RelayError where e.remote && SubmitCheck.isStuck(e.message) {
+            // typed at the PC but not submitted (Enter lost twice): sending again would type it twice
+            UsageRecorder.shared.content("chat", "nicht abgeschickt (eingabefeld)", session: s.key, kind: "text", text: t)
+            clearField()
+            error = SubmitCheck.text
         } catch {
             if OutboxLogic.retries(error) { queue() } else { self.error = error.localizedDescription }
         }

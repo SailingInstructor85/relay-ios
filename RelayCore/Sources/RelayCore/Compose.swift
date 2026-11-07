@@ -246,6 +246,7 @@ public enum OutboxLogic {
         case .failed:
             if isBusyRefusal(i.error ?? "") { return "Nicht gesendet: die Sitzung arbeitet gerade" }
             if DeskTerminal.isRefusal(i.error ?? "") { return DeskTerminal.statusText }
+            if SubmitCheck.isStuck(i.error ?? "") { return "Nicht abgeschickt: " + SubmitCheck.short }
             return "Nicht gesendet: " + (i.error ?? "abgelehnt").replacingOccurrences(of: "not sent: ", with: "")
         case .sending: return "sendet…"
         case .queued:
