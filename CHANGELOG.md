@@ -2,6 +2,22 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.10 (2026-11-07)
+
+Braucht für die Behebungen beim Senden und bei „Alle Sitzungen beenden“ das aktuelle Gateway (auf dem PC schon eingespielt).
+
+**Neu**
+- Jarvis erklärt sich: Solange der Verlauf leer ist, steht oben, was Jarvis ist (der eingebaute Sprachassistent von Relay für Fragen an deinen PC und deine Sitzungen, kein Agent von Christopher) und wie das Mikrofon funktioniert.
+- „Alle Sitzungen beenden“: Jede Sitzung schreibt vor dem Ende zusätzlich ihren Eintrag ins Agenten-Log der Daily Note, damit der Tag nachvollziehbar bleibt.
+
+**Geändert**
+- Nachrichten vom Handy gehen am PC jetzt in zwei Schritten ein: erst der Text, nach einer kurzen Pause das Enter. Danach prüft der PC, ob das Eingabefeld leer ist, und drückt notfalls noch einmal Enter. Bleibt der Text trotzdem stehen, sagt die App das deutlich, statt „gesendet“ zu melden. Erneut senden bietet sie dann nicht an, damit der Text nicht doppelt dasteht.
+- „Alle Sitzungen beenden“: Über dem Knopf steht, warum er gesperrt ist (keine Verbindung, nichts gewählt). Sitzungen, die am PC gerade eine Auswahl oder Freigabe zeigen, bleiben mit diesem Grund offen.
+
+**Behoben**
+- Jarvis per Sprache: Der rote Knopf während der Aufnahme warf das Gehörte weg. Jetzt kommt der Text ins Schreibfeld und lässt sich ändern und senden. Senden während der Aufnahme schickt Getipptes und Gesprochenes zusammen ab.
+- „Alle Sitzungen beenden“ tat nichts, wenn das Blatt geöffnet wurde, bevor die Sitzungsliste geladen war: Es war nichts ausgewählt und der Knopf blieb bei „0 Sitzungen“. Die Auswahl folgt jetzt der Liste, bis du selbst etwas antippst.
+
 ## 0.3.9 (2026-11-07)
 
 **Neu**

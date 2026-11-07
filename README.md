@@ -20,9 +20,16 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Neue Sitzung:** Konto wählen, Ordner aus den zuletzt benutzten, per Suche oder durch Blättern, erste Nachricht
 - **Anhänge:** Fotos und Dateien hochladen, der Pfad landet in der Nachricht
 - **Nutzung & Limits** pro Konto, **RAM-Monitor** mit Schließen und Wiederöffnen
-- **Jarvis per Sprache:** Mikrofon antippen und sprechen. Die Erkennung läuft auf dem iPhone und nutzt das Vokabular
-  des Gateways (`voice_vocab`). Die Antwort wird Satz für Satz vorgelesen. Im Gesprächsmodus hört Jarvis danach
-  wieder zu. Der Kurzbefehl „Jarvis in Relay“ funktioniert per Siri oder über die Aktionstaste.
+- **Jarvis per Sprache:** Jarvis ist der eingebaute Sprachassistent von Relay für Fragen an das Gateway (kein Agent
+  von Christopher). Mikrofon antippen und sprechen. Nach einer kurzen Pause fragt Jarvis von selbst; der rote Knopf
+  beendet die Aufnahme und legt den Text ins Schreibfeld, Senden während der Aufnahme schickt ihn gleich ab. Die
+  Erkennung läuft auf dem iPhone und nutzt das Vokabular des Gateways (`voice_vocab`). Die Antwort wird Satz für Satz
+  vorgelesen. Im Gesprächsmodus hört Jarvis danach wieder zu. Der Kurzbefehl „Jarvis in Relay“ funktioniert per Siri
+  oder über die Aktionstaste.
+- **Alle Sitzungen beenden** (Menü der Sitzungsliste): Jede gewählte Sitzung schreibt ihren Eintrag ins Agenten-Log
+  der Daily Note und ihre Übergabe, dann beendet das Gateway sie. Sitzungen mit offener Auswahl oder Freigabe am PC
+  bleiben mit Grund offen. Das Gateway schickt Nachrichten mit getrenntem Enter und prüft, ob das Eingabefeld am PC
+  danach leer ist; bleibt Text stehen, meldet die App das, statt still zu scheitern.
 - **Mitteilungen** bei „fertig“ und „wartet“. Direkt aus der Mitteilung antworten, „Erledigt“ setzen oder die
   Sitzung stummschalten. Bis zu drei verpasste Ereignisse kommen einzeln, mehr als Zusammenfassung.
 - **Hintergrundaktualisierung:** Ist die App zu, verbindet sie sich ab und zu kurz und meldet Verpasstes. iOS bestimmt
