@@ -193,22 +193,23 @@ struct UsageSettingsSection: View {
                 .accessibilityIdentifier("usageToggle")
             Button { reporting = true } label: { Label(UsageReport.sendLabel, systemImage: "ladybug") }
                 .accessibilityIdentifier("usageReport")
+                // Blatt am Knopf, nicht an der Section: dort verteilt SwiftUI Modifier auf jede Zeile.
+                .sheet(isPresented: $reporting) { ReportBugView { info = $0 } }
             Button { Task { info = await rec.flush() } } label: { Label("Protokoll jetzt senden", systemImage: "arrow.up.doc") }
                 .accessibilityIdentifier("usageSend")
             Button(role: .destructive) { confirmClear = true } label: { Label("Protokoll löschen", systemImage: "trash") }
                 .accessibilityIdentifier("usageClear")
+                .confirmationDialog("Protokoll auf dem iPhone löschen?", isPresented: $confirmClear, titleVisibility: .visible) {
+                    Button("Löschen", role: .destructive) { rec.clear(); info = "Protokoll gelöscht" }
+                } message: {
+                    Text("Was schon beim Gateway ist, bleibt dort.")
+                }
             if !info.isEmpty { Text(info).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("usageInfo") }
         } header: {
             Text("Nutzungsprotokoll")
         } footer: {
             Text("Zeichnet auf, was du in der App tust (Ansicht, Aktion, Sitzung, Fehler), ohne Inhalte: von Text, Diktat und Fotos nur Art und Länge. Geht nur an dein Gateway, bleibt 30 Tage. \(rec.total) Ereignisse, \(rec.pendingCount) noch nicht gesendet.")
         }
-        .confirmationDialog("Protokoll auf dem iPhone löschen?", isPresented: $confirmClear, titleVisibility: .visible) {
-            Button("Löschen", role: .destructive) { rec.clear(); info = "Protokoll gelöscht" }
-        } message: {
-            Text("Was schon beim Gateway ist, bleibt dort.")
-        }
-        .sheet(isPresented: $reporting) { ReportBugView { info = $0 } }
     }
 }
 
