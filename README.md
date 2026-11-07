@@ -35,6 +35,11 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Routinen** (Menü → „Routinen“): Routinen des Gateways mit Zeitplan, letztem Lauf, Schalter, „Jetzt ausführen“
   und den systemd-Timern des PCs; „Neue Routine“ in Worten an den Chef-Agenten. Braucht einen `team:`-Block in der
   Gateway-Konfiguration, sonst zeigt die App „Routinen im Gateway nicht eingerichtet“ (Einrichtung: `docs/routinen.md`).
+- **Handy und PC in derselben Sitzung:** Beide tippen abwechselnd in eine Sitzung, die in einer Agenten-tmux-Sitzung
+  läuft (so startet die App jede Sitzung). Ein Monitor-Symbol im Chat-Kopf und in der Liste zeigt „Am PC offen“, wenn
+  gerade ein Terminal am PC die Sitzung zeigt (nur Anzeige). Läuft eine Sitzung am PC als nacktes `claude` ohne tmux,
+  liest das Handy nur mit: Nachrichten warten im Postausgang, ein Hinweis steht über der Eingabe, der Umzug in tmux
+  nur auf Wunsch mit Bestätigung. Damit das nicht nötig ist, `claude` am PC per Wrapper in tmux starten: `docs/pc-tmux.md`.
 - **Sperre mit Face ID** (Einstellungen → Sicherheit)
 
 Noch nicht enthalten, weil iOS es nicht zulässt oder weil es später kommt: ein dauerhaft lauschendes Wake-Word
@@ -76,7 +81,7 @@ Tests unter Linux: `cd RelayCore && swift test`. Ende-zu-Ende-Test gegen ein Gat
   dort ein kurzer Standardtext, der Build bricht nicht ab.
 - `docs/` gehört zum Repo und wird je Version mitgepflegt: `docs/nachtlog.md` (was wann gebaut wurde, Entscheidungen,
   Risiken), `docs/feature-parity.md` (Abgleich mit der Android-App), `docs/rueckfragen.md`, `docs/routinen.md`,
-  `docs/testbericht.md`. Der Release-Text verlinkt README, Nachtlog und Changelog im Stand des Tags.
+  `docs/pc-tmux.md` (Handy und PC in derselben Sitzung, Wrapper und tmux-Einstellung für den PC), `docs/testbericht.md`. Der Release-Text verlinkt README, Nachtlog und Changelog im Stand des Tags.
 - Lokal prüfen (nur Python nötig): `python3 scripts/changelog_section.py 0.3.5 --release --repo <owner/repo> --tag v0.3.5`
   und `python3 scripts/make_source.py <ipa> 0.3.5 1 <owner/repo> v0.3.5 source.json CHANGELOG.md`.
 

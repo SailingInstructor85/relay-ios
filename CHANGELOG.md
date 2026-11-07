@@ -2,6 +2,20 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.7 (2026-11-07)
+
+Braucht für das Symbol „Am PC offen“ ein aktuelles Gateway (notifyd nach dem Update neu starten). Die App läuft auch mit dem älteren Gateway, zeigt das Symbol dann nur bei Sitzungen ohne tmux.
+
+**Neu**
+- „Am PC offen“: Ein kleines Monitor-Symbol im Chat-Kopf und in der Sitzungsliste zeigt, dass gerade ein Terminal am PC die Sitzung zeigt. Geht am PC ein Terminal auf oder zu, folgt das Symbol innerhalb weniger Sekunden. Nur Anzeige, nichts wird gesperrt und nichts vor dem Senden gefragt.
+- Anleitung „Handy und PC in derselben Sitzung“: Wie `claude` am PC automatisch in einer Sitzung startet, in die auch das Handy tippen kann (Wrapper für die Shell), dazu eine tmux-Einstellung, damit Mausrad, Markieren, Kopieren und Farben wie bisher funktionieren, und was mit Sitzungen passiert, deren Fenster nur geschlossen wurde.
+
+**Geändert**
+- Sitzung am PC in einem Terminal ohne tmux: Die App fragt nicht mehr von selbst „Am PC beenden und hier fortsetzen?“. Die Nachricht bleibt im Postausgang, über der Eingabe steht „Am PC in einem Terminal ohne tmux offen: vom Handy nur mitlesen. Nachrichten warten im Postausgang.“ Wer die Sitzung trotzdem auf tmux umziehen will, tippt in der Postausgangszeile „Am PC beenden und hier fortsetzen…“ und bestätigt. Ohne das passiert am PC nichts.
+
+**Behoben**
+- „Eingaben erscheinen nicht mehr auf beiden Geräten“: nachgestellt, kein Fehler im Code. In Sitzungen, die die App gestartet hat (tmux), kommen Nachrichten in beiden Richtungen an. Betroffen sind nur Sitzungen, die am PC als nacktes `claude` ohne tmux laufen: dort liest das Handy mit, kann aber nichts eintippen. Abhilfe ist der Wrapper aus der neuen Anleitung.
+
 ## 0.3.6 (2026-11-07)
 
 **Neu**
