@@ -274,6 +274,31 @@ final class InfoTests: RelayTestCase {
         XCTAssertTrue(mockReceived("ask"))
     }
 
+    func test25_JarvisDictationToSend() {
+        // Diktat bis Senden (2026-11-07): Erklärtext bei leerem Verlauf, Mikrofon, Stopp legt den Text ins Schreibfeld,
+        // Senden fragt Jarvis. Im Simulator „hört“ die App einen festen Satz (kein Mikrofon).
+        let phrase = "Welche Sitzung braucht mich gerade?"
+        launchConnected()
+        mainMenu("Jarvis fragen")
+        settle(1)
+        XCTAssertTrue(id("jarvisIntro").waitForExistence(timeout: 5), "Erklärtext fehlt bei leerem Verlauf")
+        expect("Sprachassistent", 3)
+        shot("jarvis-erklaerung")
+        tapID("jarvisMic")
+        XCTAssertTrue(has(phrase, 5), "Teilergebnis der Aufnahme fehlt")
+        shot("jarvis-hoert")
+        tapID("jarvisMic")  // Stopp: der Text kommt ins Schreibfeld statt verloren zu gehen
+        settle(1)
+        let field = id("jarvisInput")
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        XCTAssertTrue((field.value as? String)?.contains(phrase) == true, "Text nicht im Schreibfeld: \(String(describing: field.value))")
+        shot("jarvis-text-im-feld")
+        tapID("jarvisSend")
+        XCTAssertTrue(mockReceived("ask", where: { ($0["text"] as? String) == phrase }), "ask mit dem diktierten Text fehlt")
+        expect("Du hast gefragt", 6)
+        shot("jarvis-diktat-gesendet")
+    }
+
     func test11_JarvisMenuAndVocab() {
         launchConnected()
         mainMenu("Jarvis fragen")

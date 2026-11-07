@@ -175,3 +175,45 @@ final class SpeechTests: XCTestCase {
         XCTAssertNil(ReadAloud.lastAnswer([msgs[0]]))
     }
 }
+
+final class JarvisDictationTests: XCTestCase {
+    func testPauseAsksRightAway() {
+        let o = JarvisDictation.outcome(heard: " Was wartet auf mich? ", end: .pause, typed: "")
+        XCTAssertEqual(o.ask, "Was wartet auf mich?")
+        XCTAssertEqual(o.field, "")
+        XCTAssertFalse(o.endsConversation)
+        XCTAssertNil(JarvisDictation.outcome(heard: "", end: .pause, typed: "x").ask)
+    }
+
+    func testStopPutsTheTextIntoTheField() {
+        // the bug: the stop button threw away what was heard
+        let o = JarvisDictation.outcome(heard: "Was wartet auf mich?", end: .stop, typed: "")
+        XCTAssertNil(o.ask)
+        XCTAssertEqual(o.field, "Was wartet auf mich?")
+        XCTAssertTrue(o.endsConversation)
+        XCTAssertEqual(JarvisDictation.outcome(heard: "und dann", end: .stop, typed: "Erst das").field, "Erst das und dann")
+        XCTAssertEqual(JarvisDictation.outcome(heard: "", end: .stop, typed: "getippt").field, "getippt")
+    }
+
+    func testSendWhileListeningSendsTypedAndHeard() {
+        let o = JarvisDictation.outcome(heard: "die Tests laufen lassen", end: .send, typed: "Sag der Webapp-Sitzung, sie soll")
+        XCTAssertEqual(o.ask, "Sag der Webapp-Sitzung, sie soll die Tests laufen lassen")
+        XCTAssertEqual(o.field, "")
+        let none = JarvisDictation.outcome(heard: "", end: .send, typed: "")
+        XCTAssertNil(none.ask)
+    }
+
+    func testSendButton() {
+        XCTAssertFalse(JarvisDictation.canSend(typed: "", listening: false, partial: "", asking: false))
+        XCTAssertTrue(JarvisDictation.canSend(typed: "", listening: true, partial: "Was", asking: false))
+        XCTAssertFalse(JarvisDictation.canSend(typed: "", listening: true, partial: "", asking: false))
+        XCTAssertTrue(JarvisDictation.canSend(typed: "Hallo", listening: false, partial: "", asking: false))
+        XCTAssertFalse(JarvisDictation.canSend(typed: "Hallo", listening: false, partial: "", asking: true))
+    }
+
+    func testIntroSaysWhatJarvisIs() {
+        XCTAssertTrue(JarvisDictation.intro.contains("Sprachassistent"))
+        XCTAssertTrue(JarvisDictation.intro.contains("kein Agent von Christopher"))
+        XCTAssertFalse((JarvisDictation.intro + JarvisDictation.howTo).contains("—"))
+    }
+}

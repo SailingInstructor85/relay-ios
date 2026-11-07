@@ -13,6 +13,8 @@ struct JarvisView: View {
     @State private var asking = false
     @State private var error: String?
     @State private var voiceTask: Task<Void, Never>?
+    /// How the running recording is to end: a pause (ask right away), the stop button (into the field), send.
+    @State private var endedBy: JarvisDictation.End = .pause
     @StateObject private var voice = VoiceIO()
     @AppStorage("jarvisSpeak") private var speakAnswers = true
     @AppStorage("jarvisConversation") private var conversation = true
@@ -31,8 +33,11 @@ struct JarvisView: View {
                                 .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
                         }
                         if turns.isEmpty {
-                            Text("Tippe aufs Mikrofon und sprich, z. B. „Was wartet auf mich?“ oder „Sag der Webapp-Sitzung, sie soll die Tests laufen lassen.“ Tipp: Mit dem Kurzbefehl „Jarvis in Relay“ geht das auch per Siri oder Aktionstaste.")
-                                .font(.callout).foregroundStyle(.secondary).padding()
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label(JarvisDictation.intro, systemImage: "info.circle").font(.callout)
+                                    .accessibilityIdentifier("jarvisIntro")
+                                Text(JarvisDictation.howTo).font(.callout).foregroundStyle(.secondary)
+                            }.padding()
                         }
                         ForEach(turns) { t in
                             VStack(alignment: .leading, spacing: 6) {
@@ -59,9 +64,9 @@ struct JarvisView: View {
                 TextField("Jarvis schreiben…", text: $input, axis: .vertical).lineLimit(1...4)
                     .focused($inputFocused).accessibilityIdentifier("jarvisInput")
                     .padding(8).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
-                Button { let q = input; input = ""; Task { await ask(q, byVoice: false) } } label: {
+                Button { sendTapped() } label: {
                     Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
-                }.disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || asking)
+                }.disabled(!JarvisDictation.canSend(typed: input, listening: voice.listening, partial: voice.partial, asking: asking))
                     .accessibilityLabel("Senden").accessibilityIdentifier("jarvisSend")
             }.padding([.horizontal, .bottom])
         }
@@ -102,7 +107,7 @@ struct JarvisView: View {
             if voice.speaking {
                 Button { voice.stopSpeaking() } label: { Label("Stopp", systemImage: "speaker.slash.fill") }.buttonStyle(.bordered)
             }
-            Button { voice.listening || voiceTask != nil ? stopVoice() : startVoice(trigger: "button") } label: {
+            Button { micTapped() } label: {
                 Image(systemName: voice.listening ? "stop.circle.fill" : "mic.circle.fill")
                     .font(.system(size: 64))
                     .foregroundStyle(voice.listening ? .red : Color.accentColor)
@@ -110,11 +115,38 @@ struct JarvisView: View {
             }
             .disabled(asking && voiceTask == nil)
             .accessibilityLabel(voice.listening ? "Zuhören beenden" : "Sprechen")
+            .accessibilityIdentifier("jarvisMic")
         }
         .padding(.vertical, 6)
     }
 
     // MARK: voice
+
+    /// While recording, the button ends the recording and keeps the words (into the field); while Jarvis answers or
+    /// speaks, it stops everything; otherwise it starts listening.
+    private func micTapped() {
+        if voice.listening {
+            endedBy = .stop
+            UsageRecorder.shared.record("jarvis", "aufnahme gestoppt", kind: "diktat", length: voice.partial.count)
+            voice.stopListening()
+        } else if voiceTask != nil {
+            stopVoice()
+        } else {
+            startVoice(trigger: "button")
+        }
+    }
+
+    /// Send: typed text right away; during a recording the words heard so far go out together with the typed text.
+    private func sendTapped() {
+        if voice.listening {
+            endedBy = .send
+            voice.stopListening()
+            return
+        }
+        let q = input; input = ""
+        UsageRecorder.shared.content("jarvis", "gesendet", session: nil, kind: "text", text: q)
+        Task { await ask(q, byVoice: false) }
+    }
 
     private func startVoice(trigger: String) {
         guard voiceTask == nil else { return }
@@ -127,8 +159,28 @@ struct JarvisView: View {
                 model.conversationActive = conversation
                 let t0 = Date()
                 let heard: String
-                do { heard = try await voice.listen() } catch { self.error = error.localizedDescription; return }
+                endedBy = .pause
+                UsageRecorder.shared.record("jarvis", "diktat gestartet", kind: "diktat")
+                do { heard = try await voice.listen() } catch {
+                    UsageRecorder.shared.record("jarvis", "fehler", kind: "diktat", error: error.localizedDescription)
+                    self.error = error.localizedDescription; return
+                }
                 if Task.isCancelled { return }
+                let end = endedBy
+                endedBy = .pause
+                UsageRecorder.shared.content("jarvis", "diktiert", session: nil, kind: "diktat", text: heard)
+                if end != .pause {
+                    // stop button: the words go into the field; send button: typed and heard go out together
+                    let o = JarvisDictation.outcome(heard: heard, end: end, typed: input)
+                    input = o.field
+                    if let q = o.ask {
+                        await ask(q, byVoice: true, trigger: kind, t0: t0)
+                        if speakAnswers { await voice.waitUntilSpoken() }
+                    } else if !o.field.isEmpty {
+                        inputFocused = true
+                    }
+                    return
+                }
                 if heard.isEmpty {
                     // a conversation ends after two silent turns in a row
                     silent += 1

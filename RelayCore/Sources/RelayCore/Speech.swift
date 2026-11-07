@@ -444,3 +444,55 @@ public enum ReadAloud {
         messages.last { $0.role == "assistant" && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 }
+
+/// Jarvis per Sprache (2026-11-07, „Jarvis übernimmt die Aufnahme nicht, Senden geht nicht“): Wie die Aufnahme endet,
+/// entscheidet, was mit dem Gehörten passiert. Bisher brach der rote Stopp-Knopf die ganze Sprachrunde ab und warf das
+/// Gehörte weg; einen Weg ins Schreibfeld gab es nicht.
+public enum JarvisDictation {
+    public enum End: Sendable, Equatable {
+        /// Die Pause nach dem letzten Wort beendete die Aufnahme (freihändig): gleich fragen.
+        case pause
+        /// Stopp-Knopf während der Aufnahme: der Text kommt ins Schreibfeld, zum Bearbeiten und Senden.
+        case stop
+        /// Senden-Knopf während der Aufnahme: Getipptes und Gehörtes gehen zusammen raus.
+        case send
+    }
+
+    public struct Outcome: Equatable, Sendable {
+        /// Was Jarvis gefragt wird (nil = nichts).
+        public let ask: String?
+        /// Der neue Inhalt des Schreibfelds.
+        public let field: String
+        /// Die Sprachrunde endet (kein erneutes Zuhören im Gesprächsmodus).
+        public let endsConversation: Bool
+    }
+
+    public static func outcome(heard: String, end: End, typed: String) -> Outcome {
+        let heard = heard.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch end {
+        case .pause:
+            return Outcome(ask: heard.isEmpty ? nil : heard, field: typed, endsConversation: false)
+        case .stop:
+            return Outcome(ask: nil, field: DictationText.join(typed, heard), endsConversation: true)
+        case .send:
+            let q = DictationText.join(typed, heard).trimmingCharacters(in: .whitespacesAndNewlines)
+            return Outcome(ask: q.isEmpty ? nil : q, field: q.isEmpty ? typed : "", endsConversation: true)
+        }
+    }
+
+    /// Senden geht, wenn etwas im Feld steht oder während der Aufnahme schon etwas erkannt ist.
+    public static func canSend(typed: String, listening: Bool, partial: String, asking: Bool) -> Bool {
+        guard !asking else { return false }
+        if !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        return listening && !partial.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Erklärung, solange der Verlauf leer ist (Martin wusste nicht, was Jarvis ist).
+    public static let intro = "Jarvis ist der eingebaute Sprachassistent von Relay. Er beantwortet Fragen zu deinem PC und deinen Sitzungen über das Gateway und kann Sitzungen Aufträge geben. Er ist kein Agent von Christopher."
+
+    /// Bedienhinweis darunter.
+    public static let howTo = "Tippe aufs Mikrofon und sprich, z. B. „Was wartet auf mich?“. Nach einer kurzen Pause fragt Jarvis von selbst. Der rote Knopf beendet die Aufnahme und legt den Text ins Schreibfeld, dort kannst du ihn ändern und senden. Mit dem Kurzbefehl „Jarvis in Relay“ geht das auch per Siri oder Aktionstaste."
+
+    /// Was der UI-Test „hört“ (kein Mikrofon im Simulator).
+    public static let uiTestPhrase = "Welche Sitzung braucht mich gerade?"
+}

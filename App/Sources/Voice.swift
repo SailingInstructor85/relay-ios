@@ -29,6 +29,8 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private var segmentText = ""
     private var committed = ""
     private var restarts = 0
+    /// UI-Test: kein Mikrofon im Simulator, `listen` „hört“ `JarvisDictation.uiTestPhrase`, bis ein Knopf es beendet.
+    private var fake = false
 
     private let synth = AVSpeechSynthesizer()
     private var pendingUtterances = 0
@@ -44,6 +46,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     /// nil when speech recognition and the microphone may be used, else a message for the user.
     func authorize() async -> String? {
+        if UITestMode.active { return nil }  // no permission dialogs in UI tests; listen() fakes the recording
         let speech: SFSpeechRecognizerAuthorizationStatus = await withCheckedContinuation { c in
             SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) }
         }
@@ -68,6 +71,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     func listen(locale: String? = nil) async throws -> String {
         if listening || finishListening != nil { endListening() }
         stopSpeaking()
+        if UITestMode.active { return await fakeListen() }
         let locale = locale ?? SpeechPrefs.recognitionLocale
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)), recognizer.isAvailable else {
             throw RelayErrorText("Spracherkennung für \(locale) ist gerade nicht verfügbar.")
@@ -107,6 +111,20 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     }
 
     func stopListening() { endListening() }
+
+    private func fakeListen() async -> String {
+        fake = true
+        committed = ""; partial = ""; segmentText = ""; hyps = []; hypConf = []
+        listening = true
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard let self, self.listening, self.fake else { return }
+            self.segmentText = JarvisDictation.uiTestPhrase
+            self.partial = JarvisDictation.uiTestPhrase
+        }
+        let text = await withCheckedContinuation { c in finishListening = c }
+        return applyCorrections(text)
+    }
 
     /// A fresh recognition request and task; the audio tap feeds whichever request `sink` holds.
     private func startSegment() {
@@ -165,8 +183,12 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         guard listening || finishListening != nil else { return }
         listening = false
         watchdog?.cancel(); watchdog = nil
-        engine.stop()
-        engine.inputNode.removeTap(onBus: 0)
+        if fake {
+            fake = false
+        } else {
+            engine.stop()
+            engine.inputNode.removeTap(onBus: 0)
+        }
         let text = Self.join(committed, bestSegmentText())
         abortSegment()
         finishListening?.resume(returning: text)
