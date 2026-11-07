@@ -195,6 +195,7 @@ final class AppModel: ObservableObject {
     func setForeground(_ fg: Bool) {
         foreground = fg
         if fg {
+            PhoneAccessStore.shared.foregroundCame()
             if oneShot != nil { link?.close() } // a background check's link: the main loop takes over
             else if link?.isOpen != true && state != .connecting { reconnect() }
         }
@@ -258,6 +259,7 @@ final class AppModel: ObservableObject {
     func backgroundCheck() async -> Bool {
         guard await connectOnce(timeout: 20) else { releaseBackground(); return false }
         try? await Task.sleep(nanoseconds: 1_500_000_000) // late events after hello_ok
+        await PhoneAccessStore.shared.waitIdle(max: 20)    // Telefonzugriff: laufende Lesebefehle zu Ende bringen
         releaseBackground()
         return true
     }
@@ -367,6 +369,7 @@ final class AppModel: ObservableObject {
             Approvals.shared.flushReplay()
             AppLog.shared.flushSaved()
             Task { await Approvals.shared.reconcile() }
+            Task { await PhoneAccessStore.shared.reconcile() }  // Telefonzugriff: Schalter melden, offene Befehle holen
         case "session_started":
             if let s = Session.from(ev["session"]) { replacePlaceholder(for: s); sessions[s.key] = s.keepingPC(from: sessions[s.key]) }
         case "session_state":
@@ -427,6 +430,8 @@ final class AppModel: ObservableObject {
             Approvals.shared.onEvent(ev, replay: replay)
         case "location_request":
             Locator.shared.onRequest(ev, replay: replay)
+        case "phone_command", "phone_command_resolved":
+            PhoneAccessStore.shared.onEvent(ev, replay: replay)
         case "desktop_sleep":
             desktopSleepAt = Date(timeIntervalSince1970: ev.num("at", Date().timeIntervalSince1970))
         case "routine_run":

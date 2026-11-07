@@ -53,6 +53,11 @@ iPhone 16 Pro (iOS 17 oder neuer).
   gerade ein Terminal am PC die Sitzung zeigt (nur Anzeige). Läuft eine Sitzung am PC als nacktes `claude` ohne tmux,
   liest das Handy nur mit: Nachrichten warten im Postausgang, ein Hinweis steht über der Eingabe, der Umzug in tmux
   nur auf Wunsch mit Bestätigung. Damit das nicht nötig ist, `claude` am PC per Wrapper in tmux starten: `docs/pc-tmux.md`.
+- **Telefonzugriff für Agenten** (Einstellungen → „Telefonzugriff für Agenten“, Stufe 1, nur Lesen): Agenten fragen
+  über das Gateway Geräteinfos, Dateien aus freigegebenen Ordnern der Dateien-App (auch Google Drive), die neuesten
+  Fotos oder die Zwischenablage ab. Jeder Bereich hat einen Schalter (anfangs aus), Lesen läuft dann ohne Rückfrage,
+  jede Anfrage steht im Verlauf. Der Not-Aus lehnt alles ab. Am PC: `notifyd phone do --list`. Ist Relay zu, wartet der
+  Befehl; nach 5 Minuten kommt einmal ein Hinweis, Relay zu öffnen. Details: `docs/telefonzugriff.md`.
 - **Sperre mit Face ID** (Einstellungen → Sicherheit)
 - **Nutzungsprotokoll und „Fehler melden“** (Einstellungen → Nutzungsprotokoll, standardmäßig an): Die App zeichnet
   auf, was du tust (Ansicht, Aktion, Sitzung, Verbindung, Fehler), ohne Inhalte, von Text, Diktat und Fotos nur Art
@@ -100,7 +105,7 @@ Tests unter Linux: `cd RelayCore && swift test`. Ende-zu-Ende-Test gegen ein Gat
 - `docs/` gehört zum Repo und wird je Version mitgepflegt: `docs/nachtlog.md` (was wann gebaut wurde, Entscheidungen,
   Risiken), `docs/feature-parity.md` (Abgleich mit der Android-App), `docs/rueckfragen.md`, `docs/routinen.md`,
   `docs/pc-tmux.md` (Handy und PC in derselben Sitzung, Wrapper und tmux-Einstellung für den PC), `docs/telefonzugriff.md`
-  (Konzept: Agenten greifen über Relay aufs iPhone zu, geplant für 0.4.0), `docs/testbericht.md`. Der Release-Text verlinkt README, Nachtlog und Changelog im Stand des Tags.
+  (Agenten greifen über Relay aufs iPhone zu, Stufe 1 seit 0.4.0), `docs/testbericht.md`. Der Release-Text verlinkt README, Nachtlog und Changelog im Stand des Tags.
 - Lokal prüfen (nur Python nötig): `python3 scripts/changelog_section.py 0.3.5 --release --repo <owner/repo> --tag v0.3.5`
   und `python3 scripts/make_source.py <ipa> 0.3.5 1 <owner/repo> v0.3.5 source.json CHANGELOG.md`.
 

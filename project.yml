@@ -35,7 +35,7 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSLocalNetworkUsageDescription: Relay verbindet sich per SSH mit deinem Desktop im lokalen Netz.
         NSCameraUsageDescription: Mit der Kamera aufgenommene Fotos können an eine Sitzung auf dem Desktop geschickt werden.
-        NSPhotoLibraryUsageDescription: Fotos können an eine Sitzung auf dem Desktop geschickt werden.
+        NSPhotoLibraryUsageDescription: Fotos können an eine Sitzung auf dem Desktop geschickt werden. Mit Telefonzugriff lesen Agenten die neuesten Fotos, wenn du den Bereich Fotos einschaltest.
         NSMicrophoneUsageDescription: Relay hört zu, wenn du aufs Mikrofon tippst oder im Sprachmodus antwortest.
         NSSpeechRecognitionUsageDescription: Deine Sprache wird auf dem iPhone in Text umgewandelt und an Jarvis, eine Sitzung oder als Antwort auf eine Rückfrage geschickt.
         NSLocationWhenInUseUsageDescription: Relay sendet deinen Standort einmalig an den Desktop, wenn du eine Standortanfrage in der Mitteilung bestätigst.

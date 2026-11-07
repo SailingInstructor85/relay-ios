@@ -10,7 +10,8 @@ Control files in $MOCK_DIR/control (the UI tests or the CI script create them):
   offline        new connections end at once with an error; running ones are cut
   kick           running connections end (the file is removed by the first one)
   trigger_<n>    emit a live event once: finish_busy, new_input, notice, rueckfrage, send_request, pc_detach, pc_attach,
-                 cloud, desktop_sleep, location, end_session, routine_run
+                 cloud, desktop_sleep, location, end_session, routine_run,
+                 phone_command, phone_command_2
   routines_off   the team is not configured: routines, routine_run, routine_set, team_send answer enabled: false
 Logs: $MOCK_DIR/rpc.jsonl (every request received), $MOCK_DIR/mock.log (text).
 """
@@ -900,6 +901,21 @@ def rpc_location_result(p):
     return {}
 
 
+def rpc_phone_caps(p):  # Telefonzugriff: Schalter der App (Not-Aus, Bereiche, Ordner)
+    mutate(lambda st: st["sent"].append({"phone_caps": p}))
+    return {"killswitch": bool(p.get("killswitch")), "areas": p.get("areas", []), "folders": p.get("folders", []), "ts": time.time()}
+
+
+def rpc_phone_command_pending(p):
+    return {"commands": []}
+
+
+def rpc_phone_command_result(p):
+    mutate(lambda st: st["sent"].append({"phone_command_result": p}))
+    add_event("phone_command_resolved", {"request_id": p.get("request_id"), "ok": bool(p.get("ok"))})
+    return {"request_id": p.get("request_id"), "status": "done" if p.get("ok") else "failed"}
+
+
 def rpc_inbox_put(p):
     return {"stored": len(p.get("items", [])), "duplicates": 0}
 
@@ -1089,6 +1105,10 @@ def trigger(name):
                              "source": "relay-ios", "tag": "rueckfrage:relay-ios:R1"})
     elif name == "send_request":
         add_event("send_request", {"request_id": "req-1", "kind": "mail", "executor": "desktop", "text": "Hallo Frau Muster,\n\nanbei die Rechnung.", "summary": "E-Mail an frau@example.com senden", "requested_by": "Jarvis", "expires_at": time.time() + 3600})
+    elif name in ("phone_command", "phone_command_2"):  # Telefonzugriff: ein Agent fragt Geräteinfos
+        add_event("phone_command", {"request_id": "pc-2" if name.endswith("_2") else "pc-1", "command": "device_info",
+                                    "args": {}, "requested_by": "Jarvis", "reason": "Akkustand prüfen",
+                                    "needs_confirm": False, "expires_at": time.time() + 600})
     elif name == "cloud":
         out({"type": "cloud_sessions", **cloud_payload()})
     elif name == "desktop_sleep":

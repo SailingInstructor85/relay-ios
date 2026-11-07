@@ -1,6 +1,8 @@
 # Telefonzugriff für Agenten (Konzept für v0.4.0)
 
-Stand: 7. November 2026, Nachtbau 10:51. Nur Konzept, kein App-Code. Gebaut wird erst nach Martins Freigabe, in Stufen.
+Stand: 7. November 2026. Konzept aus dem Nachtbau 10:51, von Martin am 7. November freigegeben. **Stufe 1 ist seit
+Version 0.4.0 gebaut** (Nachtbau 19:04, siehe „Umsetzung Stufe 1“ unten). Stufe 2 und 3 erst nach Martins Rückmeldung
+zu Stufe 1.
 
 ## Ziel
 
@@ -147,7 +149,32 @@ in „unsicher“ habe ich nicht am Gerät geprüft.
 | 2 | URL-Schema, `shortcut_run` mit Rücksprung, Freigabeliste der Kurzbefehle, App Intent „Ergebnis an Relay“ | 1 Nachtbau, dazu ein Test am Gerät durch Martin (x-callback ist im Simulator nur teilweise prüfbar) |
 | 3 | Bestätigungskarten, Kalender, Erinnerungen, Kontakte, `files_put`, `photos_save`, `clipboard_set` | 1 bis 2 Nachtbauten |
 
-## Offene Entscheidungen für Martin
+## Entscheidungen (Martin, 7. November 2026)
+
+Alle fünf Fragen unten mit Ja beantwortet: „Lösung bei Sönke“ entfällt; Stufe 1 mit Geräteinfos, Ordnern und Fotos,
+ohne Kalender und Kontakte; Google Drive nur über die Ordnerfreigabe der Dateien-App, keine Google-API und keine
+Zugangsdaten in Relay; Lesen im einmal freigegebenen Bereich ohne Einzelbestätigung, aber mit Protokoll, Schreiben immer
+mit Bestätigung; das Gateway erinnert einmal je Befehl, Relay zu öffnen, wenn ein Befehl länger als 5 Minuten wartet,
+nicht in den Ruhezeiten.
+
+## Umsetzung Stufe 1 (Version 0.4.0)
+
+- **App:** Einstellungen → „Telefonzugriff für Agenten“: Not-Aus ganz oben, Verlauf (30 Tage, ohne Inhalte), je ein
+  Schalter für Geräteinfos, Ordner, Fotos und Zwischenablage (alle anfangs aus), Ordnerfreigabe per Auswahldialog mit
+  kurzem Namen (Umbenennen und Entfernen über langes Drücken). Befehle: `device_info`, `files_list`, `files_get`,
+  `photos_recent`, `photos_get`, `clipboard_get` (nur bei geöffneter App; kommt der Befehl im Hintergrund, wartet er,
+  bis Relay vorn ist). Prüfung in RelayCore (`PhonePolicy`, `PhoneCatalog`, `PhonePaths`, `FolderNames`, `PhoneLog`).
+- **Gateway** (`~/relay`, `gateway/src/notifyd/phonecmd.py`): RPCs `phone_command`, `phone_command_status`,
+  `phone_command_catalog`, `phone_command_pending`, `phone_command_result`, `phone_caps`; Ereignisse `phone_command`
+  und `phone_command_resolved`; Protokoll unter `~/.local/share/notifyd/telefonzugriff/`; Erinnerung nach 5 Minuten.
+- **Agenten:** `notifyd phone do <befehl> [--arg schlüssel=wert …] --reason "…" [--wait 120]`, `notifyd phone do --list`,
+  MCP-Werkzeug `phone_do`. Beispiel: `notifyd phone do files_list --arg folder=scans --reason "Rechnung suchen"`.
+- **Abweichungen vom Konzept:** Dateien höchstens 50 MB (die vorhandene Upload-Grenze des Gateways), nicht 100 MB. Der
+  Not-Aus sitzt nur in den Einstellungen, nicht zusätzlich im Freigaben-Streifen. Über 30 Anfragen je Stunde und
+  Agent lehnen Gateway und App ab (`rate_limit`), statt nachzufragen. Fotos tragen den Ort auf drei Nachkommastellen
+  gerundet (etwa 100 m).
+
+## Offene Entscheidungen für Martin (beantwortet, siehe oben)
 
 1. **Was meinte „Lösung bei Sönke“ im Diktat?** Empfehlung: kurz sagen, ob das ein Vorbild (eine App oder Lösung bei
    jemandem) ist; bis dahin baut Stufe 1 ohne Bezug darauf.

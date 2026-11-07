@@ -174,6 +174,7 @@ Spalten: Nr, Funktion, was sie tut, rpc und Events (Parameter), Android-Quellen,
 | H6 | Wecker mit Briefing | AlarmManager, Vollbild, Brief per TTS auf Alarm-Stream, Snooze | Alarm.kt, AlarmService.kt, AlarmActivity.kt, AlarmSettings.kt, AlarmIcons.kt | fehlt | X auf Android-Art (kein beliebiger Alarmdienst; mit iOS 26 AlarmKit eingeschränkt möglich, Brief selbst ist I) |
 | H7 | Shizuku-Shell | Flugmodus, WLAN, Selbstinstallation | Shell.kt, PhoneControls.kt, Updater.kt | fehlt | X (Android-spezifisch) |
 | H8 | Akkustatistik | Statistik an `voice_timing` | PhoneStats.kt | fehlt | X/irrelevant |
+| H9 | Telefonzugriff für Agenten (nur iOS, 0.4.0) | Agenten lesen über das Gateway Geräteinfos, freigegebene Ordner, Fotos, Zwischenablage; Schalter je Bereich, Not-Aus, Verlauf | rpc `phone_command`, `phone_command_result`, `phone_command_pending`, `phone_caps`; Events `phone_command`, `phone_command_resolved` (`docs/telefonzugriff.md`) | vorhanden, Stufe 1 (A: PhoneAccess.swift, C: PhoneAccess.swift) | K, nur Lesen; Stufe 2 (Kurzbefehle) und 3 (Schreiben) offen |
 
 ### 2.9 Funktionen mit Zusatzinfrastruktur (I)
 

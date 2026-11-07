@@ -398,6 +398,45 @@ final class InfoTests: RelayTestCase {
         shot("standortanfrage")
     }
 
+    func test26_PhoneAccess() {
+        // Telefonzugriff Stufe 1: Bereich Geräteinfos einschalten (phone_caps), ein Befehl vom Gateway wird ohne
+        // Rückfrage beantwortet und steht im Verlauf; mit Not-Aus lehnt die App ab.
+        launchConnected()
+        mainMenu("Einstellungen")
+        settle(1)
+        reveal("Telefonzugriff für Agenten")
+        tapID("phoneAccessLink")
+        settle(1)
+        expect("Not-Aus")
+        switchOn("phoneArea-device")
+        XCTAssertTrue(mockReceived("phone_caps", where: { p in (p["areas"] as? [String])?.contains("device") == true }, timeout: 10),
+                      "phone_caps ohne Geräteinfos")
+        shot("telefonzugriff")
+        ctl("trigger_phone_command")
+        XCTAssertTrue(mockReceived("phone_command_result", where: { p in
+            (p["request_id"] as? String) == "pc-1" && (p["ok"] as? Bool) == true && (p["result"] as? [String: Any])?["ios"] != nil
+        }, timeout: 15), "keine Geräteinfos beim Gateway")
+        tapID("phoneLog")
+        expect("Geräteinfos")
+        expect("erledigt")
+        shot("telefonzugriff-verlauf")
+        back()
+        switchOn("phoneKill")
+        XCTAssertTrue(mockReceived("phone_caps", where: { p in (p["killswitch"] as? Bool) == true }, timeout: 10), "Not-Aus nicht gemeldet")
+        ctl("trigger_phone_command_2")
+        XCTAssertTrue(mockReceived("phone_command_result", where: { p in
+            (p["request_id"] as? String) == "pc-2" && (p["error"] as? String) == "killswitch"
+        }, timeout: 15), "Not-Aus hat den Befehl nicht abgelehnt")
+    }
+
+    /// Schaltet einen Schalter per Kennung ein (Tipp auf den Schalter rechts in der Zeile).
+    private func switchOn(_ ident: String) {
+        let sw = app.switches[ident]
+        guard sw.waitForExistence(timeout: 5) else { XCTFail("Schalter fehlt: \(ident)"); shot("fehlt-" + ident); return }
+        if (sw.value as? String) != "1" { sw.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap(); settle(0.8) }
+        XCTAssertEqual(sw.value as? String, "1", "Schalter nicht an: \(ident)")
+    }
+
     func test23_UsageLogAndReport() {
         // Nutzungsprotokoll: Abschnitt direkt unter „Status“, „Protokoll jetzt senden“ schickt usage_put ans Gateway,
         // „Fehler melden“ schickt Beschreibung und Ereignisse, ohne Haken keine Inhalte.

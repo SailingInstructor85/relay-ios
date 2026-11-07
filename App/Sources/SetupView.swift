@@ -67,6 +67,11 @@ struct SetupView: View {
                 ChatSettingsSection()
                 SpeechSettingsSection()
                 AgentSettingsSection()
+                Section("Telefonzugriff") {
+                    NavigationLink { PhoneAccessView() } label: { Label("Telefonzugriff für Agenten", systemImage: "iphone") }
+                        .accessibilityIdentifier("phoneAccessLink")
+                    Text(PhoneAccessStore.shared.statusLine).font(.caption).foregroundStyle(.secondary)
+                }
                 Section("Profil") {
                     NavigationLink { ProfileView() } label: { Label("Persönliche Angaben", systemImage: "person.text.rectangle") }
                     Text("Name, Adresse, E-Mail für Formulare, gespeichert auf dem Desktop (profile.json).").font(.caption).foregroundStyle(.secondary)
