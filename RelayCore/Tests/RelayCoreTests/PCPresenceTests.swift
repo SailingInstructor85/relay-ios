@@ -3,9 +3,12 @@ import XCTest
 
 /// Anzeige „am PC offen“ (2026-11-07) und Sitzung am PC ohne tmux.
 final class PCPresenceTests: XCTestCase {
+    /// Grundzeile einer lebenden Sitzung; Schlüssel aus `extra` ersetzen die der Grundzeile (ein JSON-Text mit doppelten
+    /// Schlüsseln liefert auf Linux den ersten Wert, darum werden die Objekte zusammengeführt statt verkettet).
     private func session(_ extra: String) -> Session {
-        let base = #""key":"claude:c1:s1","tool":"claude","alias":"c1","id":"s1","cwd":"/home/u/p","title":"t","state":"idle","alive":true"#
-        return Session.from(JSON.parse("{" + base + (extra.isEmpty ? "" : "," + extra) + "}")!)!
+        let base = #"{"key":"claude:c1:s1","tool":"claude","alias":"c1","id":"s1","cwd":"/home/u/p","title":"t","state":"idle","alive":true}"#
+        guard case .object(let b) = JSON.parse(base)!, case .object(let e) = JSON.parse("{" + extra + "}")! else { fatalError("Testdaten") }
+        return Session.from(.object(b.merging(e) { $1 }))!
     }
 
     func testPresenceFromTheList() {
