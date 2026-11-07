@@ -2,6 +2,14 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.6 (2026-11-07)
+
+**Neu**
+- Vorlesen auf Knopfdruck: Unter jeder Agentenantwort ein kleines Lautsprecher-Symbol, im Sitzungsmenü „Letzte Antwort vorlesen“. Während des Vorlesens erscheint über der Eingabe eine Leiste mit Pause, Weiter und Stopp. Die Wiedergabe läuft über den aktuellen Audioausgang, also auch über Bluetooth-Kopfhörer, mit der in den Einstellungen gewählten Stimme. Codeblöcke werden übersprungen („Codeblock ausgelassen“), Pfade nur beim Dateinamen genannt, Links als „Link“, Tabellen Zelle für Zelle.
+- Nur die Frage vorlesen: Enthält eine Antwort eine Rückfrage oder Entscheidung, liest „Frage vorlesen“ (Langdruck-Menü der Nachricht, Sitzungsmenü) nur die Frage mit Optionen und Empfehlung vor, nicht den Rest. Fragekarten der Sitzung und Rückfragen von Agenten unter „Hinweise“ haben den Knopf ebenfalls.
+- Routinen: Menü der Sitzungsliste → „Routinen“ zeigt die Routinen des Gateways mit Titel, Beschreibung, Zeitplan, nächstem und letztem Lauf, Schalter an/aus, Detailansicht mit „Jetzt ausführen“ und Link zur Sitzung des Handoffs, dazu die systemd-Timer des PCs (nur Anzeige). „Neue Routine…“ geht in Worten an den Chef-Agenten, der den Eintrag schreibt und zurückfragt. Routinen erscheinen auch in der App-Suche. Ist im Gateway kein Team eingerichtet, sagt die App das („Routinen im Gateway nicht eingerichtet“); die Einrichtung ist in der Dokumentation beschrieben.
+- Versionshinweise im Repo: `CHANGELOG.md` führt alle Versionen. Der Abschnitt der getaggten Version wird automatisch zum Release-Text auf GitHub und zur Versionsbeschreibung in SideStore („Neu in dieser Version“), mit Links auf README, Nachtlog und Changelog.
+
 ## 0.3.5 (2026-11-07)
 
 **Neu**
