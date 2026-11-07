@@ -2,6 +2,21 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.8 (2026-11-07)
+
+Braucht für Nutzungsprotokoll und „Fehler melden“ ein aktuelles Gateway (notifyd nach dem Update neu starten). Mit dem älteren Gateway bleibt das Protokoll auf dem iPhone und geht später mit.
+
+**Neu**
+- Nutzungsprotokoll (Einstellungen → Nutzungsprotokoll, standardmäßig an): Die App zeichnet auf, was du tust (Ansicht geöffnet, Sitzung, Tastatur, gesendet, Postausgang, Diktat, Anhang, Stopp), dazu Verbindung, Start nach einem Absturz und Fehler. Ohne Inhalte: von Text, Diktat und Fotos nur Art und Länge. Das Protokoll geht nur an dein eigenes Gateway und bleibt 30 Tage. Bricht die Verbindung beim Senden ab, geht es beim nächsten Mal mit. Schalter zum Abstellen, „Protokoll jetzt senden“ und „Protokoll löschen“.
+- „Fehler melden“: kurze Beschreibung, dazu gehen die letzten 10 Minuten des Protokolls an den PC, wo ein Agent sie lesen und den Fehler nachstellen kann. Mit dem Haken „Inhalte mitsenden“ auch der Text, den du in diesen Minuten gesendet oder diktiert hast. Fotos nie, nur ihr Pfad.
+- Konzept „Telefonzugriff für Agenten“ für Version 0.4.0 (nur Dokumentation, noch keine Funktion): was Agenten über Relay am iPhone lesen und tun dürfen, mit welchen Freigaben und Bestätigungen.
+
+**Geändert**
+- Der Knopf „Tastatur ausblenden“ sitzt jetzt rechts in der Zeile mit den Schnellantworten über dem Eingabefeld und nicht mehr in der Leiste über der Tastatur. Er erscheint nur bei offener Tastatur; ohne Schnellantworten bekommt er eine eigene schmale Zeile.
+
+**Behoben**
+- Der Knopf „Tastatur ausblenden“ verdeckte Senden und Mikrofon teilweise. Beide sind bei offener Tastatur wieder frei antippbar.
+
 ## 0.3.7 (2026-11-07)
 
 Braucht für das Symbol „Am PC offen“ ein aktuelles Gateway (notifyd nach dem Update neu starten). Die App läuft auch mit dem älteren Gateway, zeigt das Symbol dann nur bei Sitzungen ohne tmux.
