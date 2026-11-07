@@ -199,10 +199,46 @@ struct ChatView: View {
         .accessibilityIdentifier("deskHint")
     }
 
+    /// Knopf „Tastatur ausblenden“: am rechten Ende der Schnellantwort-Zeile statt in der Leiste über der Tastatur, wo
+    /// er Senden und Mikrofon teilweise verdeckte (Martin, 2026-11-07). Tippfläche mindestens 44 pt.
+    private var hideKeyboardButton: some View {
+        Button { focused = false } label: {
+            Image(systemName: "keyboard.chevron.compact.down").font(.body)
+                .frame(minWidth: KeyboardBar.minTapSize, minHeight: KeyboardBar.minTapSize)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).foregroundStyle(Color.accentColor)
+        .accessibilityLabel(KeyboardBar.hideLabel).accessibilityIdentifier("hideKeyboard")
+    }
+
+    /// Schnellantworten und rechts daneben der Tastatur-Knopf; ohne Schnellantworten nur der Knopf in einer schmalen Zeile.
+    @ViewBuilder private func quickRow(_ quick: [String]) -> some View {
+        let row = KeyboardBar.row(quickCount: quick.count, keyboardOpen: focused, slashSuggestions: !slashSuggestions.isEmpty)
+        if row.visible {
+            HStack(spacing: 4) {
+                if row.quickReplies {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(quick, id: \.self) { q in
+                                Button(q) { Task { await send(q) } }.font(.callout)
+                                    .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.small)
+                                    .disabled(session == nil)
+                            }
+                        }.padding(.horizontal)
+                    }
+                } else {
+                    Spacer(minLength: 0)
+                }
+                if row.hideButton { hideKeyboardButton.padding(.trailing, 8) }
+            }
+        }
+    }
+
     private var inputBar: some View {
         VStack(spacing: 6) {
             if let s = session, DeskTerminal.isDeskTerminal(s) { deskHint }
             if !slashSuggestions.isEmpty {
+                quickRow([])
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(slashSuggestions, id: \.self) { c in
@@ -214,18 +250,7 @@ struct ChatView: View {
                     }.padding(.horizontal)
                 }.frame(maxHeight: 190)
             } else {
-                let quick = ChatPrefs.quickReplies
-                if !quick.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(quick, id: \.self) { q in
-                                Button(q) { Task { await send(q) } }.font(.callout)
-                                    .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.small)
-                                    .disabled(session == nil)
-                            }
-                        }.padding(.horizontal)
-                    }
-                }
+                quickRow(ChatPrefs.quickReplies)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(slashChips, id: \.self) { c in
@@ -254,17 +279,9 @@ struct ChatView: View {
                     .submitLabel(returnSends ? .send : .return)
                     .onSubmit { if returnSends && canSend { Task { await sendTapped() } } }
                     .padding(8).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
-                    .toolbar {
-                        // die Leiste über der Tastatur: ein Knopf, der sie wieder schließt (sonst bleibt sie beim Lesen offen)
-                        ToolbarItemGroup(placement: .keyboard) {
-                            Spacer()
-                            Button { focused = false } label: { Image(systemName: "keyboard.chevron.compact.down") }
-                                .accessibilityLabel(KeyboardBar.hideLabel).accessibilityIdentifier("hideKeyboard")
-                        }
-                    }
                 Button { Task { await toggleDictation() } } label: {
                     Image(systemName: voice.listening ? "mic.fill" : "mic").font(.title3).foregroundStyle(voice.listening ? Color.red : Color.accentColor)
-                }.accessibilityLabel(voice.listening ? "Diktat beenden" : "Diktieren")
+                }.accessibilityLabel(voice.listening ? "Diktat beenden" : "Diktieren").accessibilityIdentifier("chatMic")
                 Button { Task { await sendTapped() } } label: {
                     Image(systemName: sending ? "hourglass" : "arrow.up.circle.fill").font(.system(size: 30))
                 }.disabled(!canSend).accessibilityLabel("Senden").accessibilityIdentifier("chatSend")

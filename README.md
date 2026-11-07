@@ -12,7 +12,7 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Anheften, „Erledigt“ (Wischen nach rechts) und Schließen (Wischen nach links)
 - **Chat pro Sitzung:** Transkript mit Nachladen älterer Nachrichten, Live-Anhänge (`watch`), eingeklappte
   Werkzeugaufrufe, Codeblöcke, Statuszeile während die Sitzung arbeitet. Lesemodus über den Knopf oben rechts
-  (Leisten und Tastatur weg, der Verlauf füllt den Bildschirm). Die Tastatur schließt ein Knopf in der Leiste über ihr,
+  (Leisten und Tastatur weg, der Verlauf füllt den Bildschirm). Die Tastatur schließt ein Knopf rechts in der Schnellantwort-Zeile über dem Eingabefeld,
   ein Tipp in den Verlauf oder Wischen nach unten.
 - **Antwortkarten** für Fragen, Auswahllisten (`/model`, Berechtigungsabfragen, Plan-Freigabe) und Panels (`/usage`,
   `/status`), mit `expect_menu`, damit eine veraltete Karte keinen neuen Dialog beantwortet

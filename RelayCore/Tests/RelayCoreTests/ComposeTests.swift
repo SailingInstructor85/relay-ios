@@ -279,6 +279,27 @@ final class KeyboardBarTests: XCTestCase {
     func testHideButtonLabel() {
         XCTAssertEqual(KeyboardBar.hideLabel, "Tastatur ausblenden")
     }
+
+    func testRowShowsHideButtonOnlyWithOpenKeyboard() {
+        let open = KeyboardBar.row(quickCount: 3, keyboardOpen: true, slashSuggestions: false)
+        XCTAssertEqual(open, KeyboardBar.Row(quickReplies: true, hideButton: true))
+        let closed = KeyboardBar.row(quickCount: 3, keyboardOpen: false, slashSuggestions: false)
+        XCTAssertEqual(closed, KeyboardBar.Row(quickReplies: true, hideButton: false))
+        XCTAssertTrue(closed.visible)
+    }
+
+    func testRowWithoutQuickRepliesIsOwnSlimRowOnlyWhileTyping() {
+        let typing = KeyboardBar.row(quickCount: 0, keyboardOpen: true, slashSuggestions: false)
+        XCTAssertEqual(typing, KeyboardBar.Row(quickReplies: false, hideButton: true))
+        XCTAssertTrue(typing.visible)
+        XCTAssertFalse(KeyboardBar.row(quickCount: 0, keyboardOpen: false, slashSuggestions: false).visible)
+    }
+
+    func testSlashSuggestionsHideQuickRepliesButKeepTheButton() {
+        let r = KeyboardBar.row(quickCount: 3, keyboardOpen: true, slashSuggestions: true)
+        XCTAssertEqual(r, KeyboardBar.Row(quickReplies: false, hideButton: true))
+        XCTAssertGreaterThanOrEqual(KeyboardBar.minTapSize, 44)
+    }
 }
 
 final class ReadingModeTests: XCTestCase {

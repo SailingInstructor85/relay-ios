@@ -414,9 +414,27 @@ public enum RunningText {
 
 // MARK: Tastatur und Lesemodus
 
-/// Die Leiste über der Tastatur im Chat (2026-11-07): ein Knopf schließt sie wieder. Text und Diktat bleiben dabei.
+/// Knopf „Tastatur ausblenden“ im Chat (2026-11-07): Er schließt die Tastatur, Text und Diktat bleiben dabei.
+/// Seit 0.3.8 sitzt er nicht mehr in der Leiste über der Tastatur (dort lag er über Senden und Mikrofon), sondern am
+/// rechten Ende der Schnellantwort-Zeile. Ohne Schnellantworten bekommt er eine eigene schmale Zeile darüber.
 public enum KeyboardBar {
     public static let hideLabel = "Tastatur ausblenden"
+    /// Mindestgröße der Tippfläche (Apple: 44 pt).
+    public static let minTapSize: Double = 44
+
+    /// Was die Zeile über dem Eingabefeld zeigt.
+    public struct Row: Equatable, Sendable {
+        public let quickReplies: Bool, hideButton: Bool
+        public init(quickReplies: Bool, hideButton: Bool) { self.quickReplies = quickReplies; self.hideButton = hideButton }
+        /// Die Zeile erscheint überhaupt nur, wenn sie etwas zeigt.
+        public var visible: Bool { quickReplies || hideButton }
+    }
+
+    /// Schnellantworten stehen, sofern eingestellt und keine Slash-Vorschläge offen sind. Der Knopf erscheint nur bei
+    /// offener Tastatur, auch während Slash-Vorschläge offen sind.
+    public static func row(quickCount: Int, keyboardOpen: Bool, slashSuggestions: Bool) -> Row {
+        Row(quickReplies: quickCount > 0 && !slashSuggestions, hideButton: keyboardOpen)
+    }
 }
 
 /// Lesemodus im Chat (2026-11-07): Navigationsleiste, Eingabezeile und Tastatur verschwinden, der Verlauf füllt den

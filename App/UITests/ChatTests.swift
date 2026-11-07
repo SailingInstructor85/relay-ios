@@ -200,13 +200,21 @@ final class ChatTests: RelayTestCase {
     }
 
     func test12_HideKeyboard() {
-        // Tastatur offen, Knopf in der Leiste über der Tastatur schließt sie, der getippte Text bleibt im Feld.
+        // Tastatur offen: der Knopf sitzt rechts in der Schnellantwort-Zeile über dem Eingabefeld (seit 0.3.8), verdeckt
+        // weder Senden noch Mikrofon und schließt die Tastatur; der getippte Text bleibt im Feld.
         launchConnected()
         openSession("API Refactoring")
         typeInto("chatInput", "Tastatur zu")
         settle(0.8)
         shot("tastatur-offen")
-        XCTAssertTrue(app.keyboards.count > 0 || id("hideKeyboard").exists, "Tastatur nicht offen")
+        XCTAssertTrue(id("hideKeyboard").waitForExistence(timeout: 4), "Knopf Tastatur ausblenden fehlt bei offener Tastatur")
+        let hide = id("hideKeyboard").frame, send = id("chatSend").frame, mic = id("chatMic").frame, field = id("chatInput").frame
+        XCTAssertFalse(hide.intersects(send), "Knopf überdeckt Senden: \(hide) / \(send)")
+        XCTAssertFalse(hide.intersects(mic), "Knopf überdeckt Mikrofon: \(hide) / \(mic)")
+        XCTAssertLessThanOrEqual(hide.maxY, field.minY + 1, "Knopf liegt nicht über dem Eingabefeld: \(hide) / \(field)")
+        XCTAssertGreaterThanOrEqual(hide.height, 43, "Tippfläche zu klein: \(hide)")
+        XCTAssertTrue(id("chatSend").isHittable, "Senden bei offener Tastatur nicht antippbar")
+        XCTAssertTrue(id("chatMic").isHittable, "Mikrofon bei offener Tastatur nicht antippbar")
         tapID("hideKeyboard")
         settle(1)
         shot("tastatur-zu")
