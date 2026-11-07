@@ -359,9 +359,10 @@ final class AppModel: ObservableObject {
             AppLog.shared.flushSaved()
             Task { await Approvals.shared.reconcile() }
         case "session_started":
-            if let s = Session.from(ev["session"]) { replacePlaceholder(for: s); sessions[s.key] = s }
+            if let s = Session.from(ev["session"]) { replacePlaceholder(for: s); sessions[s.key] = s.keepingPC(from: sessions[s.key]) }
         case "session_state":
-            guard let s = Session.from(ev["session"]) else { return }
+            guard let fresh = Session.from(ev["session"]) else { return }
+            let s = fresh.keepingPC(from: sessions[fresh.key])  // Monitor-Ereignisse tragen kein pc_attached
             let prev = ev["prev_state"].string ?? sessions[s.key]?.state
             sessions[s.key] = s
             onStateChange(s, prev: prev, ev: ev, replay: replay)
@@ -378,6 +379,8 @@ final class AppModel: ObservableObject {
         case "session_done":
             let key = ev.str("session_key")
             sessions[key]?.asks = false
+        case "pc_attached":  // ein Terminal am PC hat die Sitzung geöffnet oder geschlossen: Anzeige „am PC offen“ (2026-11-07)
+            PCPresence.apply(ev, to: &sessions)
         case "wind_down":
             if ev.str("job") == windDownJob { windDownItems = WindDown.apply(ev, to: windDownItems) }
         case "wind_down_done":

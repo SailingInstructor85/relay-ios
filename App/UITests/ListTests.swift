@@ -185,6 +185,23 @@ final class ListTests: RelayTestCase {
         tap("Fertig", 3, exact: true, soft: true)
     }
 
+    func test12_PCOpenIndicator() {
+        // Symbol „Am PC offen“ in der Liste und im Chat-Kopf; folgt dem Ereignis pc_attached; nur Anzeige, keine Sperre.
+        launchConnected()
+        XCTAssertTrue(reveal("Nachtlauf planen"))
+        shot("liste-am-pc-offen")
+        XCTAssertTrue(has("Am PC offen", 5))  // das Symbol der Zeile „Nachtlauf planen“ (pc_attached: true)
+        openSession("Nachtlauf planen")
+        XCTAssertTrue(id("pcOpen").waitForExistence(timeout: 5))
+        XCTAssertFalse(id("deskHint").exists)  // in tmux: kein Hinweis, tippen geht
+        shot("chat-am-pc-offen")
+        ctl("trigger_pc_detach")
+        settle(2.5)
+        XCTAssertFalse(id("pcOpen").exists)
+        ctl("trigger_pc_attach")
+        XCTAssertTrue(id("pcOpen").waitForExistence(timeout: 6))
+    }
+
     func test10_OfflineList() {
         launchConnected()
         ctl("offline")

@@ -9,7 +9,7 @@ Environment:
 Control files in $MOCK_DIR/control (the UI tests or the CI script create them):
   offline        new connections end at once with an error; running ones are cut
   kick           running connections end (the file is removed by the first one)
-  trigger_<n>    emit a live event once: finish_busy, new_input, notice, rueckfrage, send_request,
+  trigger_<n>    emit a live event once: finish_busy, new_input, notice, rueckfrage, send_request, pc_detach, pc_attach,
                  cloud, desktop_sleep, location, end_session, routine_run
   routines_off   the team is not configured: routines, routine_run, routine_set, team_send answer enabled: false
 Logs: $MOCK_DIR/rpc.jsonl (every request received), $MOCK_DIR/mock.log (text).
@@ -191,7 +191,7 @@ def session_defs():
         K["busy"]: dict(title="Bench-Skript reparieren", cwd=f"{W}", state="busy", alive=True, attachable=True,
                         tmux_session="c1-webapp-3fa1", last_activity=n - 20, last_message="Ich laufe gerade die Benchmarks durch und fasse die Ergebnisse gleich zusammen.",
                         context={"tokens": 120000, "window": 1000000, "pct": 12, "level": "ok", "model": "claude-opus-5-5"}),
-        K["idle"]: dict(title="API Refactoring", cwd=f"{W}", state="idle", alive=True, attachable=True, tmux_session="c1-webapp-7b2e",
+        K["idle"]: dict(title="API Refactoring", cwd=f"{W}", state="idle", alive=True, attachable=True, tmux_session="c1-webapp-7b2e", pc_attached=False,
                         last_activity=n - 600, last_message="Fertig. Die API ist umgebaut, alle 42 Tests laufen durch.",
                         context={"tokens": 310000, "window": 1000000, "pct": 31, "level": "large", "model": "claude-opus-5-5"}),
         K["ask"]: dict(title="Abrechnung einrichten", cwd="/home/dev/workspace/billing", state="needs_input", alive=True, attachable=True,
@@ -217,8 +217,9 @@ def session_defs():
                          last_activity=n - 1500, last_message="Ein Dialog ist offen."),
         K["form"]: dict(title="Formular im Terminal", cwd=f"{W}", state="needs_input", alive=True, attachable=True, tmux_session="c1-webapp-f0rm",
                         last_activity=n - 300, last_message="Welche Groesse?"),
+        # ein Terminal am PC zeigt die Sitzung gerade (pc_attached): die App zeigt das Symbol „Am PC offen“
         K["pc"]: dict(title="Nachtlauf planen", cwd=f"{W}", state="idle", alive=True, attachable=True, tmux_session="c1-webapp-pcpc",
-                      last_activity=n - 2400, last_message="Der Plan steht, ich warte auf dein Zeichen."),
+                      last_activity=n - 2400, last_message="Der Plan steht, ich warte auf dein Zeichen.", pc_attached=True),
         # am PC in einem Terminal ohne tmux: send wird abgelehnt, ausser mit move
         K["desk"]: dict(title="Skript ohne tmux", cwd=f"{W}", state="idle", alive=True, attachable=False, tmux_session=None,
                         last_activity=n - 3000, last_message="Das Skript laeuft im Terminal am PC."),
@@ -234,7 +235,7 @@ def full_session(key, d):
          "label": d.get("label", "Claude #1"), "cwd": d["cwd"], "title": d["title"], "state": d["state"], "alive": d["alive"],
          "attachable": d["attachable"], "tmux_session": d["tmux_session"], "last_activity": d["last_activity"],
          "last_message": d["last_message"], "duplicates": 1}
-    for k in ("context", "question", "hibernated", "closed", "closed_reason", "background", "asks", "asks_text"):
+    for k in ("context", "question", "hibernated", "closed", "closed_reason", "background", "asks", "asks_text", "pc_attached"):
         if k in d:
             s[k] = d[k]
     return s
@@ -1087,6 +1088,13 @@ def trigger(name):
         add_event("location_request", {"request_id": "loc-1", "reason": "Testanfrage", "expires_at": time.time() + 600})
     elif name == "routine_run":  # ein Lauf einer Routine endet (Team eingerichtet)
         add_event("routine_run", {"id": "week-review", "at": time.time(), "ok": False, "summary": "Zusammenfassung fehlgeschlagen: kein Verlauf.", "handoff": None})
+    elif name in ("pc_detach", "pc_attach"):  # ein Terminal am PC schließt oder öffnet die Sitzung (Ereignis pc_attached, nicht persistent)
+        on = name == "pc_attach"
+
+        def f(st):
+            st["overrides"].setdefault(K["pc"], {}).update(pc_attached=on)
+        mutate(f)
+        add_event("pc_attached", {"session_key": K["pc"], "pc_attached": on}, persist=False)
     elif name == "end_session":
         def f(st):
             st["overrides"].setdefault(K["asks"], {}).update(alive=False, state="exited", tmux_session=None)

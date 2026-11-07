@@ -453,6 +453,9 @@ struct SessionRow: View {
                 HStack(spacing: 6) {
                     StateDot(state: s.shownState, stale: stale)
                     Tag(text: s.alias)
+                    if PCPresence.of(s) == .open {  // ein Terminal am PC zeigt die Sitzung gerade (nur Anzeige)
+                        Image(systemName: PCPresence.symbol).font(.caption2).foregroundStyle(.secondary).accessibilityLabel(PCPresence.openLabel)
+                    }
                     Text(s.folder).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     if let c = s.context, c.level != "ok" { Tag(text: "\(c.pct)%", color: c.level == "full" ? .red : .orange) }
                     if s.hibernated { Tag(text: "ruht") }

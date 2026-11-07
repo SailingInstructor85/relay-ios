@@ -73,6 +73,8 @@ public struct Session: Sendable, Hashable, Identifiable {
     public let context: SessionContext?
     public var asks: Bool
     public let asksText: String
+    /// `pc_attached` des Gateways (2026-11-07): ein Terminal am PC zeigt die Sitzung gerade. nil: unbekannt (älteres Gateway).
+    public var pcAttached: Bool?
 
     public var name: String { title.isEmpty ? String(sid.prefix(8)) : title }
     public var asksYou: Bool { asks && state == "idle" }
@@ -109,7 +111,16 @@ public struct Session: Sendable, Hashable, Identifiable {
             duplicates: o["duplicates"].int ?? 1, remoteUrl: o.str("remote_url"), background: o.flag("background"),
             question: Question.from(o["question"]), hibernated: o.flag("hibernated"), closed: o.flag("closed"), closedReason: o.str("closed_reason"),
             seenAt: o.num("seen_at"), context: SessionContext.from(o["context"]),
-            asks: o.flag("asks"), asksText: o.str("asks_text"))
+            asks: o.flag("asks"), asksText: o.str("asks_text"), pcAttached: o["pc_attached"].bool)
+    }
+
+    /// Ereignisse des Monitors (`session_state`, `session_started`) tragen kein `pc_attached`: die Anzeige „am PC offen“
+    /// bleibt dann, wie die Liste oder das Ereignis `pc_attached` sie zuletzt gesetzt haben (2026-11-07).
+    public func keepingPC(from old: Session?) -> Session {
+        guard pcAttached == nil, let old, old.key == key else { return self }
+        var s = self
+        s.pcAttached = old.pcAttached
+        return s
     }
 }
 
