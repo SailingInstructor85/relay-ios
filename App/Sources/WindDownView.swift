@@ -8,7 +8,7 @@ struct WindDownView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var selected: Set<String> = []
-    @State private var preselected = false
+    @State private var touched = false
     @State private var confirm = false
     @State private var starting = false
     @State private var error: String?
@@ -35,7 +35,12 @@ struct WindDownView: View {
                 }
             }
             .onAppear {
-                if !preselected { preselected = true; selected = WindDown.preselected(candidates) }
+                selected = WindDown.autoSelect(selected, touched: touched, candidates: candidates)
+                UsageRecorder.shared.record("alle beenden", "geöffnet", length: candidates.count)
+            }
+            .onChange(of: candidates.map(\.key)) { _, _ in
+                // the list may arrive after the sheet opened (right after launch, while connecting)
+                selected = WindDown.autoSelect(selected, touched: touched, candidates: candidates)
             }
             .task(id: model.windDownJob) {
                 // events carry each phase; the poll catches up after a lost link
@@ -66,6 +71,7 @@ struct WindDownView: View {
                     // a row is a button with a check mark (not a Toggle): one tap picks or drops the session
                     Button {
                         guard e.selectable else { return }
+                        touched = true
                         if on { selected.remove(s.key) } else { selected.insert(s.key) }
                     } label: {
                         HStack(alignment: .top, spacing: 10) {
@@ -102,6 +108,10 @@ struct WindDownView: View {
     private var startBar: some View {
         VStack(spacing: 6) {
             if let e = error { Text(e).font(.caption).foregroundStyle(.red).multilineTextAlignment(.center) }
+            else if let why = WindDown.blockedReason(connected: model.state == .connected, chosen: chosen.count, candidates: candidates.count) {
+                Text(why).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    .accessibilityIdentifier("windDownBlocked")
+            }
             Button(role: .destructive) { confirm = true } label: {
                 HStack {
                     if starting { ProgressView().padding(.trailing, 4) }
@@ -143,8 +153,12 @@ struct WindDownView: View {
 
     private func start() async {
         starting = true; defer { starting = false }
+        UsageRecorder.shared.record("alle beenden", "gestartet", length: chosen.count)
         do { try await model.startWindDown(chosen.map(\.key)); error = nil }
-        catch { self.error = "Nicht gestartet: \(error.localizedDescription)" }
+        catch {
+            UsageRecorder.shared.record("alle beenden", "nicht gestartet", length: chosen.count, error: error.localizedDescription)
+            self.error = "Nicht gestartet: \(error.localizedDescription)"
+        }
     }
 
     // MARK: progress

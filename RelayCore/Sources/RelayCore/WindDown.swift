@@ -8,7 +8,10 @@ public enum WindDown {
     /// Die Abschlussnachricht an jeden Agenten. Dieselbe steht als Vorgabe im Gateway (winddown.py DEFAULT_TEXT);
     /// die App schickt sie mit, damit beide Seiten denselben Wortlaut haben.
     public static let message = """
-        Martin schließt diese Sitzung jetzt. Bitte sauber beenden: Keine neuen Aufgaben anfangen. Offenes nicht verwerfen, \
+        Martin schließt diese Sitzung jetzt. Bitte sauber beenden: Keine neuen Aufgaben anfangen. Schreib zuerst deinen \
+        Eintrag ins Agenten-Log der Daily Note von heute (~/Dokumente/zweites-gehirn/zweites Gehirn/05 Daily Notes/\
+        <JJJJ-MM-TT>.md, Abschnitt „## Agenten-Log“, nur anhängen, nie überschreiben: Uhrzeit, Ordner, Thema, was \
+        erledigt ist, was schwierig war; fehlt die Datei, lege sie an). Offenes nicht verwerfen, \
         sondern festhalten, wie es die Regel „Übergabe“ in ~/.agents/AGENTS.md verlangt: Stand, offene Punkte und nächster \
         Schritt in die Projektnotiz des Projekts (gibt es keine, nach ~/.agents/docs/Übergabe <Datum> <Thema>.md), \
         offene Aufgaben als To-do dort eintragen. Danach eine Zeile an ~/.agents/docs/Übergaben.md anhängen: \
@@ -107,7 +110,7 @@ public enum WindDown {
         var notes: [String] = []
         if outsideTmux { notes.append("am PC ohne tmux: wird dort beendet und in tmux fortgesetzt") }
         if s.state == "busy" { notes.append("arbeitet gerade, das Ende der Runde wird abgewartet") }
-        if s.state == "needs_input" { notes.append("wartet auf eine Antwort") }
+        if s.state == "needs_input" { notes.append("wartet auf eine Antwort; ist eine Auswahl offen, bleibt sie offen") }
         return .ok(note: notes.joined(separator: "; "))
     }
 
@@ -125,6 +128,23 @@ public enum WindDown {
     /// Alles Wählbare ist vorgewählt.
     public static func preselected(_ sessions: [Session]) -> Set<String> {
         Set(sessions.filter { eligibility($0).selectable }.map(\.key))
+    }
+
+    /// Die Auswahl, wenn sich die Liste ändert (2026-11-07, „Alle Sitzungen beenden wirkt nicht“): Öffnet das Blatt,
+    /// bevor die Sitzungen geladen sind (gleich nach dem Start, beim Verbinden), war bisher nichts gewählt und der
+    /// Knopf blieb bei „0 Sitzungen“ gesperrt. Solange Martin nichts angetippt hat, folgt die Auswahl der Liste; danach
+    /// fallen nur Sitzungen heraus, die weg oder nicht mehr wählbar sind.
+    public static func autoSelect(_ selected: Set<String>, touched: Bool, candidates: [Session]) -> Set<String> {
+        let ok = preselected(candidates)
+        return touched ? selected.intersection(ok) : ok
+    }
+
+    /// Warum der Startknopf gesperrt ist, als Zeile über dem Knopf; nil = startbereit.
+    public static func blockedReason(connected: Bool, chosen: Int, candidates: Int) -> String? {
+        if !connected { return "Keine Verbindung zum PC. Der Knopf geht, sobald die App verbunden ist." }
+        if candidates == 0 { return nil }
+        if chosen == 0 { return "Keine Sitzung gewählt. Tippe die Sitzungen an, die beendet werden sollen." }
+        return nil
     }
 
     public static func confirmTitle(_ n: Int) -> String {

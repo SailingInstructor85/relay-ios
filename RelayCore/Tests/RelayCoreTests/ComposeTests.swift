@@ -272,6 +272,25 @@ final class WindDownTests: XCTestCase {
         XCTAssertEqual(WindDown.summary([items[0]]), "Die Sitzung ist sauber beendet.\nÜbergaben:\n• A: ~/x/Notiz.md")
         XCTAssertTrue(WindDown.message.contains("Übergabe: <Pfad der Übergabe>"))
         XCTAssertFalse(WindDown.message.contains("—"))
+        XCTAssertTrue(WindDown.message.contains("Agenten-Log"))
+        XCTAssertTrue(WindDown.message.contains("05 Daily Notes/<JJJJ-MM-TT>.md"))
+    }
+
+    func testSelectionFollowsListUntilTouched() {
+        // the sheet opened before the sessions were loaded: nothing chosen, button stuck at "0" (2026-11-07)
+        let a = session("claude:c1:a"), b = session("claude:c1:b"), gone = session("claude:c1:g", state: "exited", alive: false, tmux: nil)
+        XCTAssertEqual(WindDown.autoSelect([], touched: false, candidates: []), [])
+        XCTAssertEqual(WindDown.autoSelect([], touched: false, candidates: [a, b]), ["claude:c1:a", "claude:c1:b"])
+        // once he tapped: his choice stays, only sessions that went away drop out
+        XCTAssertEqual(WindDown.autoSelect(["claude:c1:a"], touched: true, candidates: [a, b]), ["claude:c1:a"])
+        XCTAssertEqual(WindDown.autoSelect(["claude:c1:a", "claude:c1:g"], touched: true, candidates: [a, gone]), ["claude:c1:a"])
+    }
+
+    func testBlockedReason() {
+        XCTAssertTrue(WindDown.blockedReason(connected: false, chosen: 3, candidates: 3)?.contains("Keine Verbindung") == true)
+        XCTAssertTrue(WindDown.blockedReason(connected: true, chosen: 0, candidates: 3)?.contains("Keine Sitzung gewählt") == true)
+        XCTAssertNil(WindDown.blockedReason(connected: true, chosen: 2, candidates: 3))
+        XCTAssertNil(WindDown.blockedReason(connected: true, chosen: 0, candidates: 0))
     }
 }
 

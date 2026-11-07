@@ -393,7 +393,11 @@ final class AppModel: ObservableObject {
         case "wind_down":
             if ev.str("job") == windDownJob { windDownItems = WindDown.apply(ev, to: windDownItems) }
         case "wind_down_done":
-            if ev.str("job") == windDownJob { windDownDone = true; Task { await refreshWindDown(); await refresh() } }
+            if ev.str("job") == windDownJob {
+                windDownDone = true
+                UsageRecorder.shared.record("alle beenden", "fertig", detail: ev.str("summary").components(separatedBy: "\n").first)
+                Task { await refreshWindDown(); await refresh() }
+            }
         case "session_seen":
             let key = ev.str("session_key")
             var u = unread; u.remove(key); unread = u
