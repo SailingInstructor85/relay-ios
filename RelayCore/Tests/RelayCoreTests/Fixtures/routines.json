@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "routines": [
+    {"id": "morning-brief", "title": "Morgen-Briefing", "owner": "chief", "when": "weekdays 08:00", "on": null, "kind": "builtin",
+     "mode": "read-only", "deliver": "interrupt", "enabled": true, "note": "", "description": "Wetter, Termine und offene Fragen um acht.",
+     "next_run": 1794120000, "last": {"at": 1794031200, "ok": true, "summary": "Briefing gesendet.", "handoff": null}, "builtin": "brief"},
+    {"id": "week-review", "title": "Wochenrückblick", "owner": "chief", "when": "fri 17:00", "on": null, "kind": "prompt",
+     "mode": "read-only", "deliver": "checkin", "enabled": false, "note": "Fasse die Woche in fünf Sätzen zusammen.",
+     "description": "Zusammenfassung der Woche am Freitagabend.", "next_run": null, "last": null, "builtin": ""},
+    {"id": "stellen", "title": "Stellenlauf", "owner": "jobs", "when": null, "on": null, "kind": "system", "mode": "read-only", "deliver": "log",
+     "enabled": true, "note": "", "description": "Neue Stellen dreimal am Tag.", "next_run": 1794031200,
+     "last": {"at": 1794024000, "ok": false, "summary": "job-room.ch nicht erreichbar", "handoff": "H-12"}, "builtin": ""}
+  ],
+  "system": [
+    {"unit": "relay-nachtbau.timer", "description": "Relay-App aus dem Backlog bauen", "next": 1794033000, "last": 1794027754, "result": "success"},
+    {"unit": "dreaming-woche.timer", "description": "", "next": 1794081600, "last": null, "result": ""}
+  ]
+}

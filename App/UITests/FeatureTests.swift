@@ -174,6 +174,49 @@ final class InfoTests: RelayTestCase {
         expect("Beantwortet", 4, soft: true)
     }
 
+    func test21_Routines() {
+        launchConnected()
+        mainMenu("Routinen")
+        settle(2.5)
+        shot("routinen-liste")
+        expect("Morgen-Briefing", 8)
+        expect("Wochenrückblick", 3, soft: true)
+        expect("werktags 08:00", 3, soft: true)
+        reveal("relay-nachtbau")
+        expect("relay-nachtbau", 3, soft: true)
+        reveal("Morgen-Briefing")
+        tap("Morgen-Briefing", soft: true)
+        settle(1.5)
+        shot("routine-detail")
+        expect("Jetzt ausführen", 4, soft: true)
+        tapID("routineRun")
+        settle(2.5)
+        XCTAssertTrue(mockReceived("routine_run", where: { ($0["id"] as? String) == "morning-brief" }), "routine_run nicht aufgerufen")
+        expect("Fertig: Testlauf erledigt.", 5, soft: true)
+        shot("routine-ausgefuehrt")
+        back()
+        settle(1)
+        tapID("routineNew")
+        settle(1.5)
+        typeInto("routineText", "Jeden Freitag um 17 Uhr die Woche zusammenfassen")
+        dismissKeyboard()
+        shot("routine-neu")
+        tap("An den Chef", 3, exact: true, soft: true)
+        settle(2)
+        XCTAssertTrue(mockReceived("team_send", where: { ($0["to"] as? String) == "chief" && (($0["text"] as? String) ?? "").hasPrefix("Neue Routine: Jeden Freitag") }), "team_send nicht aufgerufen")
+        expect("An den Chef geschickt", 5, soft: true)
+    }
+
+    func test22_RoutinesOff() {
+        ctl("routines_off")
+        launchConnected()
+        mainMenu("Routinen")
+        settle(2.5)
+        shot("routinen-nicht-eingerichtet")
+        expect("Routinen im Gateway nicht eingerichtet", 8)
+        XCTAssertTrue(mockReceived("routines"), "routines nicht aufgerufen")
+    }
+
     func test09_ApprovalStrip() {
         launchConnected()
         ctl("trigger_send_request")

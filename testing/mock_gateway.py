@@ -10,7 +10,8 @@ Control files in $MOCK_DIR/control (the UI tests or the CI script create them):
   offline        new connections end at once with an error; running ones are cut
   kick           running connections end (the file is removed by the first one)
   trigger_<n>    emit a live event once: finish_busy, new_input, notice, rueckfrage, send_request,
-                 cloud, desktop_sleep, location, end_session
+                 cloud, desktop_sleep, location, end_session, routine_run
+  routines_off   the team is not configured: routines, routine_run, routine_set, team_send answer enabled: false
 Logs: $MOCK_DIR/rpc.jsonl (every request received), $MOCK_DIR/mock.log (text).
 """
 import base64, json, os, struct, sys, threading, time, zlib, hashlib, re
@@ -951,6 +952,84 @@ def rpc_notices(p):
     return {}
 
 
+# ---------------------------------------------------------------- routines (team:-Block)
+# Steuerdatei routines_off: das Gateway ohne team:-Block (alle Routinen-RPCs antworten enabled: false).
+
+def routines_enabled():
+    return not os.path.exists(os.path.join(CTL, "routines_off"))
+
+
+def rpc_routines(p):
+    if not routines_enabled():
+        return {"enabled": False, "routines": [], "system": []}
+    data = fixture("routines")
+    now = time.time()
+    # Zeiten relativ zu jetzt, damit „nächster Lauf“ und „zuletzt“ im Test stimmen
+    for r in data["routines"]:
+        if r.get("next_run"):
+            r["next_run"] = now + 3600 * 3
+        if r.get("last"):
+            r["last"]["at"] = now - 1800
+    for t in data["system"]:
+        if t.get("next"):
+            t["next"] = now + 1800
+        if t.get("last"):
+            t["last"] = now - 7200
+    st = load_state()
+    for r in data["routines"]:
+        ov = st.get("routines", {}).get(r["id"])
+        if ov:
+            r.update(ov)
+    return data
+
+
+def rpc_routine_run(p):
+    if not routines_enabled():
+        return {"enabled": False, "run": None}
+    rid = str(p.get("id", ""))
+    if not rid:
+        raise RpcError("refused: unknown routine ''")
+    if rid == "stellen":
+        raise RpcError("stellen is a system timer (stellen-lauf.timer); systemd runs it")
+    at = time.time()
+    add_event("routine_run", {"id": rid, "at": at, "ok": None, "summary": "", "handoff": None})
+    run = {"id": rid, "at": at, "ok": True, "summary": "Testlauf erledigt.", "handoff": "H-7"}
+    def f(st):
+        st.setdefault("routines", {}).setdefault(rid, {})["last"] = run
+    mutate(f)
+    add_event("routine_run", run)
+    return {"run": run}
+
+
+def rpc_routine_set(p):
+    if not routines_enabled():
+        return {"enabled": False, "routine": None}
+    rid, enabled = str(p.get("id", "")), bool(p.get("enabled"))
+    base = next((r for r in fixture("routines")["routines"] if r["id"] == rid), None)
+    if base is None:
+        raise RpcError(f"refused: unknown routine {rid!r}")
+    def f(st):
+        st.setdefault("routines", {}).setdefault(rid, {})["enabled"] = enabled
+    mutate(f)
+    base["enabled"] = enabled
+    return {"routine": base}
+
+
+def rpc_team_send(p):
+    if not routines_enabled():
+        return {"enabled": False}
+    return {"key": "claude:c1:tmux-chief", "started": True}
+
+
+def rpc_handoffs(p):
+    if not routines_enabled():
+        return {"enabled": False, "handoffs": []}
+    return {"enabled": True, "handoffs": [{"id": "H-7", "from": "routine:morning-brief", "to": "chief", "request": "Morgen-Briefing",
+                                           "state": "done", "key": K["idle"], "summary": "Testlauf erledigt.", "notify": "log"},
+                                          {"id": "H-12", "from": "routine:stellen", "to": "jobs", "request": "Stellenlauf",
+                                           "state": "failed", "key": None, "summary": "job-room.ch nicht erreichbar", "notify": "checkin"}]}
+
+
 METHODS = {k[4:]: v for k, v in list(globals().items()) if k.startswith("rpc_") and k != "rpc_ask"}
 
 
@@ -1006,6 +1085,8 @@ def trigger(name):
         add_event("desktop_sleep", {"at": time.time()})
     elif name == "location":
         add_event("location_request", {"request_id": "loc-1", "reason": "Testanfrage", "expires_at": time.time() + 600})
+    elif name == "routine_run":  # ein Lauf einer Routine endet (Team eingerichtet)
+        add_event("routine_run", {"id": "week-review", "at": time.time(), "ok": False, "summary": "Zusammenfassung fehlgeschlagen: kein Verlauf.", "handoff": None})
     elif name == "end_session":
         def f(st):
             st["overrides"].setdefault(K["asks"], {}).update(alive=False, state="exited", tmux_session=None)

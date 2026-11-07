@@ -1,0 +1,6 @@
+# Ergänzung für ~/.config/notifyd/config.yaml (ans Ende anhängen). Erst danach antwortet das Gateway auf
+# routines, routine_run, routine_set und team_send mit enabled: true. Wirkt nach einem Neustart von notifyd.
+team:
+  roster: ~/.agents/team/roster.yaml
+  routines: ~/.agents/team/routines.yaml
+  rotate: {chief_daily_at: "04:00", max_transcript_kb: 1500}

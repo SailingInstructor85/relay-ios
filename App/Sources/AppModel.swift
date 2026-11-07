@@ -413,6 +413,8 @@ final class AppModel: ObservableObject {
             Locator.shared.onRequest(ev, replay: replay)
         case "desktop_sleep":
             desktopSleepAt = Date(timeIntervalSince1970: ev.num("at", Date().timeIntervalSince1970))
+        case "routine_run":
+            RoutinesStore.shared.onRunEvent(ev)
         default: break
         }
     }

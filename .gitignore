@@ -5,3 +5,4 @@ build/
 Payload/
 *.ipa
 .swiftpm/
+__pycache__/

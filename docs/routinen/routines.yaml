@@ -1,0 +1,63 @@
+# Routinen für die App (Reiter „Routinen“). Zwei Arten:
+#   system: <timer>   ein bestehender systemd-Timer des Benutzers, nur Anzeige (Zeitplan und Läufe kommen von systemd)
+#   prompt: <text>    ein Auftrag an den Besitzer (Chef) nach Zeitplan `when`; `mode: read-only` liest nur
+# `when`: "weekdays 08:00", "daily 07:40", "sun 18:00", "mon,thu 09:00, 14:00", "monthly 1 09:00" (Europe/Berlin).
+# `deliver`: interrupt (sofort melden) | checkin | log. `enabled: false` legt eine Routine stumm, sie bleibt sichtbar.
+# Alle nicht genannten Timer erscheinen in der App unter „System“ ohne Beschreibung.
+# Ablage (Vorschlag): ~/.agents/team/routines.yaml
+routines:
+  - id: relay-nachtbau
+    title: Relay Nachtbau
+    description: Baut stündlich bis zu drei Einträge aus dem Relay-Backlog zu einer neuen App-Version.
+    system: relay-nachtbau.timer
+    enabled: true
+  - id: stellen-lauf
+    title: Stellenlauf
+    description: Holt Mo bis Sa um 7, 10 und 13 Uhr neue Stellen und schickt den Bericht per Mail.
+    system: stellen-lauf.timer
+    enabled: true
+  - id: stellen-abruf
+    title: Stellen abrufen
+    description: Ruft zwischen den Stellenläufen neue Anzeigen ab.
+    system: stellen-abruf.timer
+    enabled: true
+  - id: stellen-woche
+    title: Bewerbungen der Woche
+    description: Wochenübersicht der Bewerbungen, Freitag 12 Uhr.
+    system: stellen-woche.timer
+    enabled: true
+  - id: betriebspruefer
+    title: Betriebsprüfer
+    description: Prüft Mo bis Sa um 5 Uhr den Betrieb des Agentensystems.
+    system: betriebspruefer.timer
+    enabled: true
+  - id: nachtlauf-geschaeftsfuehrer
+    title: Nachtlauf Geschäftsführer
+    description: Nachtlauf der KI-Firma.
+    system: nachtlauf-geschaeftsfuehrer.timer
+    enabled: true
+  - id: dreaming-nacht
+    title: Dreaming (Nacht)
+    description: Nächtliche Konsolidierung der Erfahrungen.
+    system: dreaming-nacht.timer
+    enabled: true
+  - id: dreaming-woche
+    title: Dreaming (Woche)
+    description: Wöchentliche Konsolidierung.
+    system: dreaming-woche.timer
+    enabled: true
+  - id: relay-spiegel
+    title: Relay Spiegel
+    description: Spiegelt das Relay-Repo einmal am Tag.
+    system: relay-spiegel.timer
+    enabled: true
+  # Beispiel für eine Routine, die der Chef selbst ausführt (ausgeschaltet, bis Martin sie in der App einschaltet):
+  - id: wochenrueckblick
+    title: Wochenrückblick
+    description: Fasst am Freitagabend die Woche in fünf Sätzen zusammen.
+    owner: chief
+    when: fri 17:00
+    prompt: Fasse die Woche aus den Projektnotizen im Vault in fünf Sätzen zusammen und lege sie unter 03 Bereiche ab.
+    mode: read-only
+    deliver: checkin
+    enabled: false
