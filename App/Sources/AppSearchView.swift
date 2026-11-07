@@ -39,14 +39,32 @@ struct SearchExtras: View {
     let query: String
     let openChat: (String, String) -> Void
     let openJarvis: () -> Void
+    var openRoutines: () -> Void = {}
     @State private var jarvisTurns: [JarvisTurn] = []
+    @ObservedObject private var routines = RoutinesStore.shared
 
     private var q: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
         let jarvis = AppSearch.jarvis(jarvisTurns, query: q)
         let convs = ContentSearch.conversations(searcher.hits, sessions: Array(model.sessions.values))
+        let routineHits = RoutinesText.search(routines.info.routines, query: q)
         Group {
+            if !routineHits.isEmpty {
+                Section("Routinen") {
+                    ForEach(routineHits) { r in
+                        Button(action: openRoutines) {
+                            HStack {
+                                Image(systemName: "calendar.badge.clock").foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(r.title).lineLimit(1)
+                                    Text(RoutinesText.schedule(r, now: Date().timeIntervalSince1970)).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                            }
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
             if !jarvis.isEmpty {
                 Section("Jarvis") {
                     ForEach(jarvis) { t in
@@ -85,5 +103,6 @@ struct SearchExtras: View {
             }
         }
         .onAppear { jarvisTurns = JarvisStore.load() }
+        .task { if !routines.loaded, model.state == .connected { await routines.refresh(model) } }
     }
 }

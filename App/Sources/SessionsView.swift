@@ -18,7 +18,7 @@ struct SessionsView: View {
     @StateObject private var searcher = ContentSearcher()
     @State private var showKill = false
 
-    enum Dest: Hashable { case chat(String), chatSearch(String, String), settings, usage, memory, jarvis, jarvisListening, notices, notice(String), digest, tokens }
+    enum Dest: Hashable { case chat(String), chatSearch(String, String), settings, usage, memory, jarvis, jarvisListening, notices, notice(String), digest, tokens, routines }
 
     private func haystack(_ s: Session) -> String { "\(s.name) \(s.alias) \(s.folder) \(s.cwd)" }
 
@@ -60,7 +60,8 @@ struct SessionsView: View {
         if !search.trimmingCharacters(in: .whitespaces).isEmpty {
             SearchExtras(searcher: searcher, query: search,
                          openChat: { key, q in path.append(Dest.chatSearch(key, q)) },
-                         openJarvis: { path.append(Dest.jarvis) })
+                         openJarvis: { path.append(Dest.jarvis) },
+                         openRoutines: { path.append(Dest.routines) })
         }
         if all.isEmpty && model.state == .connected && search.trimmingCharacters(in: .whitespaces).isEmpty {
             ContentUnavailableView(model.showDormant ? "Keine letzten Sitzungen" : "Keine Sitzungen", systemImage: "terminal",
@@ -94,6 +95,7 @@ struct SessionsView: View {
                     Button { path.append(Dest.digest) } label: { Label("Was war los", systemImage: "newspaper") }
                     Button { path.append(Dest.tokens) } label: { Label("Token-Verbrauch", systemImage: "chart.bar") }
                     Button { path.append(Dest.notices) } label: { Label("Hinweise", systemImage: "bell.badge") }
+                    Button { path.append(Dest.routines) } label: { Label("Routinen", systemImage: "calendar.badge.clock") }
                     Button { model.markAllRead() } label: { Label("Alle gelesen", systemImage: "checkmark.circle") }
                         .disabled(model.unread.isEmpty)
                     Toggle(isOn: $model.showBackground) { Label("Hintergrundläufe", systemImage: "moon.zzz") }
@@ -149,6 +151,7 @@ struct SessionsView: View {
             case .jarvisListening: JarvisView(autoListen: true)
             case .notices: NoticeView(ref: nil, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice)
             case .notice(let ref): NoticeView(ref: ref, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice)
+            case .routines: RoutinesView()
             }
         }
         .sheet(isPresented: $showPower) { PowerView().environmentObject(model) }

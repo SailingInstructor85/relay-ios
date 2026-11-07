@@ -1,0 +1,11 @@
+# Kleinster Roster nur für Routinen: ein Mitglied, der Chef. Er nimmt „Neue Routine“ aus der App entgegen
+# (rpc team_send {to: chief}) und ist Besitzer der Routinen. Pflicht je Mitglied: id und title.
+# Ablage (Vorschlag): ~/.agents/team/roster.yaml; daneben optional chief.md als Auftragstext der Chef-Sitzung.
+members:
+  - id: chief
+    name: Chef
+    title: Relay Chef
+    home: ~
+    notify: checkin      # interrupt | checkin | log: wie Ergebnisse seiner Routinen gemeldet werden
+    model: opus          # Modell der Chef-Sitzung (leer = Standard des Kontos)
+checkins: ["12:30", "18:00"]
