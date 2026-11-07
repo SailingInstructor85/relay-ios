@@ -2,6 +2,17 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.9 (2026-11-07)
+
+**Neu**
+- Sprachmodus für die Autofahrt: Unter „Hinweise“ ganz oben „Sprachmodus“, in jeder Rückfrage „Im Sprachmodus beantworten“ oder per Siri und Aktionstaste mit „Sprachmodus in Relay“. Relay liest offene Rückfragen der Agenten vor, nur Frage und Empfehlung. Du antwortest mit „ja“, „nein“ oder in eigenen Worten. Die Antwort wird zur Kontrolle vorgelesen und geht erst nach „senden“ an den Agenten. „nochmal“ verwirft sie, ein neuer Satz ersetzt sie. „wiederholen“, „später“ und „stopp“ gehen auch. Neue Rückfragen liest der Sprachmodus sofort vor, solange er offen ist.
+- Gespräch mit einer Sitzung per Sprache: Wartet der Sprachmodus, stehen darunter die zuletzt aktiven Sitzungen. Du sprichst, hörst deine Nachricht zur Kontrolle, sagst „senden“, und Relay liest die Antwort der Sitzung gekürzt vor (ohne Code und Pfade). Danach hört die App wieder zu, bis du „stopp“ oder „danke“ sagst.
+- Große Knöpfe für alles, was man auch sagen kann (Ja, Nein, Senden, Nochmal, Später). Der Bildschirm bleibt an, der Ton läuft über Bluetooth oder CarPlay.
+
+**Geändert**
+- Solange der Sprachmodus offen ist, liest „Fertige Sitzungen vorlesen“ nichts zusätzlich vor, damit nicht zwei Stimmen gleichzeitig sprechen.
+- Der Hinweis zur Mikrofonfreigabe nennt jetzt auch den Sprachmodus.
+
 ## 0.3.8 (2026-11-07)
 
 Braucht für Nutzungsprotokoll und „Fehler melden“ ein aktuelles Gateway (notifyd nach dem Update neu starten). Mit dem älteren Gateway bleibt das Protokoll auf dem iPhone und geht später mit.
