@@ -35,7 +35,8 @@ struct ChatView: View {
     @ObservedObject private var outbox = Outbox.shared
     @State private var error: String?
     @State private var confirmForce: String?
-    /// Postausgang-Kennung der Nachricht, die das Gateway abgelehnt hat, weil die Sitzung am PC ohne tmux läuft (DeskTerminal).
+    /// Postausgang-Kennung der Nachricht, für die Martin im Postausgang „Am PC beenden und hier fortsetzen…“ getippt hat;
+    /// die Bestätigung folgt (DeskTerminal). Seit 0.3.7 nicht mehr von selbst nach einer Absage.
     @State private var confirmMove: String?
     @State private var importing = false
     @State private var pickingPhoto = false
@@ -70,7 +71,7 @@ struct ChatView: View {
                         }
                         ForEach(messages) { m in MessageRow(m: m, highlighted: m.id == highlight).id(m.id) }
                         ForEach(outbox.items(for: key)) { item in
-                            OutboxRow(item: item) { text in input = text; focused = true }
+                            OutboxRow(item: item, onEdit: { text in input = text; focused = true }, onMove: { confirmMove = $0 })
                         }
                         if let s = session, s.state == "busy" || !runItems.isEmpty { workingLine(s) }
                         if let s = session, s.asksYou, !s.asksText.isEmpty {
@@ -153,7 +154,7 @@ struct ChatView: View {
             }.ignoresSafeArea()
         }
         .confirmationDialog(DeskTerminal.dialogTitle, isPresented: Binding(get: { confirmMove != nil }, set: { if !$0 { confirmMove = nil } }), titleVisibility: .visible) {
-            Button(DeskTerminal.moveButton, role: .destructive) { if let id = confirmMove { Outbox.shared.retry(id, move: true) } }
+            Button(DeskTerminal.moveConfirm, role: .destructive) { if let id = confirmMove { Outbox.shared.retry(id, move: true) } }
         } message: { Text(DeskTerminal.dialogMessage) }
         .confirmationDialog("Die Sitzung arbeitet gerade.", isPresented: Binding(get: { confirmForce != nil }, set: { if !$0 { confirmForce = nil } }), titleVisibility: .visible) {
             Button("Trotzdem senden") { if let id = confirmForce { Outbox.shared.retry(id, force: true) } }
@@ -185,8 +186,22 @@ struct ChatView: View {
         DictationSend.canSend(input: input, listening: voice.listening, sending: sending, hasSession: session != nil)
     }
 
+    /// Sitzung am PC in einem Terminal ohne tmux: Hinweis, keine Sperre. Nachrichten gehen in den Postausgang; der Umzug
+    /// in tmux nur über den Knopf dort und eine Bestätigung (Martin, 2026-11-07: nie ungefragt am PC beenden).
+    private var deskHint: some View {
+        HStack(spacing: 8) {
+            Image(systemName: PCPresence.symbol).foregroundStyle(.secondary)
+            Text(DeskTerminal.hint).font(.caption2).foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal).padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("deskHint")
+    }
+
     private var inputBar: some View {
         VStack(spacing: 6) {
+            if let s = session, DeskTerminal.isDeskTerminal(s) { deskHint }
             if !slashSuggestions.isEmpty {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -271,7 +286,13 @@ struct ChatView: View {
 
     @ViewBuilder private var titleView: some View {
         let label = VStack(spacing: 0) {
-            Text(session?.name ?? "Sitzung").font(.headline).lineLimit(1)
+            HStack(spacing: 4) {
+                Text(session?.name ?? "Sitzung").font(.headline).lineLimit(1)
+                if let s = session, PCPresence.of(s) == .open {  // auch am PC offen (nur Anzeige, keine Sperre)
+                    Image(systemName: PCPresence.symbol).font(.caption).foregroundStyle(.secondary)
+                        .accessibilityLabel(PCPresence.openLabel).accessibilityIdentifier("pcOpen")
+                }
+            }
             Text(headerSubtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
             if let la = session?.lastActivity, la > 0 {
                 // the clock is read anew on every pass and when the app comes back (a timer alone sleeps with the phone)
@@ -602,11 +623,11 @@ struct ChatView: View {
             error = nil
             confirmForce = id
         } catch let e as RelayError where e.remote && DeskTerminal.isRefusal(e.message) {
-            // at the PC in a terminal outside tmux: the text waits in the outbox, the move only after his yes
+            // at the PC in a terminal outside tmux: the text waits in the outbox (grey bubble with the reason); the move
+            // into tmux only from the button there and after his yes, never offered by itself (Martin, 2026-11-07)
             Outbox.shared.addRefused(id: id, key: s.key, text: t, error: e.message)
             clearField()
             error = nil
-            confirmMove = id
         } catch {
             if OutboxLogic.retries(error) { queue() } else { self.error = error.localizedDescription }
         }

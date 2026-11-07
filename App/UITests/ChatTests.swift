@@ -177,17 +177,23 @@ final class ChatTests: RelayTestCase {
         XCTAssertTrue(mockReceived("close"))
     }
 
-    func test13_DeskTerminalMoveAfterYes() {
-        // Die Sitzung läuft am PC in einem Terminal ohne tmux: die Nachricht bleibt im Postausgang, der Umzug erst nach Ja.
+    func test13_DeskTerminalMoveOnlyOnRequest() {
+        // Die Sitzung läuft am PC in einem Terminal ohne tmux: Hinweis über der Eingabe, Symbol „Am PC offen“ im Kopf, die
+        // Nachricht bleibt im Postausgang. Keine Rückfrage von selbst (0.3.7); der Umzug erst über den Knopf dort und Ja.
         launchConnected()
         openSession("Skript ohne tmux")
+        XCTAssertTrue(id("deskHint").waitForExistence(timeout: 5))
+        XCTAssertTrue(id("pcOpen").exists)
         typeInto("chatInput", "Bitte Status melden")
         tapID("chatSend")
         settle(1.5)
         shot("ohne-tmux-abgelehnt")
         expect("Terminal ohne tmux offen", 5)
         XCTAssertTrue(mockReceived("send", where: { ($0["text"] as? String) == "Bitte Status melden" && $0["move"] == nil }))
-        tap("Am PC beenden und hier fortsetzen", 5)
+        XCTAssertFalse(has("Ja, am PC beenden", 1.5))  // kein Dialog ohne Tipp
+        tap("Am PC beenden und hier fortsetzen…", 5)
+        shot("ohne-tmux-rueckfrage")
+        tap("Ja, am PC beenden und hier fortsetzen", 5)
         settle(3)
         shot("ohne-tmux-umgezogen")
         XCTAssertTrue(mockReceived("send", where: { ($0["text"] as? String) == "Bitte Status melden" && ($0["move"] as? Bool) == true }, timeout: 12))

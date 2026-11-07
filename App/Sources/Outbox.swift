@@ -134,6 +134,8 @@ struct OutboxRow: View {
     @EnvironmentObject var model: AppModel
     let item: OutItem
     let onEdit: (String) -> Void
+    /// „Am PC beenden und hier fortsetzen…“: der Chat fragt erst nach (DeskTerminal), dann `retry(move: true)`.
+    var onMove: (String) -> Void = { _ in }
 
     var body: some View {
         HStack {
@@ -151,7 +153,7 @@ struct OutboxRow: View {
                     HStack(spacing: 8) {
                         Button("Wiederholen") { Outbox.shared.retry(item.id) }
                         if OutboxLogic.isBusyRefusal(item.error ?? "") { Button("Trotzdem senden") { Outbox.shared.retry(item.id, force: true) } }
-                        if DeskTerminal.isRefusal(item.error ?? "") { Button(DeskTerminal.moveButton) { Outbox.shared.retry(item.id, move: true) } }
+                        if DeskTerminal.isRefusal(item.error ?? "") { Button(DeskTerminal.moveButton) { onMove(item.id) } }
                         Button("Bearbeiten") { onEdit(item.text); Outbox.shared.remove(item.id) }
                         Button("Verwerfen", role: .destructive) { Outbox.shared.remove(item.id) }
                     }.font(.caption).buttonStyle(.bordered).controlSize(.mini)
