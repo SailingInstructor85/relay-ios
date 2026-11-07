@@ -61,6 +61,18 @@ Tests unter Linux: `cd RelayCore && swift test`. Ende-zu-Ende-Test gegen ein Gat
 5. Mit einer kostenlosen Apple-ID läuft die Signatur nach **7 Tagen** ab. SideStore erneuert sie auf dem iPhone
    selbst (Refresh), dafür muss das VPN bzw. der Pairing-Mechanismus von SideStore aktiv sein.
 
+## Versionshinweise und Dokumentation
+
+- `CHANGELOG.md` im Repo führt alle Versionen (neueste oben, je Version „Neu“, „Geändert“, „Behoben“). Der Abschnitt der
+  getaggten Version wird beim Release automatisch zum Release-Text auf GitHub (`scripts/changelog_section.py`) und zur
+  Versionsbeschreibung in SideStore („Neu in dieser Version“, `scripts/make_source.py`). Fehlt der Abschnitt, steht
+  dort ein kurzer Standardtext, der Build bricht nicht ab.
+- `docs/` gehört zum Repo und wird je Version mitgepflegt: `docs/nachtlog.md` (was wann gebaut wurde, Entscheidungen,
+  Risiken), `docs/feature-parity.md` (Abgleich mit der Android-App), `docs/rueckfragen.md`, `docs/routinen.md`,
+  `docs/testbericht.md`. Der Release-Text verlinkt README, Nachtlog und Changelog im Stand des Tags.
+- Lokal prüfen (nur Python nötig): `python3 scripts/changelog_section.py 0.3.5 --release --repo <owner/repo> --tag v0.3.5`
+  und `python3 scripts/make_source.py <ipa> 0.3.5 1 <owner/repo> v0.3.5 source.json CHANGELOG.md`.
+
 ## Verbindung einrichten
 
 1. App öffnen. Sie zeigt den Befehl `notifyd setup key "ssh-ed25519 … relay-iphone"`.

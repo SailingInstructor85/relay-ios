@@ -59,14 +59,24 @@ jobs:
         if: failure()
         with: { name: build-log, path: build.log }
       - name: SideStore source (tags)
+        # Versionsbeschreibung („Neu in dieser Version“) aus dem Abschnitt der Version in CHANGELOG.md
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           cp Relay-unsigned.ipa Relay.ipa
-          python3 scripts/make_source.py Relay.ipa "$VERSION" "$BUILD" "${{ github.repository }}" "${GITHUB_REF#refs/tags/}" source.json
+          python3 scripts/make_source.py Relay.ipa "$VERSION" "$BUILD" "${{ github.repository }}" "${GITHUB_REF#refs/tags/}" source.json CHANGELOG.md
+      - name: Release-Text (tags)
+        # Der Abschnitt der Version aus CHANGELOG.md plus Links auf README, Nachtlog und Changelog; fehlt der
+        # Abschnitt, schreibt das Skript einen kurzen Standardtext und der Schritt bleibt grün.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          python3 scripts/changelog_section.py "$VERSION" --changelog CHANGELOG.md --repo "${{ github.repository }}" \
+            --tag "${GITHUB_REF#refs/tags/}" --release --out release.md
+          cat release.md
       - name: Release (tags)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release.md
           files: |
             Relay.ipa
             Relay-unsigned.ipa
