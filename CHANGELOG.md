@@ -2,6 +2,20 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.11 (2026-11-07)
+
+Braucht für den Telefonzugriff das aktuelle Gateway (auf dem PC schon eingespielt).
+
+**Neu**
+- Telefonzugriff für Agenten (Stufe 1, nur Lesen): Agenten am PC können über Relay Geräteinfos (Akku, freier Speicher, iOS-Version, Netz), Dateien aus Ordnern, die du freigibst, die neuesten Fotos und die Zwischenablage abfragen. Einstellungen → „Telefonzugriff für Agenten“.
+- Jeder Bereich hat einen eigenen Schalter, anfangs sind alle aus. Ist ein Bereich an, liest der Agent ohne Rückfrage, und jede Anfrage steht im Verlauf (wer, was, warum, Ergebnis, 30 Tage, ohne Inhalte).
+- Not-Aus ganz oben: An lehnt Relay jede Anfrage ab, auch die schon wartenden.
+- Ordner freigeben über die Dateien-App, auch aus Google Drive, wenn die Google-Drive-App dort als Speicherort aktiv ist. Relay speichert keine Zugangsdaten. Jeder Ordner bekommt einen kurzen Namen, den du per langem Drücken änderst.
+- Ist Relay zu, wartet die Anfrage. Wartet sie länger als 5 Minuten, kommt einmal ein Hinweis, Relay zu öffnen, nicht in den Ruhezeiten. Die Zwischenablage liest Relay nur, solange die App offen ist.
+
+**Geändert**
+- Der Text zur Fotofreigabe nennt jetzt auch den Telefonzugriff.
+
 ## 0.3.10 (2026-11-07)
 
 Braucht für die Behebungen beim Senden und bei „Alle Sitzungen beenden“ das aktuelle Gateway (auf dem PC schon eingespielt).

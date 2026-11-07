@@ -1,8 +1,8 @@
-# Telefonzugriff für Agenten (Konzept für v0.4.0)
+# Telefonzugriff für Agenten (Konzept für v0.4.0, Stufe 1 in 0.3.11)
 
 Stand: 7. November 2026. Konzept aus dem Nachtbau 10:51, von Martin am 7. November freigegeben. **Stufe 1 ist seit
-Version 0.4.0 gebaut** (Nachtbau 19:04, siehe „Umsetzung Stufe 1“ unten). Stufe 2 und 3 erst nach Martins Rückmeldung
-zu Stufe 1.
+Version 0.3.11 gebaut** (Nachtbau 19:04, siehe „Umsetzung Stufe 1“ unten; das Konzept nannte 0.4.0, die Nachtbau-Regel
+zählt die Patch-Stufe hoch). Stufe 2 und 3 erst nach Martins Rückmeldung zu Stufe 1.
 
 ## Ziel
 
@@ -157,7 +157,7 @@ Zugangsdaten in Relay; Lesen im einmal freigegebenen Bereich ohne Einzelbestäti
 mit Bestätigung; das Gateway erinnert einmal je Befehl, Relay zu öffnen, wenn ein Befehl länger als 5 Minuten wartet,
 nicht in den Ruhezeiten.
 
-## Umsetzung Stufe 1 (Version 0.4.0)
+## Umsetzung Stufe 1 (Version 0.3.11)
 
 - **App:** Einstellungen → „Telefonzugriff für Agenten“: Not-Aus ganz oben, Verlauf (30 Tage, ohne Inhalte), je ein
   Schalter für Geräteinfos, Ordner, Fotos und Zwischenablage (alle anfangs aus), Ordnerfreigabe per Auswahldialog mit

@@ -105,7 +105,7 @@ Tests unter Linux: `cd RelayCore && swift test`. Ende-zu-Ende-Test gegen ein Gat
 - `docs/` gehört zum Repo und wird je Version mitgepflegt: `docs/nachtlog.md` (was wann gebaut wurde, Entscheidungen,
   Risiken), `docs/feature-parity.md` (Abgleich mit der Android-App), `docs/rueckfragen.md`, `docs/routinen.md`,
   `docs/pc-tmux.md` (Handy und PC in derselben Sitzung, Wrapper und tmux-Einstellung für den PC), `docs/telefonzugriff.md`
-  (Agenten greifen über Relay aufs iPhone zu, Stufe 1 seit 0.4.0), `docs/benachrichtigungen-fremder-apps.md` (Konzept:
+  (Agenten greifen über Relay aufs iPhone zu, Stufe 1 seit 0.3.11), `docs/benachrichtigungen-fremder-apps.md` (Konzept:
   WhatsApp-Mitteilungen für Agenten), `docs/testbericht.md`. Der Release-Text verlinkt README, Nachtlog und Changelog im Stand des Tags.
 - Lokal prüfen (nur Python nötig): `python3 scripts/changelog_section.py 0.3.5 --release --repo <owner/repo> --tag v0.3.5`
   und `python3 scripts/make_source.py <ipa> 0.3.5 1 <owner/repo> v0.3.5 source.json CHANGELOG.md`.
