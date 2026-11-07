@@ -90,10 +90,14 @@ struct SessionsView: View {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
                     Button { path.append(Dest.jarvis) } label: { Label("Jarvis fragen", systemImage: "waveform") }
-                    Button { path.append(Dest.usage) } label: { Label("Nutzung & Limits", systemImage: "gauge.with.dots.needle.33percent") }
-                    Button { path.append(Dest.memory) } label: { Label("RAM-Monitor", systemImage: "memorychip") }
-                    Button { path.append(Dest.digest) } label: { Label("Was war los", systemImage: "newspaper") }
-                    Button { path.append(Dest.tokens) } label: { Label("Token-Verbrauch", systemImage: "chart.bar") }
+                    // Untermenü, damit das Hauptmenü auf dem Bildschirm bleibt (mit „Routinen“ wären es 13 Einträge;
+                    // ein zu langes Menü schneidet „Einstellungen“ unten ab, die UI-Tests fanden es nicht mehr).
+                    Menu {
+                        Button { path.append(Dest.usage) } label: { Label("Nutzung & Limits", systemImage: "gauge.with.dots.needle.33percent") }
+                        Button { path.append(Dest.memory) } label: { Label("RAM-Monitor", systemImage: "memorychip") }
+                        Button { path.append(Dest.digest) } label: { Label("Was war los", systemImage: "newspaper") }
+                        Button { path.append(Dest.tokens) } label: { Label("Token-Verbrauch", systemImage: "chart.bar") }
+                    } label: { Label("Übersichten", systemImage: "chart.xyaxis.line") }
                     Button { path.append(Dest.notices) } label: { Label("Hinweise", systemImage: "bell.badge") }
                     Button { path.append(Dest.routines) } label: { Label("Routinen", systemImage: "calendar.badge.clock") }
                     Button { model.markAllRead() } label: { Label("Alle gelesen", systemImage: "checkmark.circle") }

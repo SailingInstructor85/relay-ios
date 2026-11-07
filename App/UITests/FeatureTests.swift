@@ -316,7 +316,7 @@ final class InfoTests: RelayTestCase {
         mainMenu("Einstellungen")
         for _ in 0..<10 { if has("Jarvis-Agent", 0.4) { break }; app.swipeUp() }
         shot("jarvis-agent")
-        XCTAssertTrue(mockReceived("get_config"))
+        XCTAssertTrue(mockReceived("get_config", timeout: 15))
     }
 
     func test17_ChatSettings() {

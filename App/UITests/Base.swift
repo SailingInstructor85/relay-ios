@@ -116,8 +116,11 @@ class RelayTestCase: XCTestCase {
         Thread.sleep(forTimeInterval: 0.5)
     }
 
+    /// Öffnet das Hauptmenü und tippt einen Eintrag; die Übersichten (Nutzung, RAM, Was war los, Token) liegen im
+    /// Untermenü „Übersichten“.
     func mainMenu(_ item: String) {
         tapID("mainMenu")
+        if !has(item, 1.5), has("Übersichten", 1) { tap("Übersichten", 2); settle(0.6) }
         tap(item, 4)
     }
 

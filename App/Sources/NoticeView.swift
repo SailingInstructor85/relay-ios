@@ -75,7 +75,6 @@ struct NoticeView: View {
                     if go != .none {
                         Button(goLabel(go)) { onGo(go) }.buttonStyle(.bordered)
                     }
-                    readButtons(n, q)
                 }
                 if let q, q.wantsAnswer { answerSection(n, q) }
             }
@@ -100,19 +99,23 @@ struct NoticeView: View {
         }
         .navigationTitle(ref == nil ? "Hinweise" : (n?.source.isEmpty == false ? n!.source : "Hinweis"))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { if let n { ToolbarItem(placement: .topBarTrailing) { readMenu(n, Rueckfrage.question(n)) } } }
+        .onDisappear { reader.stop() }
     }
 
-    /// Vorlesen des Hinweises; bei einer Rückfrage dazu „Frage vorlesen“: nur Frage und Empfehlung, ohne Kontext.
-    @ViewBuilder private func readButtons(_ n: Notice, _ q: AgentQuestion?) -> some View {
-        HStack(spacing: 10) {
-            Button { reader.toggle(n.text) } label: {
-                Label(reader.speaking ? "Vorlesen beenden" : "Vorlesen", systemImage: reader.speaking ? "speaker.slash" : "speaker.wave.2")
-            }.buttonStyle(.bordered)
+    /// Vorlesen des Hinweises über die Werkzeugleiste (Lautsprecher); bei einer Rückfrage dazu „Frage vorlesen“: nur Frage
+    /// und Empfehlung, ohne Kontext. Bewusst nicht in der Liste, damit Antwortfeld und Knöpfe an ihrem Platz bleiben.
+    private func readMenu(_ n: Notice, _ q: AgentQuestion?) -> some View {
+        Menu {
+            Button { reader.speak(n.text) } label: { Label("Vorlesen", systemImage: "speaker.wave.2") }
             if let q, q.wantsAnswer {
                 Button { reader.speak(ReadAloud.spoken(q)) } label: { Label("Frage vorlesen", systemImage: "questionmark.bubble") }
-                    .buttonStyle(.bordered)
             }
-        }
+            if reader.speaking {
+                Button { reader.stop() } label: { Label("Vorlesen beenden", systemImage: "speaker.slash") }
+            }
+        } label: { Image(systemName: reader.speaking ? "speaker.wave.2.fill" : "speaker.wave.2") }
+        .accessibilityLabel("Vorlesen")
     }
 
     /// An agent's question: the answer goes back to the Desktop (`rueckfrage`); "Ja" takes the recommendation.

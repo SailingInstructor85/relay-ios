@@ -10,6 +10,10 @@ Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Ve
 - Routinen: Menü der Sitzungsliste → „Routinen“ zeigt die Routinen des Gateways mit Titel, Beschreibung, Zeitplan, nächstem und letztem Lauf, Schalter an/aus, Detailansicht mit „Jetzt ausführen“ und Link zur Sitzung des Handoffs, dazu die systemd-Timer des PCs (nur Anzeige). „Neue Routine…“ geht in Worten an den Chef-Agenten, der den Eintrag schreibt und zurückfragt. Routinen erscheinen auch in der App-Suche. Ist im Gateway kein Team eingerichtet, sagt die App das („Routinen im Gateway nicht eingerichtet“); die Einrichtung ist in der Dokumentation beschrieben.
 - Versionshinweise im Repo: `CHANGELOG.md` führt alle Versionen. Der Abschnitt der getaggten Version wird automatisch zum Release-Text auf GitHub und zur Versionsbeschreibung in SideStore („Neu in dieser Version“), mit Links auf README, Nachtlog und Changelog.
 
+**Geändert**
+- Hauptmenü der Sitzungsliste: „Nutzung & Limits“, „RAM-Monitor“, „Was war los“ und „Token-Verbrauch“ stehen jetzt im Untermenü „Übersichten“, damit das Menü mit „Routinen“ auf den Bildschirm passt.
+- Vorlesen eines Hinweises (und „Frage vorlesen“ bei Rückfragen) sitzt im Lautsprecher-Knopf oben rechts, nicht mehr als Zeile im Hinweis.
+
 ## 0.3.5 (2026-11-07)
 
 **Neu**
