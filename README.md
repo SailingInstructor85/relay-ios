@@ -66,7 +66,7 @@ iPhone 16 Pro (iOS 17 oder neuer).
   es am PC mit `notifyd phone usage --since 10:30` und `notifyd phone reports --show`. Braucht ein aktuelles Gateway.
 
 Noch nicht enthalten, weil iOS es nicht zulässt oder weil es später kommt: ein dauerhaft lauschendes Wake-Word
-„Hey Jarvis“ (stattdessen Siri oder die Aktionstaste), die Telefon-Bridge (SMS, Health, fremde Mitteilungen), das
+„Hey Jarvis“ (stattdessen Siri oder die Aktionstaste), die Telefon-Bridge (SMS, Health, fremde Mitteilungen; Wege dazu in `docs/benachrichtigungen-fremder-apps.md`), das
 Teilen-Menü und ein Homescreen-Widget (beide brauchen eigene App-IDs, siehe App-Store-Abschnitt) sowie sofortige
 Mitteilungen bei geschlossener App. Für Letzteres bräuchte man Apple-Push über einen Server, und den will Relay bewusst
 nicht.
@@ -105,7 +105,8 @@ Tests unter Linux: `cd RelayCore && swift test`. Ende-zu-Ende-Test gegen ein Gat
 - `docs/` gehört zum Repo und wird je Version mitgepflegt: `docs/nachtlog.md` (was wann gebaut wurde, Entscheidungen,
   Risiken), `docs/feature-parity.md` (Abgleich mit der Android-App), `docs/rueckfragen.md`, `docs/routinen.md`,
   `docs/pc-tmux.md` (Handy und PC in derselben Sitzung, Wrapper und tmux-Einstellung für den PC), `docs/telefonzugriff.md`
-  (Agenten greifen über Relay aufs iPhone zu, Stufe 1 seit 0.4.0), `docs/testbericht.md`. Der Release-Text verlinkt README, Nachtlog und Changelog im Stand des Tags.
+  (Agenten greifen über Relay aufs iPhone zu, Stufe 1 seit 0.4.0), `docs/benachrichtigungen-fremder-apps.md` (Konzept:
+  WhatsApp-Mitteilungen für Agenten), `docs/testbericht.md`. Der Release-Text verlinkt README, Nachtlog und Changelog im Stand des Tags.
 - Lokal prüfen (nur Python nötig): `python3 scripts/changelog_section.py 0.3.5 --release --repo <owner/repo> --tag v0.3.5`
   und `python3 scripts/make_source.py <ipa> 0.3.5 1 <owner/repo> v0.3.5 source.json CHANGELOG.md`.
 
