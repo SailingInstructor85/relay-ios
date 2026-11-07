@@ -92,6 +92,7 @@ jobs:
       - name: Generate project
         run: brew install xcodegen && xcodegen generate
       - name: Simulator waehlen und starten
+        timeout-minutes: 15
         run: |
           xcrun simctl list devices available | grep -i iphone | head -30
           UDID=$(python3 testing/pick_sim.py)
@@ -103,6 +104,7 @@ jobs:
       - name: sshd und Mock-Gateway
         run: testing/ci_sshd.sh
       - name: Build for testing
+        timeout-minutes: 40
         run: |
           set -o pipefail
           xcodebuild -project Relay.xcodeproj -scheme Relay -configuration Debug \
@@ -112,6 +114,9 @@ jobs:
           grep -E "error:|BUILD (SUCCEEDED|FAILED)|TEST BUILD (SUCCEEDED|FAILED)" build-sim.log | sort -u || true
           test "$rc" -eq 0
       - name: UI-Tests
+        # Ein Teil läuft rund 15 Minuten. Bleibt xcodebuild hängen (Lauf 42328386349 lief in das 90-Minuten-Limit
+        # des Jobs, ohne Auszug), bricht dieser Schritt ab und die Schritte danach zeigen trotzdem, wo es stand.
+        timeout-minutes: 45
         run: |
           rm -rf Results.xcresult
           ONLY=""
@@ -163,8 +168,11 @@ jobs:
           xcrun simctl spawn "$UDID" log show --last 90m --predicate 'process == "Relay" AND (messageType == fault OR messageType == error)' --style compact 2>&1 | tail -n 2000 > out/relay-app-errors.log || true
           ls -la ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -i relay > out/crash-reports.txt || true
           ls out/shots | wc -l
+      # Der Upload ist Beiwerk: schlägt er fehl (Lauf 42325452387: „Request timeout … CreateArtifact“ fünfmal),
+      # bleibt der Teil grün, wenn die Tests grün waren.
       - uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: simulator-results-${{ matrix.shard.name }}
           path: |
@@ -175,14 +183,23 @@ jobs:
             out/rpc-all.jsonl
       - uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: xcresult-${{ matrix.shard.name }}
           path: Results.xcresult
       - name: Ergebnis
         # Bei Rot stehen die gescheiterten Testfälle und ihre Meldungen hier im Schritt, damit sie auch in
         # „gh run view --log-failed“ auftauchen (der Nachtbau sieht nur diesen Auszug, nicht die Artefakte).
+        # Ohne test.rc ist der UI-Test-Schritt abgebrochen (Zeitlimit): dann steht hier, wie weit er kam.
+        if: always()
         run: |
-          if [ "$(cat test.rc)" -ne 0 ]; then
+          rc=$(cat test.rc 2>/dev/null || echo 124)
+          if [ "$rc" -eq 124 ]; then
+            echo "UI-Tests kamen nicht zu Ende (Zeitlimit oder Abbruch). Letzte Zeilen von test.log:"
+            grep -E "Test Case .* (started|passed|failed)" test.log 2>/dev/null | tail -15 | cut -c1-300 || true
+            tail -20 test.log 2>/dev/null | cut -c1-300 || true
+          fi
+          if [ "$rc" -ne 0 ]; then
             echo "Gescheiterte Testfälle:"
             grep -E "Test Case .* failed" test.log | cut -c1-300 | sort -u || true
             echo "Fehlermeldungen:"
@@ -193,4 +210,4 @@ jobs:
             grep -E "crashed|Traceback|Error|cut by|hello" /tmp/relaymock/mock.log 2>/dev/null | tail -30 || true
             tail -5 /tmp/relaymock/sshd.log 2>/dev/null || true
           fi
-          test "$(cat test.rc)" -eq 0
+          test "$rc" -eq 0
