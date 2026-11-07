@@ -189,6 +189,7 @@ final class InfoTests: RelayTestCase {
         settle(1.5)
         shot("routine-detail")
         expect("Jetzt ausführen", 4, soft: true)
+        reveal("Jetzt ausführen")  // der Knopf steht am Ende der Detailliste
         tapID("routineRun")
         settle(2.5)
         XCTAssertTrue(mockReceived("routine_run", where: { ($0["id"] as? String) == "morning-brief" }), "routine_run nicht aufgerufen")
@@ -196,6 +197,7 @@ final class InfoTests: RelayTestCase {
         shot("routine-ausgefuehrt")
         back()
         settle(1)
+        reveal("Neue Routine")
         tapID("routineNew")
         settle(1.5)
         typeInto("routineText", "Jeden Freitag um 17 Uhr die Woche zusammenfassen")
