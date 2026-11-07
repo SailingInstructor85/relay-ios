@@ -36,6 +36,8 @@ struct NoticeView: View {
     var ref: String?
     var onOpen: (String) -> Void
     var onGo: (NoticeLogic.Goto) -> Void
+    /// Öffnet den Sprachmodus (offene Rückfragen vorlesen und per Sprache beantworten).
+    var onDrive: () -> Void = {}
     @ObservedObject private var store = NoticeStore.shared
     @Environment(\.openURL) private var openURL
     @State private var answer = ""
@@ -51,6 +53,7 @@ struct NoticeView: View {
         let n = ref.flatMap { store.get($0) }
         let earlier = store.items.filter { $0.ref != ref }
         List {
+            if ref == nil { driveSection }
             if ref != nil, n == nil {
                 Text("Dieser Hinweis ist nicht mehr auf dem iPhone (Relay behält sie \(NoticeLogic.keepDays) Tage).").foregroundStyle(.secondary)
             }
@@ -118,6 +121,23 @@ struct NoticeView: View {
         .accessibilityLabel("Vorlesen")
     }
 
+    /// Ganz oben in der Liste (nicht am Ende, sonst ist der Knopf bei vielen Hinweisen außer Sicht).
+    @ViewBuilder private var driveSection: some View {
+        let open = DriveQueue.open(store.items).count
+        Section {
+            Button(action: onDrive) {
+                HStack {
+                    Label("Sprachmodus", systemImage: "car").font(.headline)
+                    Spacer()
+                    Text(open == 0 ? "keine offen" : (open == 1 ? "1 Rückfrage" : "\(open) Rückfragen")).foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityIdentifier("openDrive")
+        } footer: {
+            Text("Liest offene Rückfragen vor, du antwortest per Sprache. Die Antwort wird vorgelesen und geht erst nach „senden“ raus.")
+        }
+    }
+
     /// An agent's question: the answer goes back to the Desktop (`rueckfrage`); "Ja" takes the recommendation.
     @ViewBuilder private func answerSection(_ n: Notice, _ q: AgentQuestion) -> some View {
         Section("Antwort") {
@@ -135,6 +155,8 @@ struct NoticeView: View {
                     if answering { ProgressView().controlSize(.small) }
                 }.disabled(answering)
                 if let e = answerError { Text(e).font(.footnote).foregroundStyle(.red) }
+                Button(action: onDrive) { Label("Im Sprachmodus beantworten", systemImage: "car") }
+                    .buttonStyle(.borderless).accessibilityIdentifier("answerByVoice")
             }
         }
     }

@@ -174,6 +174,33 @@ final class InfoTests: RelayTestCase {
         expect("Beantwortet", 4, soft: true)
     }
 
+    /// Sprachmodus („Autofahrt“): offene Rückfrage vorlesen, „Ja“, Kontrolle der Antwort, „Senden“. Im UI-Test ohne
+    /// Mikrofon und Stimme: der Ablauf läuft über die großen Knöpfe, die dasselbe tun wie die Sprachbefehle.
+    func test24_DriveMode() {
+        launchConnected()
+        ctl("trigger_rueckfrage")
+        settle(3)
+        mainMenu("Hinweise")
+        settle(1.5)
+        shot("hinweise-sprachmodus")
+        tapID("openDrive")
+        settle(2)
+        shot("sprachmodus-frage")
+        expect("Soll ich die alte Route", 6)
+        tapID("driveYes")
+        settle(1)
+        shot("sprachmodus-kontrolle")
+        expect("Deine Antwort: ja", 3, soft: true)
+        tapID("driveSend")
+        settle(2)
+        XCTAssertTrue(mockReceived("inbox_put", where: { p in
+            ((p["items"] as? [[String: Any]])?.first?["app"] as? String) == "rueckfrage" && ((p["items"] as? [[String: Any]])?.first?["text"] as? String) == "ja"
+        }))
+        expect("Wartet auf Rückfragen", 4, soft: true)
+        shot("sprachmodus-gesendet")
+        tapID("driveEnd")
+    }
+
     func test21_Routines() {
         launchConnected()
         mainMenu("Routinen")

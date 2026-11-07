@@ -31,6 +31,9 @@ Verhalten in der App (`C: Notify.swift` `Rueckfrage`, `A: NoticeView.swift`, `A:
   es unter `~/.local/share/notifyd/inbox/notification/<YYYY-MM-DD>.jsonl` ab (dedupliziert nach `id`) und liefert es
   über `notifyd phone inbox --kind notification --app rueckfrage`. Dafür ist am Gateway nichts zu ändern.
 
+Seit 0.3.9 lassen sich offene Rückfragen auch im Sprachmodus beantworten (vorlesen, per Sprache antworten,
+Kontrolle, „senden“). Die Antwort geht auf demselben Weg (`inbox_put`) zum PC. Details: `docs/sprachmodus.md`.
+
 ## Vorschlag für `~/.agents/bin/rueckfrage` (nicht umgesetzt)
 
 1. `cmd_neu` und `cmd_meldung`: nach dem Schreiben der Datei, wenn Martin weg ist (`anwesenheit status` Exit 1),

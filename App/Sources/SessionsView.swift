@@ -18,7 +18,7 @@ struct SessionsView: View {
     @StateObject private var searcher = ContentSearcher()
     @State private var showKill = false
 
-    enum Dest: Hashable { case chat(String), chatSearch(String, String), settings, usage, memory, jarvis, jarvisListening, notices, notice(String), digest, tokens, routines }
+    enum Dest: Hashable { case chat(String), chatSearch(String, String), settings, usage, memory, jarvis, jarvisListening, notices, notice(String), digest, tokens, routines, drive }
 
     private func haystack(_ s: Session) -> String { "\(s.name) \(s.alias) \(s.folder) \(s.cwd)" }
 
@@ -154,8 +154,9 @@ struct SessionsView: View {
             case .tokens: TokensView()
             case .jarvis: JarvisView()
             case .jarvisListening: JarvisView(autoListen: true)
-            case .notices: NoticeView(ref: nil, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice)
-            case .notice(let ref): NoticeView(ref: ref, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice)
+            case .notices: NoticeView(ref: nil, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice, onDrive: { path.append(Dest.drive) })
+            case .notice(let ref): NoticeView(ref: ref, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice, onDrive: { path.append(Dest.drive) })
+            case .drive: DriveView()
             case .routines: RoutinesView()
             }
         }
@@ -188,9 +189,13 @@ struct SessionsView: View {
         .onChange(of: model.openJarvis) { _, open in
             if open { path = NavigationPath(); path.append(Dest.jarvisListening); model.openJarvis = false }
         }
+        .onChange(of: model.openDrive) { _, open in
+            if open { path = NavigationPath(); path.append(Dest.drive); model.openDrive = false }
+        }
         .onAppear {
             if let ref = model.openNotice { path.append(Dest.notice(ref)); model.openNotice = nil }
             if model.openJarvis { path.append(Dest.jarvisListening); model.openJarvis = false }
+            if model.openDrive { path.append(Dest.drive); model.openDrive = false }
         }
     }
 

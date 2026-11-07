@@ -73,8 +73,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var activeHost = ""   // the address the current link uses (with two configured)
     @Published var openChat: String?   // a session key to navigate to (notification tap)
     @Published var openJarvis = false  // Siri / Action Button shortcut
+    @Published var openDrive = false   // Kurzbefehl „Sprachmodus in Relay“
     @Published var voiceLive = false   // hello_ok.config.voice == "live": the Desktop offers Jarvis Live (not used here)
     var conversationActive = false     // Jarvis conversation mode is running (set by JarvisView)
+    var driveActive = false            // Sprachmodus offen: er liest selbst vor, keine zweite Stimme (DriveView)
     var lastJarvisWarm = Date.distantPast
     var jarvisWarmUnsupported = false
     @Published var locked = false      // Face ID lock shown

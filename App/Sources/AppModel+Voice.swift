@@ -20,7 +20,7 @@ extension AppModel {
     /// A session just finished: with the setting on, in the foreground, and headphones or conversation mode, read a short
     /// summary aloud (rpc `speak_summary`; the first sentences of the last message when that fails).
     func announceFinished(_ s: Session) {
-        guard SpeechPrefs.readFinished, foreground, state == .connected, !Announcer.shared.busy,
+        guard SpeechPrefs.readFinished, foreground, state == .connected, !Announcer.shared.busy, !driveActive,
               s.key != visibleChat, conversationActive || Self.headphonesConnected else { return }
         let a = Announcer.shared
         a.busy = true

@@ -32,6 +32,12 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Sitzungsmenü, Leiste mit Pause und Stopp über der Eingabe. „Frage vorlesen“ liest nur die Frage mit Optionen und
   Empfehlung vor (Langdruck-Menü, Sitzungsmenü, Fragekarten, Rückfragen unter „Hinweise“). Codeblöcke werden
   übersprungen, Pfade beim Dateinamen genannt, Links als „Link“.
+- **Sprachmodus für die Autofahrt** (Hinweise → „Sprachmodus“ oder Kurzbefehl „Sprachmodus in Relay“): liest offene
+  Rückfragen vor (nur Frage und Empfehlung), du antwortest mit „ja“, „nein“ oder in eigenen Worten, hörst die Antwort
+  zur Kontrolle und gibst sie mit „senden“ frei („nochmal“ oder ein neuer Satz korrigiert). Neue Rückfragen liest er
+  sofort vor. Dazu ein Freihand-Gespräch mit einer laufenden Sitzung: sprechen, kontrollieren, senden, die Antwort
+  gekürzt hören. Große Knöpfe für alles, Bildschirm bleibt an, Ton über Bluetooth oder CarPlay. Details:
+  `docs/sprachmodus.md`.
 - **Routinen** (Menü → „Routinen“): Routinen des Gateways mit Zeitplan, letztem Lauf, Schalter, „Jetzt ausführen“
   und den systemd-Timern des PCs; „Neue Routine“ in Worten an den Chef-Agenten. Braucht einen `team:`-Block in der
   Gateway-Konfiguration, sonst zeigt die App „Routinen im Gateway nicht eingerichtet“ (Einrichtung: `docs/routinen.md`).

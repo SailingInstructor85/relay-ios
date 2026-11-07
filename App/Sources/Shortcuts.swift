@@ -16,6 +16,20 @@ struct AskJarvisIntent: AppIntent {
     }
 }
 
+/// "Sprachmodus in Relay" per Siri, CarPlay-Siri oder Aktionstaste: öffnet Relay im Sprachmodus, der offene
+/// Rückfragen vorliest und Antworten per Sprache annimmt.
+struct DriveModeIntent: AppIntent {
+    static var title: LocalizedStringResource = "Sprachmodus starten"
+    static var description = IntentDescription("Öffnet Relay im Sprachmodus: offene Rückfragen werden vorgelesen und per Sprache beantwortet.")
+    static var openAppWhenRun = true
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        AppModel.shared.openDrive = true
+        return .result()
+    }
+}
+
 /// A session as a Shortcuts parameter (running ones first; the list comes from the last known overview).
 struct SessionEntity: AppEntity {
     static var typeDisplayRepresentation: TypeDisplayRepresentation = "Sitzung"
@@ -118,6 +132,12 @@ struct RelayShortcuts: AppShortcutsProvider {
                               "\(.applicationName) Jarvis"],
                     shortTitle: "Jarvis fragen",
                     systemImageName: "waveform")
+        AppShortcut(intent: DriveModeIntent(),
+                    phrases: ["Sprachmodus in \(.applicationName)",
+                              "\(.applicationName) Sprachmodus",
+                              "Rückfragen in \(.applicationName)"],
+                    shortTitle: "Sprachmodus",
+                    systemImageName: "car")
         AppShortcut(intent: SendToSessionIntent(),
                     phrases: ["Nachricht senden in \(.applicationName)", "\(.applicationName) Nachricht senden"],
                     shortTitle: "Nachricht senden",

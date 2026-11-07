@@ -54,7 +54,7 @@ source = {
         "appPermissions": {
             "entitlements": [],
             "privacy": {
-                "NSMicrophoneUsageDescription": "Jarvis hört zu, wenn du aufs Mikrofon tippst.",
+                "NSMicrophoneUsageDescription": "Relay hört zu, wenn du aufs Mikrofon tippst oder im Sprachmodus antwortest.",
                 "NSSpeechRecognitionUsageDescription": "Sprache wird auf dem iPhone in Text umgewandelt.",
                 "NSFaceIDUsageDescription": "Relay lässt sich mit Face ID sperren.",
                 "NSLocalNetworkUsageDescription": "SSH-Verbindung zum Desktop im lokalen Netz.",
