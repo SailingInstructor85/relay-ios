@@ -111,8 +111,8 @@ public struct PhoneSettings: Sendable, Equatable {
     /// Nutzlast für `phone_caps`.
     public var caps: JSON {
         .object(["killswitch": .bool(killswitch),
-                 "areas": .array(PhoneArea.allCases.filter { areas.contains($0) }.map { .string($0.rawValue) }),
-                 "folders": .array(folders.map { .string($0) })])
+                 "areas": .array(PhoneArea.allCases.filter { areas.contains($0) }.map { JSON.string($0.rawValue) }),
+                 "folders": .array(folders.map { JSON.string($0) })])
     }
 }
 
