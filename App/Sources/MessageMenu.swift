@@ -79,29 +79,71 @@ struct FileChip: View {
     }
 }
 
-/// Reads a message aloud with an installed on-device voice.
+/// Reads a text aloud on demand with an installed on-device voice (ReadAloud.cleaned: no code, paths and links by
+/// name). One reader for the whole app, so a new start replaces the old one; pause and resume at a word boundary; the
+/// sound goes wherever the phone plays (headset, Bluetooth, speaker).
 @MainActor
 final class SpeechOut: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+    static let shared = SpeechOut()
+    /// Something is queued or running (a paused reading counts).
     @Published private(set) var speaking = false
+    @Published private(set) var paused = false
     private let synth = AVSpeechSynthesizer()
 
     override init() { super.init(); synth.delegate = self }
 
-    func toggle(_ markdown: String) {
-        if speaking { stop(); return }
-        let text = VoiceIO.speakable(markdown)
+    func speak(_ markdown: String) {
+        stop()
+        let text = ReadAloud.cleaned(markdown)
         guard text.rangeOfCharacter(from: .alphanumerics) != nil else { return }
-        let u = VoiceIO.utterance(text)
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
         try? AVAudioSession.sharedInstance().setActive(true)
         speaking = true
-        synth.speak(u)
+        paused = false
+        synth.speak(VoiceIO.utterance(text))
     }
 
-    func stop() { synth.stopSpeaking(at: .immediate); speaking = false }
+    func toggle(_ markdown: String) {
+        if speaking { stop() } else { speak(markdown) }
+    }
 
-    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { Task { @MainActor in self.speaking = false } }
-    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { Task { @MainActor in self.speaking = false } }
+    func pause() {
+        guard speaking, !paused else { return }
+        if synth.pauseSpeaking(at: .word) { paused = true }
+    }
+
+    func resume() {
+        guard paused else { return }
+        if synth.continueSpeaking() { paused = false }
+    }
+
+    func stop() {
+        if synth.isSpeaking || synth.isPaused { synth.stopSpeaking(at: .immediate) }
+        speaking = false
+        paused = false
+    }
+
+    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { Task { @MainActor in self.ended() } }
+    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { Task { @MainActor in self.ended() } }
+    private func ended() { speaking = false; paused = false }
+}
+
+/// Pause, resume and stop while something is read aloud (shown above the input bar of a chat).
+struct ReadAloudBar: View {
+    @ObservedObject var reader: SpeechOut
+    var body: some View {
+        HStack(spacing: 12) {
+            Label(reader.paused ? "Vorlesen pausiert" : "Liest vor…", systemImage: reader.paused ? "pause.circle" : "speaker.wave.2")
+                .font(.footnote).foregroundStyle(.secondary)
+            Spacer()
+            Button { reader.paused ? reader.resume() : reader.pause() } label: { Image(systemName: reader.paused ? "play.fill" : "pause.fill") }
+                .accessibilityLabel(reader.paused ? "Weiter vorlesen" : "Vorlesen pausieren").accessibilityIdentifier("readPause")
+            Button { reader.stop() } label: { Image(systemName: "stop.fill") }
+                .accessibilityLabel("Vorlesen beenden").accessibilityIdentifier("readStop")
+        }
+        .padding(.horizontal).padding(.vertical, 6)
+        .background(Color(.secondarySystemBackground))
+    }
 }
 
 /// Selectable full-screen text (UITextView: handles, select all, copy).
@@ -128,11 +170,13 @@ struct MessageMenu: View {
     let base: String?
     let onFile: (RemoteRef) -> Void
 
-    @StateObject private var speech = SpeechOut()
+    @ObservedObject private var speech = SpeechOut.shared
     @State private var copied = ""
     @State private var error: String?
 
     private var links: [FoundLink] { Array(Links.extract(message.text).prefix(30)) }
+    /// The question of this message with options and recommendation, when it asks one (ReadAloud).
+    private var question: String? { message.role == "assistant" ? ReadAloud.question(in: message.text) : nil }
 
     var body: some View {
         NavigationStack {
@@ -144,6 +188,9 @@ struct MessageMenu: View {
                     }
                     Button { speech.toggle(message.text) } label: {
                         Label(speech.speaking ? "Vorlesen beenden" : "Vorlesen", systemImage: speech.speaking ? "speaker.slash" : "speaker.wave.2")
+                    }
+                    if let question {
+                        Button { speech.speak(question); dismiss() } label: { Label("Frage vorlesen", systemImage: "questionmark.bubble") }
                     }
                 }
                 if let error { Section { Text(error).font(.footnote).foregroundStyle(.red) } }
@@ -176,7 +223,6 @@ struct MessageMenu: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Schließen") { dismiss() } } }
         }
         .presentationDetents([.medium, .large])
-        .onDisappear { speech.stop() }
     }
 
     private func open(_ raw: String) {

@@ -291,3 +291,156 @@ public enum VoiceMode {
     /// True when the Desktop offers Jarvis Live (Gemini over the SSH `voice` channel). The iOS app does not use it.
     public static func isLive(_ configVoice: String?) -> Bool { configVoice == "live" }
 }
+
+/// Reading an answer aloud on demand (2026-11-07): the text the way a voice should say it, and the question inside an
+/// answer with its options and recommendation, nothing else. Pure text rules, nothing leaves the phone.
+public enum ReadAloud {
+    static let codeNote = "Codeblock ausgelassen."
+
+    /// Fenced code becomes a short note (a voice reading code is noise).
+    static func stripCode(_ markdown: String) -> String {
+        var t = markdown.replacingOccurrences(of: "\r\n", with: "\n")
+        t = t.replacingOccurrences(of: #"```[\s\S]*?```"#, with: "\n\(codeNote)\n", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"```[\s\S]*$"#, with: "\n\(codeNote)\n", options: .regularExpression)  // never closed
+        return t
+    }
+
+    /// Markdown made speakable: fenced code a short note, inline code its words, links their text, bare URLs "Link", file
+    /// paths their last part (`/home/x/docs/nachtlog.md` -> "nachtlog.md"), tables their cells with commas, headings,
+    /// list marks, quotes, rules and emphasis gone. "km/h" and "und/oder" are no paths and stay.
+    public static func cleaned(_ markdown: String) -> String {
+        var t = stripCode(markdown)
+        t = t.replacingOccurrences(of: #"`([^`\n]*)`"#, with: "$1", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"!\[([^\]\n]*)\]\([^)\n]*\)"#, with: "", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"\[([^\]\n]*)\]\([^)\n]*\)"#, with: "$1", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"<(?:https?://|www\.)[^>\s]+>"#, with: "Link", options: [.regularExpression, .caseInsensitive])
+        t = t.replacingOccurrences(of: #"(?:https?://|www\.)[^\s<>()\[\]"']+"#, with: "Link", options: [.regularExpression, .caseInsensitive])
+        t = replacing(t, absolutePath) { pathName($0) }
+        t = replacing(t, relativeFile) { pathName($0) }
+        var lines: [String] = []
+        for raw in t.components(separatedBy: "\n") {
+            var line = raw.trimmingCharacters(in: .whitespaces)
+            if line.range(of: #"^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$"#, options: .regularExpression) != nil { continue }  // table separator
+            if line.range(of: #"^([-*_]\s*){3,}$"#, options: .regularExpression) != nil { continue }  // rule
+            if line.hasPrefix("|") || line.filter({ $0 == "|" }).count >= 2 {
+                let cells = line.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                line = cells.isEmpty ? "" : cells.joined(separator: ", ") + "."
+            }
+            line = line.replacingOccurrences(of: #"^#{1,6}\s+"#, with: "", options: .regularExpression)
+            line = line.replacingOccurrences(of: #"^>\s?"#, with: "", options: .regularExpression)
+            line = line.replacingOccurrences(of: #"^[-*+•]\s+(\[[ xX]\]\s*)?"#, with: "", options: .regularExpression)
+            lines.append(line)
+        }
+        t = lines.joined(separator: "\n")
+        t = t.replacingOccurrences(of: #"</?[a-zA-Z][^>\n]*>"#, with: " ", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"\*\*|__|~~|[*`]"#, with: "", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
+        t = t.replacingOccurrences(of: #" +\n"#, with: "\n", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+        return t.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // a path segment: word characters, a dot only when a word character follows (so a sentence's full stop stays)
+    private static let segment = #"(?:[\w@+~-]|\.(?=\w))+"#
+    /// `/usr/x`, `~/x/y`, `./x`, `../x`, with an optional `:line` or `:line:col`; not "km/h" or "und/oder".
+    private static let absolutePath = #"(?<![\w/.])(?:~|\.{1,2})?(?:/"# + segment + #")+/?(?::\d+(?::\d+)?)?"#
+    /// `docs/nachtlog.md`, `scripts/make_source.py`: a relative path whose last part is a file with an extension.
+    private static let relativeFile = #"(?<![\w/.])[\w@+~-]+(?:/[\w@+~-]+)*/[\w@+~-]+\.[A-Za-z0-9]{1,6}\b(?::\d+(?::\d+)?)?"#
+
+    /// The last part of a path without a line number; "Pfad" when there is none worth saying.
+    static func pathName(_ path: String) -> String {
+        var s = path.replacingOccurrences(of: #":\d+(?::\d+)?$"#, with: "", options: .regularExpression)
+        while s.hasSuffix("/") { s.removeLast() }
+        let name = s.split(separator: "/").last.map(String.init) ?? ""
+        if name.isEmpty || name == "~" || name == "." || name == ".." { return "Pfad" }
+        return name
+    }
+
+    static func replacing(_ s: String, _ pattern: String, _ f: (String) -> String) -> String {
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return s }
+        let ns = s as NSString
+        var out = ""
+        var last = 0
+        for m in re.matches(in: s, range: NSRange(location: 0, length: ns.length)) {
+            out += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            out += f(ns.substring(with: m.range))
+            last = m.range.location + m.range.length
+        }
+        out += ns.substring(from: last)
+        return out
+    }
+
+    // MARK: the question in an answer
+
+    static func paragraphs(_ t: String) -> [String] {
+        t.components(separatedBy: "\n\n").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
+
+    static func isListItem(_ line: String) -> Bool {
+        line.range(of: #"^\s*(?:[-*+•]\s+|\d{1,2}[.)]\s+|[a-hA-H][.)]\s+|Option\s+\w)"#, options: .regularExpression) != nil
+    }
+
+    /// A paragraph of list items, with at most one intro line ("Optionen:") before them.
+    static func isList(_ p: String) -> Bool {
+        let lines = p.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard let first = lines.first else { return false }
+        let items = isListItem(first) ? lines : Array(lines.dropFirst())
+        return !items.isEmpty && items.allSatisfy(isListItem)
+    }
+
+    /// It asks something: a question mark, or it opens like a decision ("Frage:", "Soll ich", "Entscheidung").
+    static func isQuestion(_ p: String) -> Bool {
+        if p.contains("?") { return true }
+        let l = p.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "*_# "))
+        return ["frage", "rückfrage", "entscheidung", "soll ich", "willst du", "möchtest du", "sollen wir", "question"].contains { l.hasPrefix($0) }
+    }
+
+    static func isRecommendation(_ p: String) -> Bool {
+        let l = p.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "*_# "))
+        return ["empfehlung", "ich empfehle", "mein vorschlag", "vorschlag:", "recommendation"].contains { l.hasPrefix($0) }
+            || l.contains("ich empfehle") || l.contains("meine empfehlung")
+    }
+
+    /// The question of an answer with its options and recommendation: the last paragraph that asks something, a list
+    /// right before it (the options it refers to, with their intro line) and the lists, further questions and the
+    /// recommendation after it; a recommendation further down still counts. Nil when the answer asks nothing. Works on
+    /// the text without code, so a question inside a code block never counts.
+    public static func question(in markdown: String) -> String? {
+        let paras = paragraphs(stripCode(markdown))
+        guard let qi = paras.lastIndex(where: isQuestion) ?? paras.lastIndex(where: isRecommendation) else { return nil }
+        var picked = [qi]
+        if qi > 0, isList(paras[qi - 1]) {
+            picked.insert(qi - 1, at: 0)
+            if qi > 1, paras[qi - 2].hasSuffix(":") { picked.insert(qi - 2, at: 0) }
+        }
+        var j = qi + 1
+        while j < paras.count, isList(paras[j]) || isRecommendation(paras[j]) || isQuestion(paras[j]) { picked.append(j); j += 1 }
+        if let r = (j..<paras.count).first(where: { isRecommendation(paras[$0]) }) { picked.append(r) }
+        let text = cleaned(picked.map { paras[$0] }.joined(separator: "\n\n"))
+        return text.rangeOfCharacter(from: .alphanumerics) == nil ? nil : text
+    }
+
+    /// An agent's question from `rueckfrage` as it should be read: the question and the recommendation, no context.
+    public static func spoken(_ q: AgentQuestion) -> String {
+        var parts = [q.question]
+        if !q.recommendation.isEmpty { parts.append("Empfehlung: " + q.recommendation) }
+        return cleaned(parts.joined(separator: "\n"))
+    }
+
+    /// The session's open question (its card) with the numbered options and their descriptions.
+    public static func spoken(question q: Question) -> String {
+        var lines: [String] = []
+        for sub in q.all {
+            lines.append(sub.text)
+            for (i, o) in sub.options.enumerated() {
+                lines.append("\(i + 1). " + o.label + (o.description.isEmpty ? "" : ": " + o.description))
+            }
+        }
+        return cleaned(lines.joined(separator: "\n"))
+    }
+
+    /// The newest message of the agent with text ("letzte Antwort vorlesen").
+    public static func lastAnswer(_ messages: [TMessage]) -> TMessage? {
+        messages.last { $0.role == "assistant" && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+}
