@@ -13,9 +13,10 @@ struct RelayApp: App {
             RootView()
                 .environmentObject(model)
                 .onOpenURL { model.receive($0) }
-                .onAppear { model.start(); Outbox.shared.start(); model.requestNotificationPermission() }
+                .onAppear { UsageRecorder.shared.appStarted(); model.start(); Outbox.shared.start(); model.requestNotificationPermission() }
                 .onChange(of: phase) { _, p in
                     model.setForeground(p == .active)
+                    UsageRecorder.shared.phase(p)
                     if p == .background {
                         BackgroundRefresh.schedule()
                         if model.lockEnabled { model.locked = true }

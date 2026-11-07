@@ -44,7 +44,14 @@ final class AppModel: ObservableObject {
     @AppStorage("lastAlias") var lastAlias = ""
     @AppStorage("vaultDir") var vaultDir = VaultDrop.defaultDir   // "Ins Vault einsortieren": the vault folder on the PC
 
-    @Published private(set) var state: ConnState = .off
+    @Published private(set) var state: ConnState = .off {
+        didSet {
+            guard state != oldValue else { return }
+            if case .error(let m) = state { UsageRecorder.shared.record("app", "verbindung", detail: "Fehler", error: m) }
+            else { UsageRecorder.shared.record("app", "verbindung", detail: state.label) }
+            if state == .connected { Task { await UsageRecorder.shared.flush() } }
+        }
+    }
     @Published private(set) var sessions: [String: Session] = [:]
     /// „Alle Sitzungen beenden“ (WindDown): der laufende Auftrag des Gateways und sein Stand.
     @Published private(set) var windDownJob: String?
@@ -61,7 +68,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var cloudError = ""
     @Published private(set) var cloudChecked: Double = 0
     @Published private(set) var look = Avatars.Look()
-    @Published var lastError: String? { didSet { if let e = lastError, e != oldValue { AppLog.shared.log("warn", "ui", e) } } }
+    @Published var lastError: String? { didSet { if let e = lastError, e != oldValue { AppLog.shared.log("warn", "ui", e); UsageRecorder.shared.record("app", "fehler", error: e) } } }
     @Published private(set) var vpnActive = false
     @Published private(set) var activeHost = ""   // the address the current link uses (with two configured)
     @Published var openChat: String?   // a session key to navigate to (notification tap)

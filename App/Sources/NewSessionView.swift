@@ -67,6 +67,7 @@ struct NewSessionView: View {
                 if let e = error { Section { Text(e).foregroundStyle(.red).font(.footnote) } }
             }
             .navigationTitle("Neue Sitzung")
+            .onAppear { UsageRecorder.shared.screen("neue sitzung") }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Abbrechen") { dismiss() } }

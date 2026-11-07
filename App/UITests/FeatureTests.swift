@@ -345,4 +345,25 @@ final class InfoTests: RelayTestCase {
         settle(3)
         shot("standortanfrage")
     }
+
+    func test23_UsageLogAndReport() {
+        // Nutzungsprotokoll: Abschnitt direkt unter „Status“, „Protokoll jetzt senden“ schickt usage_put ans Gateway,
+        // „Fehler melden“ schickt Beschreibung und Ereignisse, ohne Haken keine Inhalte.
+        launchConnected()
+        mainMenu("Einstellungen")
+        settle(1)
+        reveal("Protokoll jetzt senden")
+        shot("nutzungsprotokoll")
+        tapID("usageSend")
+        XCTAssertTrue(mockReceived("usage_put", timeout: 10), "kein usage_put beim Gateway")
+        reveal("Fehler melden")
+        tapID("usageReport")
+        typeInto("reportText", "Senden hängt im Test")
+        settle(0.5)
+        shot("fehler-melden")
+        tapID("reportSend")
+        XCTAssertTrue(mockReceived("usage_report", where: { p in
+            (p["text"] as? String) == "Senden hängt im Test" && p["contents"] == nil && (p["events"] as? [Any]) != nil
+        }, timeout: 10), "keine Fehlermeldung beim Gateway (oder mit Inhalten)")
+    }
 }

@@ -62,6 +62,7 @@ struct SetupView: View {
                 }
             }
             if !firstRun {
+                UsageSettingsSection()
                 NotifySettingsSection()
                 ChatSettingsSection()
                 SpeechSettingsSection()
@@ -86,6 +87,7 @@ struct SetupView: View {
             }
         }
         .navigationTitle(firstRun ? "Relay einrichten" : "Einstellungen")
+        .onAppear { UsageRecorder.shared.screen(firstRun ? "einrichtung" : "einstellungen") }
         .onAppear { host = model.host; host2 = model.host2; port = String(model.port); user = model.user }
     }
 

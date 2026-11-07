@@ -38,6 +38,7 @@ struct ScreenView: View {
             }.padding(8)
         }
         .navigationTitle(session.name).navigationBarTitleDisplayMode(.inline)
+        .onAppear { UsageRecorder.shared.screen("bildschirm", session: session.key) }
         .keepsScreenAwake()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { Button("Fertig") { dismiss() } }

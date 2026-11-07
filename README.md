@@ -41,6 +41,11 @@ iPhone 16 Pro (iOS 17 oder neuer).
   liest das Handy nur mit: Nachrichten warten im Postausgang, ein Hinweis steht über der Eingabe, der Umzug in tmux
   nur auf Wunsch mit Bestätigung. Damit das nicht nötig ist, `claude` am PC per Wrapper in tmux starten: `docs/pc-tmux.md`.
 - **Sperre mit Face ID** (Einstellungen → Sicherheit)
+- **Nutzungsprotokoll und „Fehler melden“** (Einstellungen → Nutzungsprotokoll, standardmäßig an): Die App zeichnet
+  auf, was du tust (Ansicht, Aktion, Sitzung, Verbindung, Fehler), ohne Inhalte, von Text, Diktat und Fotos nur Art
+  und Länge. Das Protokoll geht nur ans eigene Gateway und bleibt 30 Tage. „Fehler melden“ schickt eine kurze
+  Beschreibung mit den letzten 10 Minuten; den Text dieser Minuten nur mit dem Haken „Inhalte mitsenden“. Agenten lesen
+  es am PC mit `notifyd phone usage --since 10:30` und `notifyd phone reports --show`. Braucht ein aktuelles Gateway.
 
 Noch nicht enthalten, weil iOS es nicht zulässt oder weil es später kommt: ein dauerhaft lauschendes Wake-Word
 „Hey Jarvis“ (stattdessen Siri oder die Aktionstaste), die Telefon-Bridge (SMS, Health, fremde Mitteilungen), das

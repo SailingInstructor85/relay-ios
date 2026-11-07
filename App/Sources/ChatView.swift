@@ -165,9 +165,12 @@ struct ChatView: View {
         .task(id: key) { await openChat() }
         .onAppear {
             model.rememberOpened(key)
+            UsageRecorder.shared.screen("chat", session: key)
             if let q = initialSearch, !q.isEmpty, !initialDone { initialDone = true; showSearch = true }
         }
         .onChange(of: scenePhase) { _, p in if p == .active { standTick += 1 } }
+        .onChange(of: error) { _, e in if let e { UsageRecorder.shared.record("chat", "fehler", session: key, error: e) } }
+        .onChange(of: focused) { _, f in UsageRecorder.shared.record("chat", f ? "tastatur auf" : "tastatur zu", session: key, length: input.count) }
         .keepsScreenAwake()
         .onDisappear {
             model.visibleChat = nil
@@ -398,6 +401,7 @@ struct ChatView: View {
     }
 
     private func stop(_ s: Session) async {
+        UsageRecorder.shared.record("chat", "gestoppt", session: s.key)
         do { try await model.stopTurn(s); error = nil; await refreshRunning() } catch { self.error = "Nicht gestoppt: \(error.localizedDescription)" }
     }
 
@@ -621,6 +625,7 @@ struct ChatView: View {
         let id = UUID().uuidString
         func clearField() { if input.trimmingCharacters(in: .whitespacesAndNewlines) == t { input = "" } }
         func queue() {
+            UsageRecorder.shared.content("chat", "in postausgang", session: s.key, kind: "text", text: t)
             Outbox.shared.add(id: id, key: s.key, text: t, force: force)
             clearField()
             error = nil
@@ -630,12 +635,14 @@ struct ChatView: View {
         guard await model.ensureAlive() else { queue(); return }
         do {
             try await model.send(s, text: t, force: force, clientId: id)
+            UsageRecorder.shared.content("chat", "gesendet", session: s.key, kind: "text", text: t)
             clearField()
             error = nil
             try? await Task.sleep(nanoseconds: 600_000_000)
             await refreshScreen()
         } catch let e as RelayError where e.remote && OutboxLogic.isBusyRefusal(e.message) {
             Outbox.shared.addRefused(id: id, key: s.key, text: t, error: e.message)
+            UsageRecorder.shared.content("chat", "abgelehnt (arbeitet)", session: s.key, kind: "text", text: t)
             clearField()
             error = nil
             confirmForce = id
@@ -643,6 +650,7 @@ struct ChatView: View {
             // at the PC in a terminal outside tmux: the text waits in the outbox (grey bubble with the reason); the move
             // into tmux only from the button there and after his yes, never offered by itself (Martin, 2026-11-07)
             Outbox.shared.addRefused(id: id, key: s.key, text: t, error: e.message)
+            UsageRecorder.shared.content("chat", "abgelehnt (PC ohne tmux)", session: s.key, kind: "text", text: t)
             clearField()
             error = nil
         } catch {
@@ -670,6 +678,7 @@ struct ChatView: View {
         let until = Date().addingTimeInterval(DictationSend.stuckAfter)
         while sendAfterDictation && Date() < until { try? await Task.sleep(nanoseconds: 250_000_000) }
         if sendAfterDictation {
+            UsageRecorder.shared.record("chat", "diktat hängt", session: key, kind: "diktat")
             sendAfterDictation = false
             sending = false
             dictating = false
@@ -682,7 +691,7 @@ struct ChatView: View {
     /// was tapped during the dictation, the field goes out as soon as the words (cleaned, if wanted) are in it; when
     /// nothing was understood, a banner says so instead of sending nothing in silence.
     private func toggleDictation() async {
-        if voice.listening { voice.stopListening(); return }
+        if voice.listening { UsageRecorder.shared.record("chat", "diktat beendet", session: key, kind: "diktat"); voice.stopListening(); return }
         guard !dictating else { return }  // a second tap while the first one still starts (permission, vocabulary)
         dictating = true
         defer { dictating = false }
@@ -694,7 +703,10 @@ struct ChatView: View {
         sendAfterDictation = false
         var raw = ""
         var failure: String?
+        UsageRecorder.shared.record("chat", "diktat gestartet", session: key, kind: "diktat")
         do { raw = try await voice.listen() } catch { failure = error.localizedDescription }
+        if raw.isEmpty { UsageRecorder.shared.record("chat", "diktat leer", session: key, kind: "diktat", error: failure) }
+        else { UsageRecorder.shared.content("chat", "diktiert", session: key, kind: "diktat", text: raw) }
         if !raw.isEmpty {
             let inserted = join(input, raw)
             input = inserted
@@ -761,11 +773,15 @@ struct ChatView: View {
         uploadInfo = "Lade \(label) hoch…"
         do {
             let path = try await model.upload(name: label, data: data) { p in Task { @MainActor in uploadInfo = "Lade \(label) hoch… \(Int(p * 100)) %" } }
+            UsageRecorder.shared.record("chat", "anhang hochgeladen", session: key, kind: photo ? "foto" : "datei", length: data.count, detail: path)
             let head = input.trimmingCharacters(in: .whitespacesAndNewlines)
             input = (head.isEmpty ? "" : head + "\n") + path + "\n"
             uploadInfo = ""
             focused = true
-        } catch { uploadInfo = ""; self.error = error.localizedDescription }
+        } catch {
+            uploadInfo = ""; self.error = error.localizedDescription
+            UsageRecorder.shared.record("chat", "anhang fehlgeschlagen", session: key, kind: photo ? "foto" : "datei", length: data.count, error: error.localizedDescription)
+        }
     }
 }
 

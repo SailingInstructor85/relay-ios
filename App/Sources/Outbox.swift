@@ -155,7 +155,7 @@ struct OutboxRow: View {
                         if OutboxLogic.isBusyRefusal(item.error ?? "") { Button("Trotzdem senden") { Outbox.shared.retry(item.id, force: true) } }
                         if DeskTerminal.isRefusal(item.error ?? "") { Button(DeskTerminal.moveButton) { onMove(item.id) } }
                         Button("Bearbeiten") { onEdit(item.text); Outbox.shared.remove(item.id) }
-                        Button("Verwerfen", role: .destructive) { Outbox.shared.remove(item.id) }
+                        Button("Verwerfen", role: .destructive) { UsageRecorder.shared.record("chat", "postausgang verworfen", session: item.key, kind: "text", length: item.text.count); Outbox.shared.remove(item.id) }
                     }.font(.caption).buttonStyle(.bordered).controlSize(.mini)
                 } else if item.state == .queued {
                     Button("Bearbeiten") { onEdit(item.text); Outbox.shared.remove(item.id) }

@@ -66,6 +66,7 @@ struct JarvisView: View {
             }.padding([.horizontal, .bottom])
         }
         .navigationTitle("Jarvis")
+        .onAppear { UsageRecorder.shared.screen("jarvis") }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

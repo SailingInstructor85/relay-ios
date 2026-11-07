@@ -829,6 +829,15 @@ def rpc_clean_dictation(p):
     return {"text": str(p.get("text", "")).strip()}
 
 
+def rpc_usage_put(p):
+    items = p.get("items") or []
+    return {"stored": len(items), "duplicates": 0}
+
+
+def rpc_usage_report(p):
+    return {"id": "m-1", "path": "~/.local/share/notifyd/nutzung/meldungen/mock.md", "events": len(p.get("events") or [])}
+
+
 def rpc_get_config(p):
     return load_state()["config"]
 
