@@ -68,10 +68,11 @@ final class ListTests: RelayTestCase {
         settle(0.6)
         shot("swipe-links")
         tap("Schließen", soft: true)
-        settle(1)
-        shot("geschlossen-mit-rueckgaengig")
-        expect("Sitzung geschlossen.", 4)
-        tap("Rückgängig", exact: true, soft: true)
+        // Die Leiste verschwindet nach 6 s. Auf langsamen Runnern fraßen Pause, Bildschirmfoto und die breite Suche
+        // über alle Elementarten das Fenster auf, daher den Knopf direkt abfragen und sofort tippen, Foto danach.
+        let undo = app.buttons["Rückgängig"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 4), "Erwartet, aber nicht da: Rückgängig")
+        if undo.exists { undo.tap() }
         settle(1.5)
         shot("nach-rueckgaengig")
         expect("Datenbank migrieren")
