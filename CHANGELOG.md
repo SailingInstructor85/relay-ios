@@ -2,6 +2,17 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.13 (2026-11-09)
+
+**Neu**
+- Mehrere Fotos auf einmal: In der Büroklammer heißt der Punkt jetzt „Fotos oder Videos“. In der Mediathek wählst du beliebig viele Fotos und Videos aus, die Reihenfolge deiner Auswahl bleibt erhalten.
+- Die gewählten Fotos erscheinen zuerst als Vorschau über dem Eingabefeld. Mit dem kleinen Kreuz nimmst du einzelne wieder heraus, „Verwerfen“ leert die Auswahl. Erst „3 Fotos hochladen“ (oder Senden) lädt alle nacheinander hoch, der Fortschritt steht darüber („Lade 2 von 3 hoch…“). Danach stehen die Pfade wie bisher je in einer Zeile in der Nachricht.
+
+**Geändert**
+- Relay lädt ein gewähltes Foto nicht mehr sofort hoch, sondern wartet auf deinen Tipp. Eine zweite Auswahl kommt hinten zur Vorschau dazu.
+- Klappt ein Upload nicht, bleiben dieses und die folgenden Fotos in der Vorschau, die schon hochgeladenen stehen im Feld. Ein zweiter Tipp versucht den Rest erneut.
+- Im Chat mit dem Vault-Agenten wird jedes gewählte Foto ein eigener Anhang.
+
 ## 0.3.12 (2026-11-09)
 
 **Neu**
