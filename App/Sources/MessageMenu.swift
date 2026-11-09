@@ -93,9 +93,9 @@ final class SpeechOut: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     override init() { super.init(); synth.delegate = self }
 
     func speak(_ markdown: String) {
-        stop()
+        halt()  // a new reading replaces the old one without handing the audio back in between
         let text = ReadAloud.cleaned(markdown)
-        guard text.rangeOfCharacter(from: .alphanumerics) != nil else { return }
+        guard text.rangeOfCharacter(from: .alphanumerics) != nil else { AudioFocus.release("reader"); return }
         AudioFocus.takeForPlayback("reader")
         speaking = true
         paused = false
@@ -117,10 +117,14 @@ final class SpeechOut: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     }
 
     func stop() {
+        halt()
+        AudioFocus.release("reader")
+    }
+
+    private func halt() {
         if synth.isSpeaking || synth.isPaused { synth.stopSpeaking(at: .immediate) }
         speaking = false
         paused = false
-        AudioFocus.release("reader")
     }
 
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { Task { @MainActor in self.ended() } }
