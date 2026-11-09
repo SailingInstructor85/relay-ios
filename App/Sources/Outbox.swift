@@ -30,9 +30,9 @@ final class Outbox: ObservableObject {
 
     /// Queues a message and returns at once.
     @discardableResult
-    func add(id: String = UUID().uuidString, key: String, text: String, force: Bool = false) -> OutItem {
+    func add(id: String = UUID().uuidString, key: String, text: String, force: Bool = false, files: [String] = []) -> OutItem {
         if let old = items.first(where: { $0.id == id }) { return old }
-        let i = OutItem(id: id, key: key, text: text, at: Date().timeIntervalSince1970, force: force)
+        let i = OutItem(id: id, key: key, text: text, at: Date().timeIntervalSince1970, force: force, files: files)
         update { $0 + [i] }
         return i
     }
@@ -48,7 +48,11 @@ final class Outbox: ObservableObject {
         update { $0.map { $0.id == id ? OutboxLogic.retried($0, force: force, newId: UUID().uuidString, move: move) : $0 } }
     }
 
-    func remove(_ id: String) { update { $0.filter { $0.id != id } } }
+    /// `keepFiles`: "Bearbeiten" takes the attachments back into the field, so they stay on disk.
+    func remove(_ id: String, keepFiles: Bool = false) {
+        if !keepFiles, let i = items.first(where: { $0.id == id }) { removeFiles(i) }
+        update { $0.filter { $0.id != id } }
+    }
 
     /// The transcript shows these texts now (or they are old): delivered rows go.
     func sweep(seen texts: [String]) {
@@ -89,8 +93,10 @@ final class Outbox: ObservableObject {
             waits = 0
             set(item.id) { var c = $0; c.state = .sending; c.tries += 1; c.error = nil; return c }
             do {
-                try await deliver(item)
-                set(item.id) { var c = $0; c.state = .delivered; c.doneAt = Date().timeIntervalSince1970; c.error = nil; return c }
+                // the vault chat delivers every waiting message at once when it starts its agent
+                for id in try await deliver(item) {
+                    set(id) { var c = $0; c.state = .delivered; c.doneAt = Date().timeIntervalSince1970; c.error = nil; return c }
+                }
             } catch {
                 if OutboxLogic.retries(error) {
                     set(item.id) { var c = $0; c.state = .queued; c.error = error.localizedDescription; return c }
@@ -105,7 +111,9 @@ final class Outbox: ObservableObject {
         }
     }
 
-    private func deliver(_ item: OutItem) async throws {
+    /// Sends one item; returns the ids now delivered (more than one when the vault chat starts its agent).
+    private func deliver(_ item: OutItem) async throws -> [String] {
+        if VaultChat.isVault(item.key) { return try await deliverVault(item) }
         let model = AppModel.shared
         if let s = model.session(for: item.key) {
             try await model.send(s, text: item.text, force: item.force, clientId: item.id, move: item.move)
@@ -114,6 +122,93 @@ final class Outbox: ObservableObject {
                                                   "force": .bool(item.force), "client_id": .string(item.id),
                                                   "move": item.move ? .bool(true) : nil]), timeout: 60)
         }
+        return [item.id]
+    }
+
+    // MARK: vault chat
+
+    private static let vaultTargetKey = "vaultChatTarget", vaultLaunchedKey = "vaultChatLaunchedAt"
+
+    /// The session the vault chat started last (`tmux:<name>` right after the launch).
+    var vaultTarget: String? {
+        get { UserDefaults.standard.string(forKey: Self.vaultTargetKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.vaultTargetKey); objectWillChange.send() }
+    }
+
+    /// Where attachments of the vault chat wait until they are uploaded.
+    static var filesDir: URL? {
+        guard let base = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        else { return nil }
+        let d = base.appendingPathComponent("vault-outbox", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    /// Keeps an attachment on the phone; returns its stored name (nil when it could not be written).
+    static func storeFile(name: String, data: Data) -> String? {
+        let stored = VaultChat.storedName(id: UUID().uuidString, name: name)
+        guard let d = filesDir else { return nil }
+        do { try data.write(to: d.appendingPathComponent(stored), options: .atomic) } catch { return nil }
+        return stored
+    }
+
+    static func dropFile(_ stored: String) {
+        if let d = filesDir { try? FileManager.default.removeItem(at: d.appendingPathComponent(stored)) }
+    }
+
+    private func removeFiles(_ i: OutItem) { i.files.forEach(Self.dropFile) }
+
+    /// The message with its attachments uploaded (their PC paths appended). An attachment gone from disk is skipped.
+    private func uploadedBody(_ i: OutItem) async throws -> String {
+        var paths: [String] = []
+        for f in i.files {
+            guard let d = Self.filesDir, let data = try? Data(contentsOf: d.appendingPathComponent(f)) else { continue }
+            let (name, prepared) = await Task.detached(priority: .userInitiated) { AttachPrep.prepared(name: VaultChat.displayName(f), data: data) }.value
+            paths.append(try await AppModel.shared.upload(name: name, data: prepared))
+        }
+        return VaultChat.body(i.text, paths: paths)
+    }
+
+    /// Vault chat: into the agent it started, while that one runs; otherwise a new agent in the vault folder gets every
+    /// waiting message as its first prompt. A launch whose answer got lost is found by its name, never started twice.
+    private func deliverVault(_ item: OutItem) async throws -> [String] {
+        let model = AppModel.shared
+        if let t = vaultTarget {
+            // just started: the session shows up in the list a moment after the launch
+            let launchedAt = UserDefaults.standard.double(forKey: Self.vaultLaunchedKey)
+            var s = model.session(for: t)
+            var n = 0
+            while s == nil && Date().timeIntervalSince1970 - launchedAt < 120 && n < 15 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                await model.refresh()
+                s = model.session(for: t); n += 1
+            }
+            if let s, VaultChat.reusable(alive: s.alive, closed: s.closed, hibernated: s.hibernated) {
+                let body = VaultChat.followUp(try await uploadedBody(item), at: item.at)
+                try await model.send(s, text: body, force: true, clientId: item.id)
+                removeFiles(item)
+                return [item.id]
+            }
+        }
+        let batch = VaultChat.batch(items, next: item)
+        let tag = VaultChat.tag(item.id)
+        if item.tries > 1 {
+            await model.refresh()
+            if let key = VaultChat.launched(model.sessions.values.map { (key: $0.key, name: $0.name) }, tag: tag) {
+                vaultTarget = key
+                batch.forEach(removeFiles)
+                return batch.map(\.id)
+            }
+        }
+        var messages: [(at: Double, text: String)] = []
+        for i in batch { messages.append((at: i.at, text: try await uploadedBody(i))) }
+        let tmux = try await model.launch(alias: model.defaultLaunchAlias, cwd: model.vaultDir,
+                                          prompt: VaultChat.prompt(messages), name: VaultChat.sessionName(tag: tag))
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.vaultLaunchedKey)
+        vaultTarget = "tmux:\(tmux)"
+        batch.forEach(removeFiles)
+        UsageRecorder.shared.record("vault-chat", "agent gestartet", kind: "text", length: batch.count)
+        return batch.map(\.id)
     }
 
     /// The chat may be closed by now: this one has to reach the user.

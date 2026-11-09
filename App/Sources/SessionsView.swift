@@ -17,8 +17,9 @@ struct SessionsView: View {
     @State private var killTarget: Session?
     @StateObject private var searcher = ContentSearcher()
     @State private var showKill = false
+    @ObservedObject private var outbox = Outbox.shared
 
-    enum Dest: Hashable { case chat(String), chatSearch(String, String), settings, usage, memory, jarvis, jarvisListening, notices, notice(String), digest, tokens, routines, drive }
+    enum Dest: Hashable { case chat(String), chatSearch(String, String), settings, usage, memory, jarvis, jarvisListening, notices, notice(String), digest, tokens, routines, drive, vaultChat }
 
     private func haystack(_ s: Session) -> String { "\(s.name) \(s.alias) \(s.folder) \(s.cwd)" }
 
@@ -79,6 +80,7 @@ struct SessionsView: View {
             }.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
             if model.state != .connected { connectionRow }
             if model.tailscaleHint { TailscaleHintRow() }
+            if model.state != .connected || outbox.items(for: VaultChat.key).contains(where: { $0.state != .delivered }) { vaultRow }
             listContent
         }
         .listStyle(.insetGrouped)
@@ -158,6 +160,7 @@ struct SessionsView: View {
             case .notices: NoticeView(ref: nil, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice, onDrive: { path.append(Dest.drive) })
             case .notice(let ref): NoticeView(ref: ref, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice, onDrive: { path.append(Dest.drive) })
             case .drive: DriveView()
+            case .vaultChat: VaultChatView()
             case .routines: RoutinesView()
             }
         }
@@ -182,7 +185,7 @@ struct SessionsView: View {
         .onChange(of: model.showDormant) { _, _ in Task { await model.refresh() } }
         .onChange(of: model.showBackground) { _, _ in Task { await model.refresh() } }
         .onChange(of: model.openChat) { _, key in
-            if let key { path = NavigationPath(); path.append(Dest.chat(key)); model.openChat = nil }
+            if let key { path = NavigationPath(); path.append(VaultChat.isVault(key) ? Dest.vaultChat : Dest.chat(key)); model.openChat = nil }
         }
         .onChange(of: model.openNotice) { _, ref in
             if let ref { path = NavigationPath(); path.append(Dest.notice(ref)); model.openNotice = nil }
@@ -235,6 +238,19 @@ struct SessionsView: View {
         guard !model.showDormant else { return [] }
         let q = search.trimmingCharacters(in: .whitespaces)
         return model.cloudSessions.filter { $0.waiting && (q.isEmpty || Fuzzy.score(q, "\($0.title) \($0.repo)") != nil) }
+    }
+
+    /// Ohne Verbindung (oder solange etwas wartet): Chat für den Agenten im Vault, Nachrichten gehen später raus.
+    private var vaultRow: some View {
+        Button { path.append(Dest.vaultChat) } label: {
+            HStack {
+                Label(VaultChat.openButton, systemImage: "tray.and.arrow.up")
+                Spacer()
+                let waiting = outbox.items(for: VaultChat.key).filter { $0.state != .delivered }.count
+                if waiting > 0 { Text("\(waiting) wartet").font(.caption).foregroundStyle(.secondary) }
+            }
+        }
+        .accessibilityIdentifier("vaultChat")
     }
 
     @ViewBuilder private var connectionRow: some View {

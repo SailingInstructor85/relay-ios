@@ -89,4 +89,28 @@ final class ComposeTests: RelayTestCase {
         let clip = id("attach")
         if clip.exists { clip.tap(); tap("Datei", soft: true); settle(2); shot("dateiauswahl"); if app.buttons["Abbrechen"].exists { app.buttons["Abbrechen"].tap() } }
     }
+
+    func test09_VaultChatOffline() {
+        // Ohne Verbindung: Chat für den Vault-Agenten öffnen, Nachricht wartet sichtbar und startet nach dem
+        // Wiederverbinden genau einen Agenten im Vault mit der Nachricht als erster Eingabe.
+        launchConnected()
+        ctl("offline"); ctl("kick")
+        settle(4)
+        shot("vault-zeile-offline")
+        tapID("vaultChat", 10)
+        expect("Keine Verbindung zum PC", 5, soft: true)
+        typeInto("vaultInput", "Notiz ohne Verbindung")
+        tapID("vaultSend")
+        settle(1)
+        expect("wartet auf Verbindung", 5)
+        shot("vault-wartet")
+        ctlRemove("offline")
+        XCTAssertTrue(mockReceived("launch", where: { p in
+            (p["prompt"] as? String)?.contains("Notiz ohne Verbindung") == true && (p["name"] as? String)?.hasPrefix("Vom iPhone") == true
+        }, timeout: 50), "Vault-Agent nicht gestartet")
+        settle(2)
+        shot("vault-zugestellt")
+        let launches = rpcLog().filter { ($0["method"] as? String) == "launch" && (($0["params"] as? [String: Any])?["prompt"] as? String)?.contains("Notiz ohne Verbindung") == true }
+        XCTAssertEqual(launches.count, 1, "Vault-Agent mehrfach gestartet")
+    }
 }
