@@ -218,8 +218,8 @@ final class DriveController: ObservableObject {
     }
 
     private func releaseAudio() {
-        guard !quiet, !voice.speaking, !voice.listening else { return }
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        guard !voice.speaking, !voice.listening else { return }
+        voice.releaseAudio()
     }
 }
 

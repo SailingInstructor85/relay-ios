@@ -4,18 +4,23 @@ import RelayCore
 
 /// Plays a test sentence with a chosen voice.
 @MainActor
-final class VoiceTester: ObservableObject {
+final class VoiceTester: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private let synth = AVSpeechSynthesizer()
+
+    override init() { super.init(); synth.delegate = self }
 
     func test(lang: String) {
         synth.stopSpeaking(at: .immediate)
         let text = lang == "de" ? "Hallo, ich bin Jarvis. So klinge ich." : "Hello, I am Jarvis. This is how I sound."
         let u = VoiceIO.utterance(text)
         u.voice = SpeechPrefs.voice(lang: lang)
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-        try? AVAudioSession.sharedInstance().setActive(true)
+        AudioFocus.takeForPlayback("tester")
         synth.speak(u)
     }
+
+    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { Task { @MainActor in self.ended() } }
+    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { Task { @MainActor in self.ended() } }
+    private func ended() { if !synth.isSpeaking { AudioFocus.release("tester") } }
 }
 
 /// Settings section "Sprache und Stimme": recognition language, speech language, tempo, voices, reading finished sessions.

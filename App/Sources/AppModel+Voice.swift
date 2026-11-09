@@ -32,6 +32,7 @@ extension AppModel {
             guard !text.isEmpty, foreground else { return }
             a.voice.speak("\(s.name). \(text)")
             await a.voice.waitUntilSpoken()
+            a.voice.releaseAudio()  // vorgelesen: Musik anderer Apps läuft weiter
         }
     }
 

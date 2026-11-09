@@ -96,6 +96,7 @@ struct JarvisView: View {
         }
         .onChange(of: inputFocused) { _, focused in if focused { model.warmJarvis() } }
         .onDisappear { stopVoice() }
+        .onChange(of: voice.speaking) { _, s in if !s { releaseIfDone() } }
         .sheet(isPresented: $teaching) { TeachRecognitionView(voice: voice) }
         .confirmationDialog("Den Jarvis-Verlauf auf diesem iPhone löschen?", isPresented: $confirmClear, titleVisibility: .visible) {
             Button("Chat löschen", role: .destructive) { turns = []; JarvisStore.clear() }
@@ -151,7 +152,7 @@ struct JarvisView: View {
     private func startVoice(trigger: String) {
         guard voiceTask == nil else { return }
         voiceTask = Task {
-            defer { voiceTask = nil; model.conversationActive = false }
+            defer { voiceTask = nil; model.conversationActive = false; releaseIfDone() }
             if let msg = await voice.authorize() { error = msg; return }
             var silent = 0
             var kind = trigger
@@ -204,6 +205,14 @@ struct JarvisView: View {
         voice.stopSpeaking()
         voiceTask = nil
         model.conversationActive = false
+        voice.releaseAudio()
+    }
+
+    /// Gespräch und Vorlesen fertig: Audio an andere Apps zurück (Spotify spielt weiter). Nicht zwischen zwei Runden
+    /// des Gesprächsmodus, dort läuft `voiceTask` noch.
+    private func releaseIfDone() {
+        guard voiceTask == nil, !voice.listening, !voice.speaking else { return }
+        voice.releaseAudio()
     }
 
     private func loadVocab() async { await model.loadVocab(into: voice) }

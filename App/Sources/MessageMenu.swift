@@ -96,8 +96,7 @@ final class SpeechOut: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         stop()
         let text = ReadAloud.cleaned(markdown)
         guard text.rangeOfCharacter(from: .alphanumerics) != nil else { return }
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-        try? AVAudioSession.sharedInstance().setActive(true)
+        AudioFocus.takeForPlayback("reader")
         speaking = true
         paused = false
         synth.speak(VoiceIO.utterance(text))
@@ -121,11 +120,17 @@ final class SpeechOut: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         if synth.isSpeaking || synth.isPaused { synth.stopSpeaking(at: .immediate) }
         speaking = false
         paused = false
+        AudioFocus.release("reader")
     }
 
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { Task { @MainActor in self.ended() } }
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { Task { @MainActor in self.ended() } }
-    private func ended() { speaking = false; paused = false }
+    /// Read to the end: the audio goes back to other apps (Spotify resumes).
+    private func ended() {
+        guard !synth.isSpeaking else { return }  // a new reading has already started
+        speaking = false; paused = false
+        AudioFocus.release("reader")
+    }
 }
 
 /// Pause, resume and stop while something is read aloud (shown above the input bar of a chat).

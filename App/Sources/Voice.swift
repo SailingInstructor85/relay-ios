@@ -37,9 +37,19 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private var splitter = SentenceSplitter()
     private var speakWaiters: [CheckedContinuation<Void, Never>] = []
 
+    /// Name of this voice in `AudioFocus` (Chat, Jarvis and Sprachmodus each have their own `VoiceIO`).
+    private let holder = "voice-" + UUID().uuidString
+
     override init() {
         super.init()
         synth.delegate = self
+    }
+
+    /// The message is finished (sent, cancelled, read to the end): the audio goes back to other apps, Spotify resumes.
+    /// Not called between a recording and its read-back, so the music stays paused for the whole message.
+    func releaseAudio() {
+        guard !listening, !speaking, finishListening == nil else { return }
+        AudioFocus.release(holder)
     }
 
     // MARK: permissions
@@ -76,9 +86,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)), recognizer.isAvailable else {
             throw RelayErrorText("Spracherkennung für \(locale) ist gerade nicht verfügbar.")
         }
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .duckOthers])
-        try session.setActive(true, options: .notifyOthersOnDeactivation)
+        try AudioFocus.takeForRecording(holder)
 
         self.recognizer = recognizer
         committed = ""
@@ -253,8 +261,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         let u = Self.utterance(text)
         pendingUtterances += 1
         speaking = true
-        try? AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .duckOthers])
-        try? AVAudioSession.sharedInstance().setActive(true)
+        try? AudioFocus.takeForRecording(holder)
         synth.speak(u)
     }
 
@@ -346,6 +353,40 @@ enum SpeechPrefs {
     static func voice(for text: String) -> AVSpeechSynthesisVoice? {
         voice(lang: Voices.langFor(text, setting: d.string(forKey: langKey) ?? "auto"))
     }
+}
+
+/// Who uses the audio session right now. Recording and reading aloud interrupt other apps (no `.duckOthers`, no
+/// `.mixWithOthers`): Spotify pauses instead of playing on quietly (over Bluetooth in the car even in phone quality).
+/// When the last holder lets go, the session is deactivated with `.notifyOthersOnDeactivation`, so the music resumes.
+@MainActor
+enum AudioFocus {
+    private static var holders = Set<String>()
+
+    /// Microphone and speech (Jarvis, Chat-Diktat, Sprachmodus).
+    static func takeForRecording(_ who: String) throws {
+        if UITestMode.active { holders.insert(who); return }
+        let s = AVAudioSession.sharedInstance()
+        try s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+        try s.setActive(true, options: .notifyOthersOnDeactivation)
+        holders.insert(who)
+    }
+
+    /// Reading aloud only (Vorlesen, Stimmprobe). While a recording holds the session its category stays as it is.
+    static func takeForPlayback(_ who: String) {
+        if UITestMode.active { holders.insert(who); return }
+        let s = AVAudioSession.sharedInstance()
+        if holders.subtracting([who]).isEmpty { try? s.setCategory(.playback, mode: .spokenAudio, options: []) }
+        try? s.setActive(true, options: .notifyOthersOnDeactivation)
+        holders.insert(who)
+    }
+
+    static func release(_ who: String) {
+        holders.remove(who)
+        guard holders.isEmpty, !UITestMode.active else { return }
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    static var isHeld: Bool { !holders.isEmpty }
 }
 
 struct RelayErrorText: LocalizedError {
