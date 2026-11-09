@@ -59,9 +59,10 @@ final class ComposeTests: RelayTestCase {
         launchConnected()
         openSession("API Refactoring")
         let clip = id("attach")
-        if clip.exists { clip.tap(); settle(0.8); shot("anhang-menue"); expect("Datei", 2, soft: true); expect("Foto oder Video", 2, soft: true)
-            // The photo item must open the system picker (it did not while it was a PhotosPicker inside the Menu).
-            let photoItem = app.buttons["Foto oder Video"]
+        if clip.exists { clip.tap(); settle(0.8); shot("anhang-menue"); expect("Datei", 2, soft: true); expect("Fotos oder Videos", 2, soft: true)
+            // The photo item must open the system picker (it did not while it was a PhotosPicker inside the Menu). Since 0.3.13
+            // several can be picked; they wait as a preview (stagedMedia) until "N Fotos hochladen".
+            let photoItem = app.buttons["Fotos oder Videos"]
             if photoItem.exists { photoItem.tap(); settle(2.5); shot("anhang-fotoauswahl")
                 if app.buttons["attach"].isHittable { notes.append("Fotoauswahl hat sich nicht geöffnet") } }
             else { app.tap() } }

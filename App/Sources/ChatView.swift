@@ -42,6 +42,9 @@ struct ChatView: View {
     @State private var confirmMove: String?
     @State private var importing = false
     @State private var pickingPhoto = false
+    /// Fotos und Videos aus der Mediathek, die als Vorschau über der Eingabe warten, bis „N Fotos hochladen“ getippt ist.
+    @State private var staged: [StagedMedia] = []
+    @State private var stagedBusy = false
     @State private var uploadInfo = ""
     @State private var showScreen = false
     @State private var showSearch = false
@@ -116,7 +119,16 @@ struct ChatView: View {
             if reader.speaking { ReadAloudBar(reader: reader) }
             if let e = error { ErrorBanner(text: Binding(get: { e }, set: { error = $0 })).padding(.vertical, 4) }
             if !uploadInfo.isEmpty { Text(uploadInfo).font(.caption).foregroundStyle(.secondary).padding(.top, 4) }
-            if ReadingMode.chrome(reading: reading).inputBar { inputBar }
+            if ReadingMode.chrome(reading: reading).inputBar {
+                if !staged.isEmpty {
+                    StagedMediaStrip(items: staged, busy: stagedBusy,
+                                     onRemove: { id in staged.first(where: { $0.id == id })?.discard(); staged.removeAll { $0.id == id } },
+                                     onUpload: { Task { await uploadStaged() } },
+                                     onDiscard: { discardStaged() })
+                    .background(.bar)
+                }
+                inputBar
+            }
         }
         .navigationTitle(session?.name ?? "Sitzung")
         .navigationBarTitleDisplayMode(.inline)
@@ -150,9 +162,9 @@ struct ChatView: View {
             if case .success(let url) = result { Task { await uploadFile(url) } }
         }
         .sheet(isPresented: $pickingPhoto) {
-            PhotoLibraryPicker { provider in
+            PhotoLibraryPicker { providers in
                 pickingPhoto = false
-                if let provider { Task { await uploadPicked(provider) } }
+                if !providers.isEmpty { Task { await stagePicked(providers) } }
             }.ignoresSafeArea()
         }
         .confirmationDialog(DeskTerminal.dialogTitle, isPresented: Binding(get: { confirmMove != nil }, set: { if !$0 { confirmMove = nil } }), titleVisibility: .visible) {
@@ -187,6 +199,7 @@ struct ChatView: View {
             model.visibleChat = nil
             model.transcriptListeners[sessionKey] = nil
             voice.stopSpeaking(); voice.stopListening(); reader.stop()
+            if !stagedBusy { discardStaged() }
             dictated = false
             voice.releaseAudio()
             Task { _ = try? await model.rpc("unwatch", ["key": .string(key)]) }
@@ -285,7 +298,7 @@ struct ChatView: View {
                 Menu {
                     // A picker inside a Menu does not open on iOS; the menu item sets a flag for the sheet below, a moment
                     // later so the menu has closed first (presenting while it closes was dropped on the iPhone).
-                    Button { Task { try? await Task.sleep(nanoseconds: 350_000_000); pickingPhoto = true } } label: { Label("Foto oder Video", systemImage: "photo") }
+                    Button { Task { try? await Task.sleep(nanoseconds: 350_000_000); pickingPhoto = true } } label: { Label("Fotos oder Videos", systemImage: "photo.on.rectangle") }
                     if CameraPicker.available { Button { camera = true } label: { Label("Kamera", systemImage: "camera") } }
                     if UIPasteboard.general.hasImages { Button { Task { await uploadClipboard() } } label: { Label("Bild aus Zwischenablage", systemImage: "doc.on.clipboard") } }
                     Button { importing = true } label: { Label("Datei", systemImage: "doc") }
@@ -687,7 +700,11 @@ struct ChatView: View {
     /// not arrive within `DictationSend.stuckAfter` (a recogniser or clean-up that never answers), the button is freed
     /// with what is in the field, so the chat never stays blocked.
     private func sendTapped() async {
-        guard voice.listening else { await send(input); return }
+        guard voice.listening else {
+            // Gewählte Fotos gehen mit: erst hochladen (Pfade ins Feld), dann senden; scheitert ein Upload, wird nichts gesendet.
+            if !staged.isEmpty { await uploadStaged(); guard staged.isEmpty else { return } }
+            await send(input); return
+        }
         guard !sendAfterDictation else { return }
         sendAfterDictation = true
         sending = true
@@ -751,26 +768,55 @@ struct ChatView: View {
 
     // MARK: attachments
 
-    private func uploadPicked(_ provider: NSItemProvider) async {
-        let stamp = Int(Date().timeIntervalSince1970)
-        uploadInfo = "Lade Auswahl…"
-        let media: PickedMedia
-        do { media = try await PickedMedia.load(provider) } catch { uploadInfo = ""; self.error = error.localizedDescription; return }
+    /// Mediathek: die gewählten Fotos und Videos kommen erst in die Vorschau über der Eingabe; hochgeladen wird
+    /// gemeinsam mit „N Fotos hochladen“. Eine zweite Auswahl kommt hinten dazu.
+    private func stagePicked(_ providers: [NSItemProvider]) async {
+        uploadInfo = providers.count > 1 ? "Lade \(providers.count) Fotos aus der Mediathek…" : "Lade Auswahl…"
+        let (items, failed) = await StagedMedia.load(providers, stamp: Int(Date().timeIntervalSince1970))
         uploadInfo = ""
-        switch media {
-        case .movie(let url):
-            defer { try? FileManager.default.removeItem(at: url) }
-            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            guard size <= Attach.maxBytes else { error = "Das Video ist größer als 50 MB"; return }
-            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { error = "Video konnte nicht gelesen werden"; return }
-            let ext = url.pathExtension.isEmpty ? "mov" : url.pathExtension
-            await upload(name: "video-\(stamp).\(ext)", data: data)
-        case .image(let data):
-            // The name follows the bytes (with .compatible iOS hands over JPEG for a HEIC original).
-            let type = CGImageSourceCreateWithData(data as CFData, nil).flatMap { CGImageSourceGetType($0) }.flatMap { UTType($0 as String) }
-            let ext = type?.preferredFilenameExtension ?? "jpg"
-            await upload(name: "foto-\(stamp).\(ext)", data: data, photo: true, mime: type?.preferredMIMEType)
+        let tooBig = items.filter { $0.size() > Attach.maxBytes }
+        tooBig.forEach { $0.discard() }
+        staged += items.filter { $0.size() <= Attach.maxBytes }
+        UsageRecorder.shared.record("chat", "fotos ausgewählt", session: key, kind: "foto", length: items.count)
+        var problems: [String] = []
+        if failed > 0 { problems.append(failed == 1 ? "1 Auswahl konnte nicht geladen werden" : "\(failed) Auswahlen konnten nicht geladen werden") }
+        if !tooBig.isEmpty { problems.append(tooBig.count == 1 ? "1 Anhang ist größer als 50 MB" : "\(tooBig.count) Anhänge sind größer als 50 MB") }
+        if !problems.isEmpty { error = problems.joined(separator: ", ") }
+    }
+
+    private func discardStaged() {
+        staged.forEach { $0.discard() }
+        staged = []
+    }
+
+    /// Lädt die Vorschau der Reihe nach hoch; die Pfade stehen danach je in einer Zeile im Eingabefeld. Scheitert ein
+    /// Anhang, bleiben er und alle danach in der Vorschau, die fertigen Pfade stehen schon im Feld.
+    private func uploadStaged() async {
+        guard !stagedBusy, !staged.isEmpty else { return }
+        stagedBusy = true
+        defer { stagedBusy = false; uploadInfo = "" }
+        let batch = staged
+        var paths: [String] = []
+        for (i, m) in batch.enumerated() {
+            uploadInfo = PhotoBatch.progress(index: i, count: batch.count, name: m.name, fraction: nil)
+            do {
+                guard let data = m.bytes() else { throw RelayErrorText("\(m.name) konnte nicht gelesen werden") }
+                let path = try await model.upload(name: m.name, data: data) { p in
+                    Task { @MainActor in if stagedBusy { uploadInfo = PhotoBatch.progress(index: i, count: batch.count, name: m.name, fraction: p) } }
+                }
+                UsageRecorder.shared.record("chat", "anhang hochgeladen", session: key, kind: m.video ? "video" : "foto", length: data.count, detail: path)
+                paths.append(path)
+                m.discard()
+                staged.removeAll { $0.id == m.id }
+            } catch {
+                input = PhotoBatch.appendPaths(input, paths)
+                self.error = PhotoBatch.failure(done: paths.count, count: batch.count, message: error.localizedDescription)
+                UsageRecorder.shared.record("chat", "anhang fehlgeschlagen", session: key, kind: m.video ? "video" : "foto", error: error.localizedDescription)
+                return
+            }
         }
+        input = PhotoBatch.appendPaths(input, paths)
+        focused = true
     }
 
     private func uploadClipboard() async {

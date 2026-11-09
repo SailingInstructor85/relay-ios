@@ -335,6 +335,48 @@ public enum Attach {
     }
 }
 
+/// Several photos or videos from the library at once (since 0.3.13): they are shown as a preview strip first and go up
+/// together on one tap, in the order picked. Names, button and progress texts live here so they can be tested.
+public enum PhotoBatch {
+    /// Upload name for item `index` (0-based) of `count` picked at `stamp`: one item keeps the old form
+    /// ("foto-1700000000.jpg"), several get a running number so they never collide ("foto-1700000000-2.jpg").
+    public static func name(video: Bool, stamp: Int, index: Int, count: Int, ext: String) -> String {
+        let base = (video ? "video" : "foto") + "-\(stamp)"
+        let e = ext.isEmpty ? (video ? "mov" : "jpg") : ext.lowercased()
+        return count > 1 ? "\(base)-\(index + 1).\(e)" : "\(base).\(e)"
+    }
+
+    /// What the strip calls its items: "1 Foto", "3 Fotos", "1 Video", "2 Videos", mixed "4 Anhänge".
+    public static func noun(photos: Int, videos: Int) -> String {
+        let n = photos + videos
+        if videos == 0 { return n == 1 ? "1 Foto" : "\(n) Fotos" }
+        if photos == 0 { return n == 1 ? "1 Video" : "\(n) Videos" }
+        return "\(n) Anhänge"
+    }
+
+    /// The upload button under the preview: "3 Fotos hochladen".
+    public static func uploadTitle(photos: Int, videos: Int) -> String { noun(photos: photos, videos: videos) + " hochladen" }
+
+    /// Progress line while the batch goes up: "Lade 2 von 5 hoch… 40 %" (one item: "Lade foto-….jpg hoch… 40 %").
+    public static func progress(index: Int, count: Int, name: String, fraction: Double?) -> String {
+        let head = count > 1 ? "Lade \(index + 1) von \(count) hoch…" : "Lade \(name) hoch…"
+        guard let f = fraction else { return head }
+        return head + " \(Int((min(max(f, 0), 1) * 100).rounded(.down))) %"
+    }
+
+    /// Adds uploaded Desktop paths to the input field, each on its own line after what is already typed.
+    public static func appendPaths(_ input: String, _ paths: [String]) -> String {
+        guard !paths.isEmpty else { return input }
+        let head = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (head.isEmpty ? "" : head + "\n") + paths.joined(separator: "\n") + "\n"
+    }
+
+    /// The error line when some of the batch did not make it.
+    public static func failure(done: Int, count: Int, message: String) -> String {
+        done == 0 ? message : "\(done) von \(count) hochgeladen, dann: \(message). Der Rest bleibt in der Auswahl."
+    }
+}
+
 // MARK: working line
 
 /// Something a session runs now (rpc `running`): a subagent, a long command, a background shell, agent, monitor, workflow.

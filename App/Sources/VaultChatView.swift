@@ -74,9 +74,9 @@ struct VaultChatView: View {
             if case .success(let url) = result { keepFile(url) }
         }
         .sheet(isPresented: $pickingPhoto) {
-            PhotoLibraryPicker { provider in
+            PhotoLibraryPicker { providers in
                 pickingPhoto = false
-                if let provider { Task { await keepPicked(provider) } }
+                if !providers.isEmpty { Task { await keepPicked(providers) } }
             }.ignoresSafeArea()
         }
     }
@@ -144,7 +144,7 @@ struct VaultChatView: View {
     private var inputBar: some View {
         HStack(alignment: .bottom, spacing: 10) {
             Menu {
-                Button { Task { try? await Task.sleep(nanoseconds: 350_000_000); pickingPhoto = true } } label: { Label("Foto oder Video", systemImage: "photo") }
+                Button { Task { try? await Task.sleep(nanoseconds: 350_000_000); pickingPhoto = true } } label: { Label("Fotos oder Videos", systemImage: "photo.on.rectangle") }
                 Button { importing = true } label: { Label("Datei", systemImage: "doc") }
             } label: { Image(systemName: "paperclip").font(.title3) }
                 .accessibilityLabel("Anhang").accessibilityIdentifier("vaultAttach")
@@ -213,18 +213,14 @@ struct VaultChatView: View {
         keep(name: url.lastPathComponent, data: data)
     }
 
-    private func keepPicked(_ provider: NSItemProvider) async {
-        let stamp = Int(Date().timeIntervalSince1970)
-        let media: PickedMedia
-        do { media = try await PickedMedia.load(provider) } catch { self.error = error.localizedDescription; return }
-        switch media {
-        case .movie(let url):
-            defer { try? FileManager.default.removeItem(at: url) }
-            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { error = "Video konnte nicht gelesen werden"; return }
-            keep(name: "video-\(stamp).\(url.pathExtension.isEmpty ? "mov" : url.pathExtension)", data: data)
-        case .image(let data):
-            let type = CGImageSourceCreateWithData(data as CFData, nil).flatMap { CGImageSourceGetType($0) }.flatMap { UTType($0 as String) }
-            keep(name: "foto-\(stamp).\(type?.preferredFilenameExtension ?? "jpg")", data: data)
+    /// Mehrere Fotos und Videos auf einmal: jedes wird ein Anhang-Chip, in der Reihenfolge der Auswahl.
+    private func keepPicked(_ providers: [NSItemProvider]) async {
+        let (items, failed) = await StagedMedia.load(providers, stamp: Int(Date().timeIntervalSince1970))
+        for m in items {
+            defer { m.discard() }
+            guard let data = m.bytes() else { error = "\(m.name) konnte nicht gelesen werden"; continue }
+            keep(name: m.name, data: data)
         }
+        if failed > 0 { error = failed == 1 ? "1 Auswahl konnte nicht geladen werden" : "\(failed) Auswahlen konnten nicht geladen werden" }
     }
 }

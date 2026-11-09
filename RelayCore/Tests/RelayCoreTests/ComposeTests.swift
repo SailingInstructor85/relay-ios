@@ -119,6 +119,24 @@ final class ComposeTests: XCTestCase {
         XCTAssertEqual(OutboxLogic.status(c, connected: true, network: true), "Nicht gesendet: refused: x")
     }
 
+    func testPhotoBatch() {
+        XCTAssertEqual(PhotoBatch.name(video: false, stamp: 17, index: 0, count: 1, ext: "JPEG"), "foto-17.jpeg")
+        XCTAssertEqual(PhotoBatch.name(video: false, stamp: 17, index: 1, count: 3, ext: "jpg"), "foto-17-2.jpg")
+        XCTAssertEqual(PhotoBatch.name(video: true, stamp: 17, index: 2, count: 3, ext: ""), "video-17-3.mov")
+        XCTAssertEqual(PhotoBatch.uploadTitle(photos: 1, videos: 0), "1 Foto hochladen")
+        XCTAssertEqual(PhotoBatch.uploadTitle(photos: 3, videos: 0), "3 Fotos hochladen")
+        XCTAssertEqual(PhotoBatch.uploadTitle(photos: 0, videos: 2), "2 Videos hochladen")
+        XCTAssertEqual(PhotoBatch.uploadTitle(photos: 2, videos: 1), "3 Anhänge hochladen")
+        XCTAssertEqual(PhotoBatch.progress(index: 1, count: 5, name: "x", fraction: 0.4), "Lade 2 von 5 hoch… 40 %")
+        XCTAssertEqual(PhotoBatch.progress(index: 0, count: 1, name: "foto-1.jpg", fraction: nil), "Lade foto-1.jpg hoch…")
+        XCTAssertEqual(PhotoBatch.progress(index: 0, count: 2, name: "x", fraction: 1.7), "Lade 1 von 2 hoch… 100 %")
+        XCTAssertEqual(PhotoBatch.appendPaths("", ["/a.jpg", "/b.jpg"]), "/a.jpg\n/b.jpg\n")
+        XCTAssertEqual(PhotoBatch.appendPaths("Schau mal \n", ["/a.jpg"]), "Schau mal\n/a.jpg\n")
+        XCTAssertEqual(PhotoBatch.appendPaths("bleibt", []), "bleibt")
+        XCTAssertEqual(PhotoBatch.failure(done: 0, count: 3, message: "weg"), "weg")
+        XCTAssertEqual(PhotoBatch.failure(done: 2, count: 3, message: "weg"), "2 von 3 hochgeladen, dann: weg. Der Rest bleibt in der Auswahl.")
+    }
+
     func testAttach() {
         XCTAssertTrue(Attach.isImage("IMG.JPG"))
         XCTAssertTrue(Attach.isImage("x", mime: "image/png"))
