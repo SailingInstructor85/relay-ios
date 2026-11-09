@@ -58,6 +58,18 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Fotos oder die Zwischenablage ab. Jeder Bereich hat einen Schalter (anfangs aus), Lesen läuft dann ohne Rückfrage,
   jede Anfrage steht im Verlauf. Der Not-Aus lehnt alles ab. Am PC: `notifyd phone do --list`. Ist Relay zu, wartet der
   Befehl; nach 5 Minuten kommt einmal ein Hinweis, Relay zu öffnen. Details: `docs/telefonzugriff.md`.
+- **Tailscale aus?** Erreicht Relay den PC nicht, weil iOS Tailscale im Hintergrund beendet hat, steht über der
+  Sitzungsliste „Keine Verbindung. Tailscale ist vermutlich aus.“ mit dem Knopf „Tailscale verbinden“. Er startet den
+  Kurzbefehl „Tailscale verbinden“ (Tailscale-Aktion „Connect“, ab Tailscale 1.36), kehrt zu Relay zurück und verbindet
+  neu. Der Hinweis erscheint nur, wenn eine Adresse des PCs eine Tailscale-Adresse ist und das iPhone gerade keine hat.
+  Einrichtung: Einstellungen → Status → „Tailscale verbinden“ (Name des Kurzbefehls und Anleitung).
+- **Vault-Chat ohne Verbindung:** Ohne Verbindung steht oben in der Liste „Nachricht an Vault-Agent“. Text, Diktat und
+  Anhänge warten auf dem iPhone („wartet auf Verbindung“). Steht die Verbindung wieder, startet Relay einen Agenten im
+  Vault-Ordner (Einstellungen → Ablage) mit allen wartenden Nachrichten in der richtigen Reihenfolge; spätere gehen in
+  dieselbe Sitzung, solange sie läuft. Nichts geht doppelt raus.
+- **Musik pausiert beim Sprechen:** Diktat, Jarvis, Sprachmodus und Vorlesen unterbrechen Spotify und andere Apps,
+  statt sie nur leiser zu stellen. Ist die Nachricht fertig (gesendet, Feld geleert, Vorlesen zu Ende), läuft die Musik
+  von selbst weiter.
 - **Sperre mit Face ID** (Einstellungen → Sicherheit)
 - **Nutzungsprotokoll und „Fehler melden“** (Einstellungen → Nutzungsprotokoll, standardmäßig an): Die App zeichnet
   auf, was du tust (Ansicht, Aktion, Sitzung, Verbindung, Fehler), ohne Inhalte, von Text, Diktat und Fotos nur Art
@@ -119,6 +131,9 @@ Tests unter Linux: `cd RelayCore && swift test`. Ende-zu-Ende-Test gegen ein Gat
 3. Auf dem Desktop muss `sshd` laufen (`sudo systemctl enable --now sshd`).
 4. In der App Host (LAN-IP oder WireGuard-Adresse), Port und Benutzer eintragen und dann „Verbinden“ tippen.
    Der Host-Schlüssel wird beim ersten Mal gepinnt, ein geänderter Schlüssel wird abgelehnt.
+5. Mit Tailscale: In der Kurzbefehle-App einen Kurzbefehl „Tailscale verbinden“ mit der Tailscale-Aktion „Connect“
+   anlegen (Einstellungen → Status → „Tailscale verbinden“ zeigt die Schritte). Dann reicht ein Tipp auf den Knopf im
+   Hinweis, wenn iOS Tailscale beendet hat.
 
 ## Später in den App Store
 

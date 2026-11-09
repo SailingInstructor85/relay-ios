@@ -2,6 +2,19 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.12 (2026-11-09)
+
+**Neu**
+- Hilfe, wenn Tailscale aus ist: Erreicht Relay den PC nicht, weil iOS Tailscale im Hintergrund beendet hat, steht über der Sitzungsliste „Keine Verbindung. Tailscale ist vermutlich aus.“ mit dem Knopf „Tailscale verbinden“. Er startet deinen Kurzbefehl mit der Tailscale-Aktion „Connect“, springt zurück zu Relay und verbindet sofort neu. Der Hinweis kommt nur, wenn dein PC über Tailscale erreicht wird und das iPhone gerade keine Tailscale-Verbindung hat. Ist Tailscale an und nur der PC still, bleibt er weg.
+- Einstellungen → Status → „Tailscale verbinden“: Name des Kurzbefehls und eine kurze Anleitung zum Anlegen in der Kurzbefehle-App. Ohne Namen öffnet der Knopf die Tailscale-App.
+- Nachricht an den Vault-Agenten auch ohne Verbindung: Oben in der Sitzungsliste steht dann „Nachricht an Vault-Agent“. Du kannst schreiben, diktieren und Fotos oder Dateien anhängen. Alles wartet auf dem iPhone, an jeder Nachricht steht „wartet auf Verbindung“, Bearbeiten und Verwerfen gehen auch. Sobald der PC erreichbar ist, startet Relay einen Agenten im Vault mit allen wartenden Nachrichten in der richtigen Reihenfolge. Spätere Nachrichten gehen in dieselbe Sitzung, solange sie läuft. Nichts wird doppelt gesendet.
+
+**Geändert**
+- Kommt Tailscale wieder hoch, versucht Relay die Verbindung sofort statt erst beim nächsten Intervall.
+
+**Behoben**
+- Musik spielte während einer Aufnahme mit seltsamem Klang weiter (etwa Spotify im Auto über Bluetooth). Diktat, Jarvis, Sprachmodus und Vorlesen pausieren andere Apps jetzt, statt sie nur leiser zu stellen. Ist die Nachricht fertig (gesendet, Feld geleert, Vorlesen zu Ende oder Ansicht verlassen), spielt die Musik von selbst weiter. Zwischen Aufnahme und Kontrollvorlesen bleibt sie aus.
+
 ## 0.3.11 (2026-11-07)
 
 Braucht für den Telefonzugriff das aktuelle Gateway (auf dem PC schon eingespielt).
