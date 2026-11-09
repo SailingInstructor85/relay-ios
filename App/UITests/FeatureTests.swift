@@ -429,6 +429,20 @@ final class InfoTests: RelayTestCase {
         }, timeout: 15), "Not-Aus hat den Befehl nicht abgelehnt")
     }
 
+    func test27_TailscaleSettings() {
+        // Einstellungen → Status → „Tailscale verbinden“: Name des Kurzbefehls und Anleitung. Der Hinweis über der
+        // Liste erscheint im Test nicht (127.0.0.1 ist keine Tailscale-Adresse).
+        launchConnected()
+        XCTAssertFalse(id("tailscaleConnect").exists, "Tailscale-Hinweis trotz Verbindung")
+        mainMenu("Einstellungen")
+        settle(1)
+        XCTAssertTrue(reveal("Tailscale verbinden"), "Eintrag Tailscale fehlt")
+        tapID("tailscaleSettings")
+        expect("So legst du ihn an")
+        XCTAssertTrue(id("tailscaleShortcutName").waitForExistence(timeout: 5), "Feld für den Kurzbefehl fehlt")
+        shot("tailscale-einstellungen")
+    }
+
     /// Schaltet einen Schalter per Kennung ein (Tipp auf den Schalter rechts in der Zeile).
     private func switchOn(_ ident: String) {
         let sw = app.switches[ident]

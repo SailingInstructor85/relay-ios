@@ -60,6 +60,10 @@ struct SetupView: View {
                     }
                     Button("Host-Schlüssel vergessen (neu pinnen)", role: .destructive) { model.forgetHostKey() }
                 }
+                if !firstRun {
+                    NavigationLink { TailscaleSettingsView() } label: { Label("Tailscale verbinden", systemImage: "network") }
+                        .accessibilityIdentifier("tailscaleSettings")
+                }
             }
             if !firstRun {
                 UsageSettingsSection()

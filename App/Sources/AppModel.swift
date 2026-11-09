@@ -50,7 +50,19 @@ final class AppModel: ObservableObject {
             if case .error(let m) = state { UsageRecorder.shared.record("app", "verbindung", detail: "Fehler", error: m) }
             else { UsageRecorder.shared.record("app", "verbindung", detail: state.label) }
             if state == .connected { Task { await UsageRecorder.shared.flush() } }
+            // Tailscale-Hinweis: nur nach einem gescheiterten Versuch, nicht schon beim Verbinden
+            if case .error = state { linkFailed = true } else if state != .connecting { linkFailed = false }
+            tailnetUp = TailscaleLauncher.tailnetUp()
         }
+    }
+    /// The last connect attempt failed and no link came up since.
+    @Published private(set) var linkFailed = false
+    /// A tailnet address (Tailscale on) is on the phone.
+    @Published private(set) var tailnetUp = false
+    /// "Keine Verbindung. Tailscale ist vermutlich aus." with the connect button (sessions list).
+    var tailscaleHint: Bool {
+        guard state != .connected else { return false }
+        return Tailnet.showHint(failed: linkFailed, network: hasNetwork, hosts: hosts, tailnetUp: tailnetUp)
     }
     @Published private(set) var sessions: [String: Session] = [:]
     /// „Alle Sitzungen beenden“ (WindDown): der laufende Auftrag des Gateways und sein Stand.
@@ -121,8 +133,22 @@ final class AppModel: ObservableObject {
 
     /// A file opened in Relay from another app (document type): queued until the user picked a session.
     func receive(_ url: URL) {
+        if let cb = Tailnet.callback(url) { tailscaleReturned(cb); return }
         guard url.isFileURL else { return }
         if !incomingFiles.contains(url) { incomingFiles.append(url) }
+    }
+
+    /// Back from the shortcut "Tailscale verbinden": connect again at once (or say why the shortcut failed).
+    func tailscaleReturned(_ cb: Tailnet.Callback) {
+        switch cb {
+        case .connected:
+            UsageRecorder.shared.record("app", "tailscale zurück", detail: "verbunden")
+            tailnetUp = TailscaleLauncher.tailnetUp()
+            reconnect()
+        case .failed(let msg):
+            UsageRecorder.shared.record("app", "tailscale zurück", detail: "Fehler", error: msg)
+            lastError = Tailnet.failureText(shortcut: TailscaleLauncher.shortcutName, message: msg)
+        }
     }
 
     /// Forget the queued files and delete the copies iOS put into our Inbox.
@@ -174,7 +200,11 @@ final class AppModel: ObservableObject {
                 self.vpnActive = path.usesInterfaceType(.other)
                 let had = self.hasNetwork
                 self.hasNetwork = path.status == .satisfied
+                let tailnetHad = self.tailnetUp
+                self.tailnetUp = TailscaleLauncher.tailnetUp()
                 if self.hasNetwork != had { self.reconnect() }
+                // Tailscale ist (wieder) an: sofort neu versuchen statt auf das nächste Intervall zu warten
+                else if self.tailnetUp && !tailnetHad && self.state != .connected { self.reconnect() }
             }
         }
         monitor.start(queue: DispatchQueue(label: "net"))

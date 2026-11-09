@@ -78,6 +78,7 @@ struct SessionsView: View {
                 }.pickerStyle(.segmented)
             }.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
             if model.state != .connected { connectionRow }
+            if model.tailscaleHint { TailscaleHintRow() }
             listContent
         }
         .listStyle(.insetGrouped)
