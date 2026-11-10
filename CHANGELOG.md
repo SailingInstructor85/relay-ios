@@ -2,6 +2,14 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.14 (2026-11-10)
+
+**Behoben**
+- Das iPhone sperrte sich mitten im Diktat. Solange eine Mikrofon-Aufnahme läuft (Diktat im Chat oder im Vault-Chat, Jarvis), bleibt der Bildschirm jetzt an, höchstens 10 Minuten am Stück. Endet die Aufnahme früher, gilt sofort wieder die normale automatische Sperre.
+
+**Geändert**
+- „Bildschirm bleibt an“ beim Zuschauen (60 s nach der letzten Berührung im Chat) und die Aufnahme gelten nebeneinander: Der Bildschirm geht erst aus, wenn keins von beiden mehr greift. Im Sprachmodus bleibt er wie bisher durchgehend an, auch wenn dort eine Aufnahme endet.
+
 ## 0.3.13 (2026-11-09)
 
 **Neu**

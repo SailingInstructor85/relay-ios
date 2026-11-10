@@ -341,3 +341,17 @@ Entscheidungen: Vorschau statt Sofort-Upload auch bei nur einem Foto, damit sich
 Risiken: nicht auf dem Gerät getestet, Swift nur über die CI. Stellen, an denen der Compiler meckern könnte: `Task.detached` mit benanntem Tupel in `StagedMedia.load`, `try? await gen.image(at:)`, verschachteltes `if` im ViewBuilder des Chats. Die Systemauswahl selbst lässt sich im UI-Test nicht bedienen, die Vorschauzeile ist daher nur per Screenshot-Test des Menüs abgedeckt, nicht mit echten Fotos. Sehr viele Videos auf einmal belegen Platz im Temp-Ordner, bis sie hochgeladen oder verworfen sind.
 
 Version: `project.yml` 0.3.12 auf 0.3.13. Nicht gepusht, kein Tag; das übernimmt das Skript.
+
+## Nachtbau 10. November 2026, 08:43 (Version 0.3.14)
+
+Zweig `nachtbau/2026-11-10-0843`, Worktree `~/.local/state/agents/relay-nachtbau/wt-2026-11-10-0843`, ein Backlog-Eintrag, unbeaufsichtigt. Nur App und RelayCore, kein Gateway-Anteil. Swift läuft lokal nicht, geprüft wird über die CI.
+
+Gebaut:
+- **Bildschirm bleibt während der Mikrofon-Aufnahme an** (Eintrag 1, `7a90fd6`): RelayCore `AwakePolicy` bekommt `recordingLimit` (600 s) und die Überladungen `keepAwake`/`nextCheck` mit `recordingSince` und `pinned`. Gründe: Zuschauen (60 s nach Berührung), Aufnahme (bis 10 Minuten ab Start), angeheftet (Sprachmodus). Der Bildschirm bleibt an, solange einer greift; `nextCheck` ist das früheste Ablaufen. Die alten Aufrufe bleiben gleich. Tests `testRecordingKeepsAwakeForTenMinutes`, `testRecordingAndTouchAddUp`, `testPinnedStaysOnWithoutTimer`. App: `ScreenAwake.recordingStarted/recordingEnded` (je `VoiceIO`-Halter, die jüngste Aufnahme zählt) und `pin/unpin`. `VoiceIO.listen` und `fakeListen` melden den Start, `endListening` das Ende (deckt Stopp, Pause, Stille und Abbruch ab). Der Sprachmodus setzt `isIdleTimerDisabled` nicht mehr selbst, sondern heftet sich an `ScreenAwake`, sonst hätte ein Aufnahmeende dort den Bildschirm ausgeschaltet. README ergänzt.
+- Version 0.3.14 (`58fe082`), Doku (dieser Commit): CHANGELOG, README, Nachtlog.
+
+Entscheidungen: Die 10 Minuten zählen je Aufnahme ab ihrem Start (ein neues Diktat beginnt neu). Zuschauen und Aufnahme addieren sich: Nach 10 Minuten Aufnahme bleibt der Bildschirm im Chat trotzdem an, wenn er in den letzten 60 s berührt wurde (Verträglichkeit mit v0.3.2). Keine Oberfläche geändert, daher keine UI-Tests angepasst.
+
+Risiken: nicht auf dem Gerät getestet. Wird ein `VoiceIO` während einer Aufnahme freigegeben, ohne dass `endListening` läuft, bleibt der Bildschirm bis zum Ende der 10 Minuten an (begrenzt). Ob iOS bei laufendem Mikrofon die Sperre ohnehin aufschiebt, ist ungeprüft; die Änderung erzwingt es nun.
+
+Version: `project.yml` 0.3.13 auf 0.3.14. Nicht gepusht, kein Tag; das übernimmt das Skript.
