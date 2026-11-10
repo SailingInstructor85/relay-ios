@@ -66,10 +66,6 @@ struct VaultChatView: View {
             if model.visibleChat == VaultChat.key { model.visibleChat = nil }
             voice.stopListening(); voice.stopSpeaking(); voice.releaseAudio()
         }
-        .onChange(of: input) { _, t in
-            // Nachricht fertig (gesendet oder Feld geleert): Musik anderer Apps läuft weiter
-            if t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !voice.listening, !dictating { voice.releaseAudio() }
-        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item]) { result in
             if case .success(let url) = result { keepFile(url) }
         }
@@ -173,7 +169,6 @@ struct VaultChatView: View {
         input = ""
         files = []
         error = nil
-        voice.releaseAudio()
     }
 
     /// Diktat auf dem iPhone (geht auch ohne Verbindung, wenn die Erkennung auf dem Gerät läuft).
@@ -187,13 +182,12 @@ struct VaultChatView: View {
         UsageRecorder.shared.record("vault-chat", "diktat gestartet", kind: "diktat")
         var raw = ""
         do { raw = try await voice.listen() } catch { self.error = error.localizedDescription }
+        voice.releaseAudio()  // Aufnahme vorbei: Musik anderer Apps läuft sofort weiter
         if !raw.isEmpty {
             UsageRecorder.shared.content("vault-chat", "diktiert", session: nil, kind: "diktat", text: raw)
             let head = input.trimmingCharacters(in: .whitespacesAndNewlines)
             input = head.isEmpty ? raw : head + " " + raw
             focused = true
-        } else {
-            voice.releaseAudio()
         }
     }
 

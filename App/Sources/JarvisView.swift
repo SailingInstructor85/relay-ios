@@ -167,6 +167,8 @@ struct JarvisView: View {
                     self.error = error.localizedDescription; return
                 }
                 if Task.isCancelled { return }
+                // ohne Vorlesen braucht nach der Aufnahme niemand mehr das Audio: Musik läuft schon während der Antwort weiter
+                if !speakAnswers { voice.releaseAudio() }
                 let end = endedBy
                 endedBy = .pause
                 UsageRecorder.shared.content("jarvis", "diktiert", session: nil, kind: "diktat", text: heard)

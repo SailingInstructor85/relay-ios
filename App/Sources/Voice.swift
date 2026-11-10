@@ -45,8 +45,9 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         synth.delegate = self
     }
 
-    /// The message is finished (sent, cancelled, read to the end): the audio goes back to other apps, Spotify resumes.
-    /// Not called between a recording and its read-back, so the music stays paused for the whole message.
+    /// Recording or reading is over: the audio goes back to other apps, Spotify resumes. Does nothing while this voice
+    /// still records or speaks. Not called between a recording and its spoken answer or read-back (Jarvis, Sprachmodus),
+    /// so the music stays paused in between; the chat dictation gives the audio back as soon as the recording ends.
     func releaseAudio() {
         guard !listening, !speaking, finishListening == nil else { return }
         AudioFocus.release(holder)
@@ -361,35 +362,98 @@ enum SpeechPrefs {
 /// Who uses the audio session right now. Recording and reading aloud interrupt other apps (no `.duckOthers`, no
 /// `.mixWithOthers`): Spotify pauses instead of playing on quietly (over Bluetooth in the car even in phone quality).
 /// When the last holder lets go, the session is deactivated with `.notifyOthersOnDeactivation`, so the music resumes.
+/// iOS refuses that while audio is still winding down (the speech voice just ended); then it is tried again a few
+/// times (`AudioHolders.retryDelays`), otherwise the music would stay paused or quiet for good. Taking, giving back,
+/// failures and interruptions go to the usage log (screen "audio", with the route), so a report can be traced.
 @MainActor
 enum AudioFocus {
-    private static var holders = Set<String>()
+    private static var holders = AudioHolders()
+    private static var retry: Task<Void, Never>?
+    private static var observing = false
 
     /// Microphone and speech (Jarvis, Chat-Diktat, Sprachmodus).
     static func takeForRecording(_ who: String) throws {
-        if UITestMode.active { holders.insert(who); return }
+        if UITestMode.active { holders.take(who); return }
+        cancelRetry()
+        observe()
         let s = AVAudioSession.sharedInstance()
-        try s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
-        try s.setActive(true, options: .notifyOthersOnDeactivation)
-        holders.insert(who)
+        do {
+            try s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+            try s.setActive(true)
+        } catch {
+            UsageRecorder.shared.record("audio", "nicht übernommen", kind: "aufnahme", error: error.localizedDescription)
+            if holders.isEmpty { deactivate(attempt: 0) }
+            throw error
+        }
+        if holders.take(who) { UsageRecorder.shared.record("audio", "übernommen", kind: "aufnahme", detail: route()) }
     }
 
     /// Reading aloud only (Vorlesen, Stimmprobe). While a recording holds the session its category stays as it is.
     static func takeForPlayback(_ who: String) {
-        if UITestMode.active { holders.insert(who); return }
+        if UITestMode.active { holders.take(who); return }
+        cancelRetry()
+        observe()
         let s = AVAudioSession.sharedInstance()
-        if holders.subtracting([who]).isEmpty { try? s.setCategory(.playback, mode: .spokenAudio, options: []) }
-        try? s.setActive(true, options: .notifyOthersOnDeactivation)
-        holders.insert(who)
+        if !holders.heldByOthers(than: who) { try? s.setCategory(.playback, mode: .spokenAudio, options: []) }
+        do { try s.setActive(true) } catch {
+            UsageRecorder.shared.record("audio", "nicht übernommen", kind: "vorlesen", error: error.localizedDescription)
+        }
+        if holders.take(who) { UsageRecorder.shared.record("audio", "übernommen", kind: "vorlesen", detail: route()) }
     }
 
     static func release(_ who: String) {
-        holders.remove(who)
-        guard holders.isEmpty, !UITestMode.active else { return }
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        guard holders.release(who), !UITestMode.active else { return }
+        deactivate(attempt: 0)
     }
 
     static var isHeld: Bool { !holders.isEmpty }
+
+    /// Gives the session back to other apps; on failure tries again later, unless someone took it in the meantime.
+    private static func deactivate(attempt: Int) {
+        cancelRetry()
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            UsageRecorder.shared.record("audio", "freigegeben", detail: attempt > 0 ? "Versuch \(attempt + 1)" : nil)
+        } catch {
+            let msg = error.localizedDescription
+            guard let delay = AudioHolders.retryDelay(afterFailed: attempt) else {
+                UsageRecorder.shared.record("audio", "nicht freigegeben", detail: route(), error: msg)
+                return
+            }
+            if attempt == 0 { UsageRecorder.shared.record("audio", "freigabe wiederholt", error: msg) }
+            retry = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                guard !Task.isCancelled, holders.isEmpty else { return }
+                deactivate(attempt: attempt + 1)
+            }
+        }
+    }
+
+    private static func cancelRetry() {
+        retry?.cancel()
+        retry = nil
+    }
+
+    /// Inputs and outputs of the current route, e.g. "MicrophoneBuiltIn > Speaker" or "BluetoothHFP > BluetoothHFP".
+    private static func route() -> String {
+        let r = AVAudioSession.sharedInstance().currentRoute
+        let ins = r.inputs.map { $0.portType.rawValue }.joined(separator: ",")
+        let outs = r.outputs.map { $0.portType.rawValue }.joined(separator: ",")
+        return ins + " > " + outs
+    }
+
+    /// Another app or a call took the audio away, or gave it back: noted in the usage log.
+    private static func observe() {
+        guard !observing else { return }
+        observing = true
+        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { n in
+            let raw = n.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let began = raw == AVAudioSession.InterruptionType.began.rawValue
+            Task { @MainActor in
+                UsageRecorder.shared.record("audio", began ? "unterbrochen" : "unterbrechung beendet", detail: isHeld ? "gehalten" : "frei")
+            }
+        }
+    }
 }
 
 struct RelayErrorText: LocalizedError {

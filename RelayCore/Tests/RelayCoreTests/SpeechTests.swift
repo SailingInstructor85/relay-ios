@@ -59,6 +59,28 @@ final class SpeechTests: XCTestCase {
         XCTAssertTrue(VoiceMode.isLive("live"))
     }
 
+    func testAudioHolders() {
+        var h = AudioHolders()
+        XCTAssertTrue(h.isEmpty)
+        XCTAssertFalse(h.release("chat"), "wer nichts hält, gibt nichts frei")
+        XCTAssertTrue(h.take("chat"))
+        XCTAssertFalse(h.take("chat"))
+        XCTAssertFalse(h.take("reader"))
+        XCTAssertTrue(h.heldByOthers(than: "chat"))
+        XCTAssertFalse(h.release("chat"), "der Vorleser hält noch")
+        XCTAssertFalse(h.heldByOthers(than: "reader"))
+        XCTAssertTrue(h.release("reader"), "der Letzte gibt frei")
+        XCTAssertFalse(h.release("reader"), "nicht doppelt freigeben")
+        XCTAssertTrue(h.isEmpty)
+    }
+
+    func testAudioReleaseRetries() {
+        XCTAssertEqual(AudioHolders.retryDelay(afterFailed: 0), 0.3)
+        XCTAssertEqual(AudioHolders.retryDelay(afterFailed: 2), 3)
+        XCTAssertNil(AudioHolders.retryDelay(afterFailed: 3))
+        XCTAssertNil(AudioHolders.retryDelay(afterFailed: -1))
+    }
+
     func testDictationRestart() {
         let said = "Ich möchte dir zeigen, was wir hier"
         // the recogniser started over after a pause: only the words after it come back

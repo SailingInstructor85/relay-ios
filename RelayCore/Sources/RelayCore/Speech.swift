@@ -226,6 +226,42 @@ public enum SpeechVocab {
 }
 
 /// One exchange with Jarvis, kept on the device.
+/// Who holds the phone's audio session (recording, reading aloud). Other apps (Spotify) stay paused while anyone holds
+/// it; when the last holder lets go, the session is given back so their music resumes. iOS sometimes refuses to give
+/// the session back at once (audio still winding down), so the release is tried again after `retryDelays`.
+public struct AudioHolders: Equatable, Sendable {
+    public private(set) var names: Set<String> = []
+
+    public init() {}
+
+    public var isEmpty: Bool { names.isEmpty }
+
+    /// Someone other than `who` holds the session (its category must stay as it is).
+    public func heldByOthers(than who: String) -> Bool { !names.subtracting([who]).isEmpty }
+
+    /// true when `who` is the first holder (the session was free before).
+    @discardableResult
+    public mutating func take(_ who: String) -> Bool {
+        let first = names.isEmpty
+        names.insert(who)
+        return first
+    }
+
+    /// true when `who` held the session and was the last one: now it has to be given back to other apps.
+    public mutating func release(_ who: String) -> Bool {
+        guard names.remove(who) != nil else { return false }
+        return names.isEmpty
+    }
+
+    /// Waits before the next try when giving the session back failed.
+    public static let retryDelays: [TimeInterval] = [0.3, 1, 3]
+
+    /// Delay before try number `attempt + 1` (0 = the first try failed); nil = give up.
+    public static func retryDelay(afterFailed attempt: Int) -> TimeInterval? {
+        attempt >= 0 && attempt < retryDelays.count ? retryDelays[attempt] : nil
+    }
+}
+
 /// Partial results of a dictation (SFSpeechRecognizer). After a pause the recogniser sometimes starts over on its own
 /// without reporting `isFinal`: its next partial covers only the words after the pause, and the words before would be
 /// lost. Such a restart is told from an ordinary revision by its shape: the new partial is much shorter than the last

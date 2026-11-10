@@ -30,7 +30,6 @@ struct ChatView: View {
     @State private var sendAfterDictation = false
     @State private var vocabLoaded = false
     /// Diktierter Text steht im Feld und ist noch nicht gesendet: andere Apps (Spotify) bleiben pausiert.
-    @State private var dictated = false
     @StateObject private var voice = VoiceIO()
     /// Vorlesen auf Knopfdruck: eine Antwort, die letzte Antwort oder nur die Frage (ReadAloud), mit Pause und Stopp.
     @ObservedObject private var reader = SpeechOut.shared
@@ -186,21 +185,15 @@ struct ChatView: View {
         .onChange(of: error) { _, e in if let e { UsageRecorder.shared.record("chat", "fehler", session: key, error: e) } }
         .onChange(of: focused) { _, f in UsageRecorder.shared.record("chat", f ? "tastatur auf" : "tastatur zu", session: key, length: input.count) }
         .keepsScreenAwake()
-        // Nachricht fertig (gesendet, in den Postausgang, Feld geleert): Musik anderer Apps läuft weiter
-        .onChange(of: input) { _, t in
-            guard t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !voice.listening, !dictating else { return }
-            dictated = false
-            voice.releaseAudio()
-        }
+        // Zusammenfassung vorgelesen: Musik anderer Apps läuft weiter (nach einer Aufnahme gibt `toggleDictation` frei)
         .onChange(of: voice.speaking) { _, s in
-            if !s, !voice.listening, !dictating, !dictated { voice.releaseAudio() }
+            if !s, !dictating { voice.releaseAudio() }
         }
         .onDisappear {
             model.visibleChat = nil
             model.transcriptListeners[sessionKey] = nil
             voice.stopSpeaking(); voice.stopListening(); reader.stop()
             if !stagedBusy { discardStaged() }
-            dictated = false
             voice.releaseAudio()
             Task { _ = try? await model.rpc("unwatch", ["key": .string(key)]) }
         }
@@ -740,6 +733,9 @@ struct ChatView: View {
         var failure: String?
         UsageRecorder.shared.record("chat", "diktat gestartet", session: key, kind: "diktat")
         do { raw = try await voice.listen() } catch { failure = error.localizedDescription }
+        // Aufnahme vorbei (Pause, Knopf, Senden, Fehler): Audio sofort zurück, Spotify spielt normal weiter. Nicht erst
+        // nach dem Aufräumen oder Senden, sonst bliebe die Musik aus, solange der Text im Feld wartet.
+        voice.releaseAudio()
         if raw.isEmpty { UsageRecorder.shared.record("chat", "diktat leer", session: key, kind: "diktat", error: failure) }
         else { UsageRecorder.shared.content("chat", "diktiert", session: key, kind: "diktat", text: raw) }
         if !raw.isEmpty {
@@ -761,9 +757,6 @@ struct ChatView: View {
         } else if let failure {
             error = failure
         }
-        // Spotify bleibt pausiert, solange der diktierte Text noch auf Senden wartet; sonst gleich weiter
-        dictated = !sendNow && !raw.isEmpty && !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        if !dictated { voice.releaseAudio() }
     }
 
     // MARK: attachments

@@ -70,8 +70,10 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Vault-Ordner (Einstellungen → Ablage) mit allen wartenden Nachrichten in der richtigen Reihenfolge; spätere gehen in
   dieselbe Sitzung, solange sie läuft. Nichts geht doppelt raus.
 - **Musik pausiert beim Sprechen:** Diktat, Jarvis, Sprachmodus und Vorlesen unterbrechen Spotify und andere Apps,
-  statt sie nur leiser zu stellen. Ist die Nachricht fertig (gesendet, Feld geleert, Vorlesen zu Ende), läuft die Musik
-  von selbst weiter.
+  statt sie nur leiser zu stellen. Beim Diktat im Chat läuft die Musik weiter, sobald die Aufnahme endet (auch wenn
+  der Text noch im Feld steht), bei Jarvis und im Sprachmodus nach der vorgelesenen Antwort. Gibt iOS das Audio nicht
+  sofort zurück, versucht die App es noch dreimal. Übernahme, Freigabe und Unterbrechungen stehen im Nutzungsprotokoll
+  (Ansicht „audio“ mit dem Audioweg). Braucht mindestens Version 0.3.12 auf dem Handy.
 - **Bildschirm bleibt an:** Im Chat und im Live-Bildschirm bis 60 s nach der letzten Berührung, während einer
   Mikrofon-Aufnahme (Diktat, Jarvis) höchstens 10 Minuten ab ihrem Start, im Sprachmodus durchgehend. Danach oder beim
   Ende der Aufnahme gilt wieder die normale automatische Sperre.
