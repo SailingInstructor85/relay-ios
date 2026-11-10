@@ -3,12 +3,17 @@ import UIKit
 import RelayCore
 
 /// Hält den Bildschirm an, solange ein Chat oder der Live-Bildschirm offen ist und zuletzt vor weniger als 60 s berührt
-/// wurde (`AwakePolicy`). Berührungen zählt ein Gestenerkenner am Fenster, der nie auslöst und nichts verschluckt.
-/// Beim Verlassen der Ansicht gilt wieder die normale Sperrzeit.
+/// wurde, solange eine Mikrofon-Aufnahme läuft (höchstens 10 Minuten ab ihrem Start) oder solange der Sprachmodus offen
+/// ist (`AwakePolicy`). Die Gründe gelten nebeneinander, erst wenn keiner mehr greift, sperrt iOS wieder normal.
+/// Berührungen zählt ein Gestenerkenner am Fenster, der nie auslöst und nichts verschluckt.
 @MainActor
 final class ScreenAwake {
     static let shared = ScreenAwake()
     private var watchers: Set<UUID> = []
+    /// Laufende Aufnahmen je `VoiceIO` mit ihrem Start.
+    private var recordings: [String: Date] = [:]
+    /// Ansichten, die den Bildschirm durchgehend anhalten (Sprachmodus).
+    private var pins: Set<UUID> = []
     private var lastTouch = Date()
     private var timer: Task<Void, Never>?
     private var recognizer: TouchWatch?
@@ -26,6 +31,28 @@ final class ScreenAwake {
         apply()
     }
 
+    /// Eine Mikrofon-Aufnahme beginnt: Der Bildschirm bleibt an, höchstens `AwakePolicy.recordingLimit` lang.
+    func recordingStarted(_ who: String) {
+        recordings[who] = Date()
+        apply()
+    }
+
+    /// Die Aufnahme ist vorbei: Ab sofort gilt wieder die normale Sperre (sofern kein anderer Grund greift).
+    func recordingEnded(_ who: String) {
+        guard recordings.removeValue(forKey: who) != nil else { return }
+        apply()
+    }
+
+    func pin(_ id: UUID) {
+        pins.insert(id)
+        apply()
+    }
+
+    func unpin(_ id: UUID) {
+        pins.remove(id)
+        apply()
+    }
+
     func touched() {
         lastTouch = Date()
         apply()
@@ -34,9 +61,12 @@ final class ScreenAwake {
     private func apply() {
         timer?.cancel(); timer = nil
         let now = Date()
-        let on = AwakePolicy.keepAwake(watching: !watchers.isEmpty, lastTouch: lastTouch, now: now)
+        let since = recordings.values.max()  // die jüngste Aufnahme zählt
+        let watching = !watchers.isEmpty, pinned = !pins.isEmpty
+        let on = AwakePolicy.keepAwake(watching: watching, lastTouch: lastTouch, recordingSince: since, pinned: pinned, now: now)
         if UIApplication.shared.isIdleTimerDisabled != on { UIApplication.shared.isIdleTimerDisabled = on }
-        guard let wait = AwakePolicy.nextCheck(watching: !watchers.isEmpty, lastTouch: lastTouch, now: now) else { return }
+        guard let wait = AwakePolicy.nextCheck(watching: watching, lastTouch: lastTouch, recordingSince: since,
+                                               pinned: pinned, now: now) else { return }
         timer = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
             guard !Task.isCancelled else { return }

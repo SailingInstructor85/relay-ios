@@ -228,6 +228,7 @@ final class DriveController: ObservableObject {
 /// solange die Ansicht offen ist.
 struct DriveView: View {
     @StateObject private var c = DriveController()
+    @State private var awakeID = UUID()
     @ObservedObject private var store = NoticeStore.shared
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -281,12 +282,12 @@ struct DriveView: View {
         .onAppear {
             UsageRecorder.shared.screen("sprachmodus")
             model.driveActive = true
-            UIApplication.shared.isIdleTimerDisabled = true
+            ScreenAwake.shared.pin(awakeID)
         }
         .onDisappear {
             c.shutdown()
             model.driveActive = false
-            UIApplication.shared.isIdleTimerDisabled = false
+            ScreenAwake.shared.unpin(awakeID)
         }
     }
 

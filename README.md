@@ -72,6 +72,9 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Musik pausiert beim Sprechen:** Diktat, Jarvis, Sprachmodus und Vorlesen unterbrechen Spotify und andere Apps,
   statt sie nur leiser zu stellen. Ist die Nachricht fertig (gesendet, Feld geleert, Vorlesen zu Ende), läuft die Musik
   von selbst weiter.
+- **Bildschirm bleibt an:** Im Chat und im Live-Bildschirm bis 60 s nach der letzten Berührung, während einer
+  Mikrofon-Aufnahme (Diktat, Jarvis) höchstens 10 Minuten ab ihrem Start, im Sprachmodus durchgehend. Danach oder beim
+  Ende der Aufnahme gilt wieder die normale automatische Sperre.
 - **Sperre mit Face ID** (Einstellungen → Sicherheit)
 - **Nutzungsprotokoll und „Fehler melden“** (Einstellungen → Nutzungsprotokoll, standardmäßig an): Die App zeichnet
   auf, was du tust (Ansicht, Aktion, Sitzung, Verbindung, Fehler), ohne Inhalte, von Text, Diktat und Fotos nur Art

@@ -102,6 +102,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         do { try engine.start() } catch { abortSegment(); throw error }
 
         listening = true
+        ScreenAwake.shared.recordingStarted(holder)
         started = Date()
         lastHeard = Date()
         watchdog = Task { [weak self] in
@@ -124,6 +125,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         fake = true
         committed = ""; partial = ""; segmentText = ""; hyps = []; hypConf = []
         listening = true
+        ScreenAwake.shared.recordingStarted(holder)
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 400_000_000)
             guard let self, self.listening, self.fake else { return }
@@ -190,6 +192,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private func endListening() {
         guard listening || finishListening != nil else { return }
         listening = false
+        ScreenAwake.shared.recordingEnded(holder)
         watchdog?.cancel(); watchdog = nil
         if fake {
             fake = false
