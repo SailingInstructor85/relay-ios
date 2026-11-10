@@ -79,7 +79,7 @@ struct SessionsView: View {
                 }.pickerStyle(.segmented)
             }.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
             if model.state != .connected { connectionRow }
-            if model.tailscaleHint { TailscaleHintRow() }
+            if let help = model.connectHelp, !help.isEmpty { ConnectHelpRow(help: help) { path.append(Dest.settings) } }
             if model.state != .connected || outbox.items(for: VaultChat.key).contains(where: { $0.state != .delivered }) { vaultRow }
             listContent
         }

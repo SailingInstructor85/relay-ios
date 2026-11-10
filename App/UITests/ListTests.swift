@@ -208,6 +208,9 @@ final class ListTests: RelayTestCase {
         ctl("offline")
         ctl("kick")
         settle(5)
+        // Das Mock-Gateway nimmt SSH an und beendet `serve` mit einem Fehler: Grund in Klartext mit Hilfe statt Rohtext
+        expect("Gateway läuft nicht", 20, soft: true)
+        expect("Relay-Dienst", 5, soft: true)
         shot("offline-liste")
         reveal("API Refactoring")
         expect("API Refactoring")

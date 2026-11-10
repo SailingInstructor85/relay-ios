@@ -60,8 +60,15 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Fotos oder die Zwischenablage ab. Jeder Bereich hat einen Schalter (anfangs aus), Lesen läuft dann ohne Rückfrage,
   jede Anfrage steht im Verlauf. Der Not-Aus lehnt alles ab. Am PC: `notifyd phone do --list`. Ist Relay zu, wartet der
   Befehl; nach 5 Minuten kommt einmal ein Hinweis, Relay zu öffnen. Details: `docs/telefonzugriff.md`.
-- **Tailscale aus?** Erreicht Relay den PC nicht, weil iOS Tailscale im Hintergrund beendet hat, steht über der
-  Sitzungsliste „Keine Verbindung. Tailscale ist vermutlich aus.“ mit dem Knopf „Tailscale verbinden“. Er startet den
+- **Verbindung klappt nicht?** Über der Sitzungsliste steht der Grund in Klartext mit der passenden Hilfe statt der
+  rohen Fehlermeldung: „Kein Netz“ (Knopf zu den iOS-Einstellungen), „Keine Verbindung. Tailscale ist vermutlich aus.“
+  (Knöpfe „Tailscale verbinden“ und „Tailscale öffnen“), „Kein Weg zum PC“ (nur die Heimnetz-Adresse eingetragen und
+  unterwegs), „PC schläft“, „PC nicht erreichbar“ (aus, Ruhezustand oder ohne Netz), „PC nimmt keine Verbindung an“
+  (SSH-Dienst), „PC lehnt dieses iPhone ab“ (Schlüssel-Befehl zum Kopieren), „Host-Schlüssel passt nicht“ (neuen
+  Schlüssel nach Rückfrage übernehmen) und „Gateway läuft nicht“ (Startbefehl für notifyd zum Kopieren). Jeder Fall
+  nennt, was am PC oder am iPhone zu tun ist. Trennt die App selbst (zurück im Vordergrund, „Erneut“), erscheint kein
+  Fehler mehr.
+- **Tailscale aus?** Hat iOS Tailscale im Hintergrund beendet, startet der Knopf „Tailscale verbinden“ den
   Kurzbefehl „Tailscale verbinden“ (Tailscale-Aktion „Connect“, ab Tailscale 1.36), kehrt zu Relay zurück und verbindet
   neu. Der Hinweis erscheint nur, wenn eine Adresse des PCs eine Tailscale-Adresse ist und das iPhone gerade keine hat.
   Einrichtung: Einstellungen → Status → „Tailscale verbinden“ (Name des Kurzbefehls und Anleitung).

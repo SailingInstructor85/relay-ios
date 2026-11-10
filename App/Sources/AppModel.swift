@@ -50,20 +50,32 @@ final class AppModel: ObservableObject {
             if case .error(let m) = state { UsageRecorder.shared.record("app", "verbindung", detail: "Fehler", error: m) }
             else { UsageRecorder.shared.record("app", "verbindung", detail: state.label) }
             if state == .connected { Task { await UsageRecorder.shared.flush() } }
-            // Tailscale-Hinweis: nur nach einem gescheiterten Versuch, nicht schon beim Verbinden
-            if case .error = state { linkFailed = true } else if state != .connecting { linkFailed = false }
             tailnetUp = TailscaleLauncher.tailnetUp()
+            // der Grund des letzten Fehlversuchs bleibt beim nächsten „Verbinde…“ stehen, sonst flackert die Hilfe
+            if state == .connected || state == .off { problem = nil; problemMessage = "" }
+            if state == .noNetwork { problem = .noNetwork; problemMessage = "" }
+            else if oldValue == .noNetwork, problem == .noNetwork { problem = nil }
         }
     }
-    /// The last connect attempt failed and no link came up since.
-    @Published private(set) var linkFailed = false
+    /// Why the last connect attempt failed (`ConnectDiagnosis`); nil while connected or before the first failure.
+    @Published private(set) var problem: ConnectProblem? {
+        didSet {
+            guard problem != oldValue, let p = problem else { return }
+            UsageRecorder.shared.record("app", "verbindungsgrund", detail: p.rawValue)
+        }
+    }
+    private var problemMessage = ""
+    /// The link of the current attempt got its `hello_ok` (a later failure is a cut link, not a gateway that is down).
+    private var linkGotHello = false
+    /// The phone is in a Wi-Fi (a home-network address of the PC may be reachable).
+    private var onWifi = true
+    /// Title, explanation and buttons for the failed link (row above the session list); nil when there is nothing to say.
+    var connectHelp: ConnectHelp? {
+        guard state != .connected, let p = problem else { return nil }
+        return ConnectDiagnosis.help(p, message: problemMessage, hosts: hosts, tailnetUp: tailnetUp)
+    }
     /// A tailnet address (Tailscale on) is on the phone.
     @Published private(set) var tailnetUp = false
-    /// "Keine Verbindung. Tailscale ist vermutlich aus." with the connect button (sessions list).
-    var tailscaleHint: Bool {
-        guard state != .connected else { return false }
-        return Tailnet.showHint(failed: linkFailed, network: hasNetwork, hosts: hosts, tailnetUp: tailnetUp)
-    }
     @Published private(set) var sessions: [String: Session] = [:]
     /// „Alle Sitzungen beenden“ (WindDown): der laufende Auftrag des Gateways und sein Stand.
     @Published private(set) var windDownJob: String?
@@ -159,10 +171,10 @@ final class AppModel: ObservableObject {
 
     func rememberOpened(_ key: String) { if !key.isEmpty { lastOpenedKey = key } }
 
-    /// The state in words; "Kein Weg zum PC" when only private LAN addresses are configured and no VPN is up.
+    /// The state in words; after a failed attempt the reason in plain words instead of the raw error.
     var connLabel: String {
         switch state {
-        case .noNetwork, .error: return ConnText.noRoute(hosts: hosts, vpn: vpnActive) ? ConnText.noRouteText : state.label
+        case .noNetwork, .error: return connectHelp?.title ?? state.label
         default: return state.label
         }
     }
@@ -198,6 +210,7 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 self.vpnActive = path.usesInterfaceType(.other)
+                self.onWifi = path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet)
                 let had = self.hasNetwork
                 self.hasNetwork = path.status == .satisfied
                 let tailnetHad = self.tailnetUp
@@ -332,10 +345,24 @@ final class AppModel: ObservableObject {
             link = l
             let started = Date()
             let hello = Hello.make(sinceSeq: lastSeq, pinned: Array(pinned), appVersion: Self.appVersion)
+            linkGotHello = false
             do { try await l.run(hello: hello) }
             catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? "\(error)"
-                if link === l { state = .error(msg) }
+                if link === l {
+                    if kick {
+                        // selbst getrennt („Erneut“, zurück im Vordergrund, Netzwechsel): kein Fehler, gleich neu verbinden
+                        state = .connecting
+                    } else {
+                        let facts = ConnectDiagnosis.Facts(
+                            message: msg, stage: (error as? RelayError)?.stage, hostKeyChanged: error is HostKeyMismatch,
+                            wasConnected: linkGotHello, network: hasNetwork, wifi: onWifi, vpn: vpnActive, hosts: hosts,
+                            tailnetUp: TailscaleLauncher.tailnetUp(), pcSleeping: desktopSleepAt != nil)
+                        problemMessage = msg
+                        problem = ConnectDiagnosis.problem(facts)
+                        state = .error(msg)
+                    }
+                }
                 if error is HostKeyMismatch { lastError = msg }
             }
             if link === l { link = nil }
@@ -364,7 +391,7 @@ final class AppModel: ObservableObject {
             // wait briefly while connecting
             for _ in 0..<40 where state == .connecting { try await Task.sleep(nanoseconds: 250_000_000) }
         }
-        guard let l = link, l.isOpen else { throw RelayError("Nicht verbunden: \(state.label)") }
+        guard let l = link, l.isOpen else { throw RelayError("Nicht verbunden: \(connLabel)") }
         let r = try await l.rpc(method, params, timeout: timeout, onProgress: onProgress)
         lastTraffic = Date()
         return r
@@ -379,6 +406,7 @@ final class AppModel: ObservableObject {
         defer { if seq > lastSeq { lastSeq = seq }; if seq > 0 || ev.str("type") == "hello_ok" { lastSync = Date().timeIntervalSince1970 } }
         switch ev.str("type") {
         case "hello_ok":
+            linkGotHello = true
             state = .connected
             if lastGoodHost != activeHost { lastGoodHost = activeHost }
             var fresh: [String: Session] = [:]

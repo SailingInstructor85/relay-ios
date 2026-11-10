@@ -16,7 +16,11 @@ public struct RelayError: Error, LocalizedError, Sendable {
     public let message: String
     /// The gateway answered and refused (vs. the link failed or timed out).
     public let remote: Bool
-    public init(_ message: String, remote: Bool = false) { self.message = message; self.remote = remote }
+    /// Where a connect attempt failed (before SSH was up, or in the `serve` channel); nil for everything else.
+    public let stage: ConnectDiagnosis.Stage?
+    public init(_ message: String, remote: Bool = false, stage: ConnectDiagnosis.Stage? = nil) {
+        self.message = message; self.remote = remote; self.stage = stage
+    }
     public var errorDescription: String? { message }
 }
 
@@ -85,7 +89,7 @@ public final class GatewayLink: @unchecked Sendable {
             if let m = error as? HostKeyMismatch { throw m }
             if let p = validator.presented, let pin = pinnedHostKey, !pin.isEmpty,
                p.split(separator: " ").prefix(2) != pin.split(separator: " ").prefix(2) { throw HostKeyMismatch(presented: p) }
-            throw RelayError(Self.describe(error))
+            throw RelayError(Self.describe(error), stage: .connect)
         }
         lock.withLock { self.client = client }
         defer { Task { try? await client.close() } }
@@ -112,11 +116,11 @@ public final class GatewayLink: @unchecked Sendable {
             }
         } catch {
             finish(RelayError(errText.isEmpty ? Self.describe(error) : errText.trimmingCharacters(in: .whitespacesAndNewlines)))
-            throw RelayError(errText.isEmpty ? Self.describe(error) : String(errText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)))
+            throw RelayError(errText.isEmpty ? Self.describe(error) : String(errText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)), stage: .serve)
         }
         let msg = errText.isEmpty ? "Gateway hat die Verbindung beendet" : String(errText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
         finish(RelayError(msg))
-        throw RelayError(msg)
+        throw RelayError(msg, stage: .serve)
     }
 
     static func describe(_ e: Error) -> String {

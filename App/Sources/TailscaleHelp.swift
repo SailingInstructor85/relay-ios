@@ -49,20 +49,68 @@ enum TailscaleLauncher {
     }
 }
 
-/// The hint above the session list: no link, Tailscale probably off, with the connect button.
-struct TailscaleHintRow: View {
+/// The help above the session list when the link failed: why (in plain words), what to do, and the fitting buttons
+/// (`ConnectDiagnosis` in RelayCore). The title itself stands in the status line above.
+struct ConnectHelpRow: View {
+    let help: ConnectHelp
+    let openSettings: () -> Void
+    @State private var confirmKey = false
+    @State private var copied = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(Tailnet.hint, systemImage: "network.slash").font(.footnote)
-            HStack(spacing: 10) {
-                Button { TailscaleLauncher.connect() } label: { Label(Tailnet.connectButton, systemImage: "bolt.fill") }
-                    .buttonStyle(.borderedProminent).controlSize(.small)
-                    .accessibilityIdentifier("tailscaleConnect")
-                Button("Tailscale öffnen") { TailscaleLauncher.openApp() }
-                    .buttonStyle(.bordered).controlSize(.small)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(help.text).font(.footnote).accessibilityIdentifier("connectHelp")
+            ForEach(help.steps, id: \.self) { step in
+                Text("• " + step).font(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+            if !help.detail.isEmpty {
+                Text(help.detail).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+            }
+            if !help.actions.isEmpty {
+                HStack(spacing: 10) {
+                    ForEach(Array(help.actions.enumerated()), id: \.offset) { i, action in
+                        if i == 0 {
+                            Button(label(action)) { run(action) }.buttonStyle(.borderedProminent).controlSize(.small)
+                                .accessibilityIdentifier(ident(action))
+                        } else {
+                            Button(label(action)) { run(action) }.buttonStyle(.bordered).controlSize(.small)
+                                .accessibilityIdentifier(ident(action))
+                        }
+                    }
+                }
             }
         }
         .padding(.vertical, 2)
+        .confirmationDialog("Neuen Host-Schlüssel übernehmen?", isPresented: $confirmKey, titleVisibility: .visible) {
+            Button("Übernehmen und verbinden", role: .destructive) {
+                UsageRecorder.shared.record("liste", "host-schlüssel übernommen", kind: "knopf")
+                AppModel.shared.forgetHostKey()
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("Nur, wenn du den PC neu aufgesetzt oder SSH neu eingerichtet hast. Relay merkt sich dann den Schlüssel, den der PC jetzt zeigt.")
+        }
+    }
+
+    private func label(_ a: ConnectAction) -> String {
+        copied && (a == .copySetupKey || a == .copyGatewayStart) ? "Kopiert" : a.label
+    }
+
+    /// `tailscaleConnect` is the identifier the Tailscale hint always had.
+    private func ident(_ a: ConnectAction) -> String { a == .tailscaleConnect ? "tailscaleConnect" : "connectHelp-" + a.rawValue }
+
+    private func run(_ a: ConnectAction) {
+        if a != .tailscaleConnect { UsageRecorder.shared.record("liste", "verbindungshilfe", kind: "knopf", detail: a.rawValue) }
+        switch a {
+        case .tailscaleConnect: TailscaleLauncher.connect()
+        case .tailscaleOpen: TailscaleLauncher.openApp()
+        case .phoneSettings:
+            if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
+        case .relaySettings: openSettings()
+        case .copySetupKey: UIPasteboard.general.string = AppModel.shared.setupCommand; copied = true
+        case .copyGatewayStart: UIPasteboard.general.string = ConnectDiagnosis.gatewayStartCommand; copied = true
+        case .acceptHostKey: confirmKey = true
+        }
     }
 }
 
@@ -73,7 +121,7 @@ struct TailscaleSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Text("iOS beendet Tailscale im Hintergrund manchmal. Erreicht Relay den PC dann nicht, steht über der Sitzungsliste „\(Tailnet.hint)“ mit dem Knopf „\(Tailnet.connectButton)“. Er startet einen Kurzbefehl, der Tailscale verbindet und zu Relay zurückkehrt. Danach verbindet Relay neu.")
+                Text("iOS beendet Tailscale im Hintergrund manchmal. Erreicht Relay den PC dann nicht, steht über der Sitzungsliste „\(Tailnet.hint)“ mit dem Knopf „\(Tailnet.connectButton)“. Er startet einen Kurzbefehl, der Tailscale verbindet und zu Relay zurückkehrt. Danach verbindet Relay neu. Scheitert die Verbindung aus einem anderen Grund (PC aus, Gateway läuft nicht, kein Netz), steht dort stattdessen dieser Grund mit der passenden Hilfe.")
                     .font(.callout)
             }
             Section("Kurzbefehl") {
