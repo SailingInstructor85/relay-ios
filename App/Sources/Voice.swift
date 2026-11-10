@@ -446,7 +446,7 @@ enum AudioFocus {
     private static func observe() {
         guard !observing else { return }
         observing = true
-        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { n in
+        _ = NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { n in
             let raw = n.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
             let began = raw == AVAudioSession.InterruptionType.began.rawValue
             Task { @MainActor in
