@@ -2,6 +2,22 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.15 (2026-11-10)
+
+**Neu**
+- Klappt die Verbindung zum PC nicht, sagt Relay jetzt, woran es liegt, statt nur eine rohe Fehlermeldung zu zeigen: kein Netz, Tailscale aus, kein Weg zum PC (nur die Heimnetz-Adresse eingetragen und unterwegs), PC schläft, PC nicht erreichbar, SSH-Dienst läuft nicht, PC lehnt dieses iPhone ab, Host-Schlüssel passt nicht, Gateway läuft nicht.
+- Zu jedem Grund steht über der Sitzungsliste, was zu tun ist, mit den passenden Knöpfen: „Tailscale verbinden“ und „Tailscale öffnen“, „iOS-Einstellungen“, „Adresse prüfen“, „Befehl kopieren“ (Startbefehl für das Gateway oder der Befehl, der den Schlüssel dieses iPhones am PC einträgt) und „Neuen Schlüssel übernehmen“ (mit Rückfrage).
+
+**Geändert**
+- Diktat im Chat und im Vault-Chat: Die Musik anderer Apps läuft weiter, sobald die Aufnahme endet, auch wenn der diktierte Text noch im Feld steht. Bisher blieb sie aus, bis die Nachricht gesendet oder das Feld geleert war.
+- Jarvis ohne „Antworten vorlesen“ gibt die Musik gleich nach der Aufnahme wieder frei.
+- Trennt Relay die Verbindung selbst (zurück aus dem Hintergrund, „Erneut“), blitzt kein Fehler mehr auf.
+- „Kein Weg zum PC“ erscheint nur noch, wenn das iPhone nicht im WLAN ist. Zuhause bei ausgeschaltetem PC steht jetzt „PC nicht erreichbar“.
+
+**Behoben**
+- Spotify lief während der Aufnahme leise und blechern weiter und kam danach nicht normal zurück. Das war das Verhalten bis Version 0.3.11; die Korrektur steckt seit 0.3.12 in der App. Bitte in SideStore auf die aktuelle Version aktualisieren.
+- Gab iOS das Audio nach Aufnahme oder Vorlesen nicht sofort zurück, blieb die Musik anderer Apps aus. Relay versucht die Freigabe jetzt noch dreimal und schreibt Übernahme, Freigabe und Unterbrechungen ins Nutzungsprotokoll.
+
 ## 0.3.14 (2026-11-10)
 
 **Behoben**
