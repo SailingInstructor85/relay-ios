@@ -2,6 +2,20 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.16 (2026-11-12)
+
+**Behoben**
+- Die Antwort des Agenten kam im offenen Chat nicht an, wenn die App zwischendurch im Hintergrund war. iOS trennt die Verbindung dort nach kurzer Zeit. Nach dem Wiederverbinden lädt der Chat den Verlauf jetzt nach und liest wieder live mit. Bisher musstest du den Chat schließen und neu öffnen, um die Antwort zu sehen.
+
+**Neu**
+- Arbeitet eine Sitzung noch, wenn du Relay verlässt, hält die App die Verbindung bis zu 25 Sekunden. Eine kurze Antwort kommt so noch als Mitteilung „Fertig“ an.
+- Abgelehnte Nachrichten gehen nicht mehr unter. Lehnt der PC eine Nachricht ab, weil die Sitzung gerade arbeitet oder am PC ohne tmux läuft, steht im Chat „Wartet: … Geht von selbst hinaus“. Sobald die Sitzung frei ist, sendet Relay sie von selbst, höchstens eine Stunde lang. Danach bleibt sie mit „Wiederholen“, „Bearbeiten“ und „Verwerfen“ stehen.
+- In der Sitzungsliste zeigt eine Zeile unter der Sitzung, wenn Nachrichten noch nicht angekommen sind: „1 Nachricht wartet auf die Sitzung“, „1 Nachricht nicht gesendet“ oder „1 Nachricht im Postausgang“.
+
+**Geändert**
+- Der Knopf „Am PC beenden und hier fortsetzen…“ ist entfernt. Die so fortgesetzte Sitzung blieb am PC an einer Rückfrage hängen und arbeitete nicht los. Läuft eine Sitzung am PC in einem Terminal ohne tmux, steht über der Eingabe jetzt der Befehl, mit dem du sie am PC neu öffnest (`claude --resume` mit der Kennung der Sitzung). Danach geht es in tmux weiter, und wartende Nachrichten gehen von selbst hinaus.
+- Arbeitet die Sitzung beim Senden gerade, heißt die zweite Wahl im Dialog jetzt „Warten“ statt „Abbrechen“. „Trotzdem senden“ bleibt.
+
 ## 0.3.15 (2026-11-10)
 
 **Neu**
