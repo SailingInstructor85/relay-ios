@@ -411,3 +411,5 @@ Offen für Martin:
 - Am Gerät prüfen: Nachricht senden, Relay verlassen, nach der Antwort zurückkehren. Die Antwort muss ohne Schließen und Öffnen des Chats dastehen.
 
 Version: `project.yml` 0.3.15 auf 0.3.16 (`c8d2baf`). Nicht gepusht, kein Tag; das übernimmt das Skript.
+
+CI Runde 1 (Lauf 43292895019, 12.11.2026 20:42 bis 20:57): rot ohne Fehler im Code. `ipa` und `core-tests` grün, alle vier Simulator-Teile „cancelled“ ohne einen einzigen Schritt. Anmerkung von GitHub: „The job was not acquired by Runner of type hosted even after multiple attempts“, dazu der Hinweis auf knappe macOS-arm64-Runner. Kein Test ist gelaufen, der Fehlerauszug war deshalb leer. Am Code nichts geändert; dieser Commit hält nur den Befund fest und gibt der nächsten Runde eine eigene Commit-Kennung, damit das Skript nicht den alten Lauf wiederfindet.
