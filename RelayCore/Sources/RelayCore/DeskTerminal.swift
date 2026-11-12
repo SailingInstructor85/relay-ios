@@ -4,7 +4,8 @@ import Foundation
 /// im Postausgang, das Handy liest nur mit. Den Umzug vom Handy aus („Am PC beenden und hier fortsetzen“, Gateway
 /// `send {move:true}`) gibt es seit 0.3.16 nicht mehr (Martin, 2026-11-12): die in tmux fortgesetzte Sitzung blieb an der
 /// Abfrage „Trust this folder?“ hängen. Der Weg ist jetzt am PC: die Sitzung dort beenden und mit `claude --resume <id>`
-/// neu öffnen (am PC startet `claude` in einer Agenten-tmux-Sitzung).
+/// neu öffnen (am PC startet `claude` in einer Agenten-tmux-Sitzung). Die wartende Nachricht geht danach von selbst
+/// hinaus (`OutboxLogic.resendable`).
 public enum DeskTerminal {
     /// Die Absage des Gateways (`adapters/*.py send()`), an der die App den Fall erkennt.
     public static func isRefusal(_ message: String) -> Bool { message.lowercased().contains("outside tmux") }
@@ -28,7 +29,7 @@ public enum DeskTerminal {
     public static func hint(_ s: Session) -> String {
         let how = resumeCommand(s).map { "Am PC beenden und mit „\($0)“ neu öffnen, dann geht es in tmux weiter." }
             ?? "Am PC beenden und dort in tmux neu öffnen, dann geht es weiter."
-        return "Am PC in einem Terminal ohne tmux offen: vom Handy nur mitlesen. \(how) Nachrichten warten im Postausgang."
+        return "Am PC in einem Terminal ohne tmux offen: vom Handy nur mitlesen. \(how) Nachrichten warten im Postausgang und gehen danach von selbst hinaus."
     }
 }
 

@@ -74,6 +74,7 @@ final class Outbox: ObservableObject {
         var waits = 0
         let model = AppModel.shared
         while !Task.isCancelled {
+            autoResend()
             guard let item = OutboxLogic.next(items) else { waits = 0; try? await Task.sleep(nanoseconds: 700_000_000); continue }
             if model.state != .connected || model.isForeground == false {
                 if model.isForeground {
@@ -104,10 +105,30 @@ final class Outbox: ObservableObject {
                 } else {
                     let why = error.localizedDescription
                     set(item.id) { var c = $0; c.state = .failed; c.error = why; return c }
-                    notifyFailed(item, why: why)
+                    // wartet sie nur auf die Sitzung (arbeitet, ohne tmux), geht sie später von selbst: keine Fehlermitteilung
+                    let waitsOn = items.first { $0.id == item.id }.map { OutboxLogic.waitsForSession($0, now: Date().timeIntervalSince1970) } ?? false
+                    if !waitsOn { notifyFailed(item, why: why) }
                 }
             }
             if !model.isForeground && OutboxLogic.next(items) == nil { model.releaseBackground() }
+        }
+    }
+
+    /// Wann je Sitzung zuletzt von selbst nachgesendet wurde (Abstand `OutboxLogic.autoResendGap`).
+    private var autoTried: [String: Date] = [:]
+
+    /// Abgelehnt, weil die Sitzung arbeitete oder am PC ohne tmux lief: die Nachricht geht von selbst noch einmal, sobald
+    /// die Sitzung frei ist und in tmux läuft (`OutboxLogic.resendable`), eine je Durchgang und Sitzung. Lehnt das
+    /// Gateway wieder ab, wartet sie weiter.
+    private func autoResend() {
+        let model = AppModel.shared
+        guard model.state == .connected else { return }
+        let now = Date()
+        for i in items where OutboxLogic.resendable(i, session: model.session(for: i.key), now: now.timeIntervalSince1970) {
+            if let last = autoTried[i.key], now.timeIntervalSince(last) < OutboxLogic.autoResendGap { continue }
+            autoTried[i.key] = now
+            UsageRecorder.shared.record("chat", "postausgang von selbst gesendet", session: i.key, kind: "text", length: i.text.count)
+            retry(i.id)
         }
     }
 
@@ -229,6 +250,10 @@ struct OutboxRow: View {
     let item: OutItem
     let onEdit: (String) -> Void
 
+    private var now: Double { Date().timeIntervalSince1970 }
+    /// Abgelehnt, geht aber von selbst hinaus, sobald die Sitzung frei ist (OutboxLogic.waitsForSession).
+    private var waitsOn: Bool { OutboxLogic.waitsForSession(item, now: now) }
+
     var body: some View {
         HStack {
             Spacer(minLength: 40)
@@ -238,8 +263,9 @@ struct OutboxRow: View {
                     .foregroundStyle(item.state == .delivered ? .primary : .secondary)
                 HStack(spacing: 8) {
                     if item.state == .sending || (item.state == .queued && model.state == .connected) { ProgressView().controlSize(.mini) }
-                    Text(OutboxLogic.status(item, connected: model.state == .connected, network: model.state != .noNetwork))
-                        .font(.caption2).foregroundStyle(item.state == .failed ? Color.red : Color.secondary)
+                    Text(OutboxLogic.status(item, connected: model.state == .connected, network: model.state != .noNetwork, now: now))
+                        .font(.caption2).foregroundStyle(item.state == .failed ? (waitsOn ? Color.orange : Color.red) : Color.secondary)
+                        .multilineTextAlignment(.trailing)
                 }
                 if item.state == .failed {
                     HStack(spacing: 8) {

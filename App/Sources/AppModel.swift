@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 import Network
 import UserNotifications
 import RelayCore
@@ -77,6 +78,9 @@ final class AppModel: ObservableObject {
     /// A tailnet address (Tailscale on) is on the phone.
     @Published private(set) var tailnetUp = false
     @Published private(set) var sessions: [String: Session] = [:]
+    /// Zählt jede neue Verbindung (`hello_ok`). Ein offener Chat lädt daraufhin den Verlauf nach und meldet das Mitlesen
+    /// neu an, denn `watch` gilt im Gateway nur für die Verbindung, auf der es bestellt wurde (2026-11-12).
+    @Published private(set) var linkEpoch = 0
     /// „Alle Sitzungen beenden“ (WindDown): der laufende Auftrag des Gateways und sein Stand.
     @Published private(set) var windDownJob: String?
     @Published private(set) var windDownItems: [WindDown.Item] = []
@@ -237,11 +241,51 @@ final class AppModel: ObservableObject {
 
     func setForeground(_ fg: Bool) {
         foreground = fg
+        if !fg { beginLinger() }
         if fg {
+            endLinger()
             PhoneAccessStore.shared.foregroundCame()
             if oneShot != nil { link?.close() } // a background check's link: the main loop takes over
             else if link?.isOpen != true && state != .connecting { reconnect() }
         }
+    }
+
+    // MARK: Verbindung im Hintergrund kurz halten (BackgroundLinger)
+
+    private var lingerTask: UIBackgroundTaskIdentifier = .invalid
+    private var lingerWatch: Task<Void, Never>?
+
+    /// In den Hintergrund, während eine Sitzung arbeitet: iOS um seine Nachlaufzeit bitten und die Verbindung so lange
+    /// halten, damit eine kurze Antwort noch ihre Mitteilung „Fertig“ auslöst (2026-11-12). Endet von selbst, sobald
+    /// nichts mehr arbeitet, nach `BackgroundLinger.maxSeconds`, zurück im Vordergrund oder wenn iOS die Zeit beendet.
+    private func beginLinger() {
+        guard lingerTask == .invalid, state == .connected, link?.isOpen == true,
+              BackgroundLinger.wanted(Array(sessions.values)) else { return }
+        lingerTask = UIApplication.shared.beginBackgroundTask(withName: "relay-linger") {
+            MainActor.assumeIsolated { AppModel.shared.endLinger() }  // iOS ruft das auf dem Hauptthread
+        }
+        guard lingerTask != .invalid else { return }
+        UsageRecorder.shared.record("app", "hintergrund: verbindung gehalten")
+        let started = Date()
+        lingerWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                if BackgroundLinger.done(Array(self.sessions.values), elapsed: Date().timeIntervalSince(started),
+                                         foreground: self.foreground, connected: self.state == .connected && self.link?.isOpen == true) {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)  // die Mitteilung „Fertig“ noch abgeben lassen
+                    if !Task.isCancelled { self.endLinger() }
+                    return
+                }
+            }
+        }
+    }
+
+    private func endLinger() {
+        lingerWatch?.cancel(); lingerWatch = nil
+        guard lingerTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(lingerTask)
+        lingerTask = .invalid
     }
 
     private func makeLink(host: String) -> GatewayLink {
@@ -408,6 +452,7 @@ final class AppModel: ObservableObject {
         case "hello_ok":
             linkGotHello = true
             state = .connected
+            linkEpoch += 1
             if lastGoodHost != activeHost { lastGoodHost = activeHost }
             var fresh: [String: Session] = [:]
             for s in ev["sessions"].array.compactMap(Session.from) { fresh[s.key] = s }

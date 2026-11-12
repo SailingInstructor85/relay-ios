@@ -54,7 +54,7 @@ iPhone 16 Pro (iOS 17 oder neuer).
   läuft (so startet die App jede Sitzung). Ein Monitor-Symbol im Chat-Kopf und in der Liste zeigt „Am PC offen“, wenn
   gerade ein Terminal am PC die Sitzung zeigt (nur Anzeige). Läuft eine Sitzung am PC als nacktes `claude` ohne tmux,
   liest das Handy nur mit: Nachrichten warten im Postausgang, über der Eingabe steht ein Hinweis mit dem Befehl, der
-  die Sitzung am PC in tmux neu öffnet (`claude --resume <id>`). Den Knopf „Am PC beenden und hier fortsetzen“ gibt es
+  die Sitzung am PC in tmux neu öffnet (`claude --resume <id>`); danach gehen die wartenden Nachrichten von selbst hinaus. Den Knopf „Am PC beenden und hier fortsetzen“ gibt es
   seit 0.3.16 nicht mehr. Damit der Fall gar nicht eintritt, `claude` am PC per Wrapper in tmux starten: `docs/pc-tmux.md`.
 - **Telefonzugriff für Agenten** (Einstellungen → „Telefonzugriff für Agenten“, Stufe 1, nur Lesen): Agenten fragen
   über das Gateway Geräteinfos, Dateien aus freigegebenen Ordnern der Dateien-App (auch Google Drive), die neuesten
@@ -77,6 +77,14 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Anhänge warten auf dem iPhone („wartet auf Verbindung“). Steht die Verbindung wieder, startet Relay einen Agenten im
   Vault-Ordner (Einstellungen → Ablage) mit allen wartenden Nachrichten in der richtigen Reihenfolge; spätere gehen in
   dieselbe Sitzung, solange sie läuft. Nichts geht doppelt raus.
+- **Verpasste Antworten und wartende Nachrichten (seit 0.3.16):** Bricht die Verbindung ab, während ein Chat offen ist
+  (iOS trennt sie im Hintergrund nach kurzer Zeit), lädt der Chat nach dem Wiederverbinden den Verlauf nach und liest
+  wieder live mit. Antworten, die in der Zwischenzeit kamen, erscheinen ohne Schließen und Öffnen. Arbeitet beim
+  Wechsel in den Hintergrund noch eine Sitzung, hält Relay die Verbindung bis zu 25 Sekunden, damit eine kurze Antwort
+  noch als Mitteilung „Fertig“ ankommt. Lehnt der PC eine Nachricht ab, weil die Sitzung gerade arbeitet oder am PC
+  ohne tmux läuft, wartet sie im Postausgang („Wartet: … Geht von selbst hinaus“) und geht innerhalb einer Stunde von
+  selbst hinaus, sobald die Sitzung frei ist. In der Sitzungsliste steht dann „1 Nachricht wartet auf die Sitzung“
+  oder „1 Nachricht nicht gesendet“.
 - **Musik pausiert beim Sprechen:** Diktat, Jarvis, Sprachmodus und Vorlesen unterbrechen Spotify und andere Apps,
   statt sie nur leiser zu stellen. Beim Diktat im Chat läuft die Musik weiter, sobald die Aufnahme endet (auch wenn
   der Text noch im Feld steht), bei Jarvis und im Sprachmodus nach der vorgelesenen Antwort. Gibt iOS das Audio nicht

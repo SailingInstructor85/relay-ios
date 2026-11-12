@@ -275,7 +275,8 @@ struct SessionsView: View {
     @ViewBuilder private func row(_ s: Session) -> some View {
         NavigationLink(value: Dest.chat(s.key)) {
             SessionRow(s: s, unread: model.unread.contains(s.key), pinned: model.pinned.contains(s.key), muted: model.muted.contains(s.key),
-                       stale: stale, look: model.look, query: search)
+                       stale: stale, look: model.look, query: search,
+                       outNote: OutboxLogic.listNote(outbox.items(for: s.key), now: Date().timeIntervalSince1970))
         }
         .contextMenu {
             if s.tool == "claude" && s.liveTmux != nil {
@@ -431,6 +432,8 @@ struct SessionRow: View {
     var stale = false
     var look = Avatars.Look()
     var query = ""
+    /// Nachrichten an diese Sitzung, die noch nicht angekommen sind (abgelehnt, wartend): „1 Nachricht nicht gesendet“.
+    var outNote: String?
 
     /// The title with the letters the search matched in bold.
     private var title: Text {
@@ -486,6 +489,9 @@ struct SessionRow: View {
                 }
                 let detail = s.question?.text ?? (s.asksYou ? s.asksText : s.lastMessage)
                 if !detail.isEmpty { Text(detail).font(.footnote).foregroundStyle(.secondary).lineLimit(2) }
+                if let outNote {
+                    Label(outNote, systemImage: "tray.and.arrow.up").font(.caption).foregroundStyle(.orange).lineLimit(1)
+                }
             }
         }
         .padding(.vertical, 2)

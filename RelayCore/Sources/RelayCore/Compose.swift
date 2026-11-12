@@ -241,11 +241,55 @@ public enum OutboxLogic {
         }
     }
 
-    /// The line under a message that isn't in the transcript yet.
-    public static func status(_ i: OutItem, connected: Bool, network: Bool) -> String {
+    // MARK: abgelehnte Nachrichten (2026-11-12)
+
+    /// So lange nach dem Schreiben geht eine abgelehnte Nachricht noch von selbst hinaus. Danach bleibt sie mit ihren
+    /// Knöpfen stehen: ein Auftrag von vor Stunden soll nicht ungefragt in eine Sitzung fallen.
+    public static let autoResendWindow: Double = 60 * 60
+    /// Abstand zwischen zwei selbsttätigen Versuchen je Sitzung (der Zustand der Sitzung kommt mit Verzögerung an).
+    public static let autoResendGap: Double = 15
+
+    /// Abgelehnt, weil die Sitzung gerade arbeitete oder am PC ohne tmux lief, und noch jung genug: die Nachricht
+    /// wartet auf die Sitzung, statt als gescheitert liegen zu bleiben (Martin, 2026-11-11: zwei Nachrichten waren
+    /// „abgelehnt (arbeitet)“, ohne dass er es merkte).
+    public static func waitsForSession(_ i: OutItem, now: Double) -> Bool {
+        guard i.state == .failed, let e = i.error, now - i.at <= autoResendWindow else { return false }
+        return DeskTerminal.isRefusal(e) || isBusyRefusal(e)
+    }
+
+    /// Der Grund der Absage ist weg: die Sitzung lebt, wartet auf Eingabe im Feld (`idle`, keine offene Auswahl) und
+    /// läuft, wenn die Absage „ohne tmux“ hieß, inzwischen in tmux. Dann geht die Nachricht ohne `force` noch einmal.
+    public static func resendable(_ i: OutItem, session: Session?, now: Double) -> Bool {
+        guard waitsForSession(i, now: now), let s = session, let e = i.error else { return false }
+        guard s.alive, !s.exited, !s.closed, !s.placeholder, s.state == "idle" else { return false }
+        if DeskTerminal.isRefusal(e) { return !DeskTerminal.isDeskTerminal(s) && s.liveTmux != nil }
+        return !DeskTerminal.isDeskTerminal(s)
+    }
+
+    /// Zeile in der Sitzungsliste, wenn Nachrichten an diese Sitzung noch nicht angekommen sind. nil: nichts offen.
+    public static func listNote(_ items: [OutItem], now: Double) -> String? {
+        let failed = items.filter { $0.state == .failed }
+        let waiting = failed.filter { waitsForSession($0, now: now) }.count
+        func n(_ c: Int, _ one: String, _ many: String) -> String { c == 1 ? "1 Nachricht \(one)" : "\(c) Nachrichten \(many)" }
+        if !failed.isEmpty {
+            return waiting == failed.count ? n(failed.count, "wartet auf die Sitzung", "warten auf die Sitzung")
+                                           : n(failed.count, "nicht gesendet", "nicht gesendet")
+        }
+        let open = items.filter { $0.state == .queued || $0.state == .sending }.count
+        return open == 0 ? nil : n(open, "im Postausgang", "im Postausgang")
+    }
+
+    /// The line under a message that isn't in the transcript yet. `now` (seconds since 1970): given, a refused message
+    /// that still waits for its session says so instead of "Nicht gesendet".
+    public static func status(_ i: OutItem, connected: Bool, network: Bool, now: Double? = nil) -> String {
         switch i.state {
         case .delivered: return "gesendet"
         case .failed:
+            if let now, waitsForSession(i, now: now) {
+                return DeskTerminal.isRefusal(i.error ?? "")
+                    ? "Wartet: die Sitzung ist am PC in einem Terminal ohne tmux offen. Geht von selbst hinaus, sobald sie in tmux läuft"
+                    : "Wartet: die Sitzung arbeitet gerade. Geht von selbst hinaus, sobald sie fertig ist"
+            }
             if isBusyRefusal(i.error ?? "") { return "Nicht gesendet: die Sitzung arbeitet gerade" }
             if DeskTerminal.isRefusal(i.error ?? "") { return DeskTerminal.statusText }
             if SubmitCheck.isStuck(i.error ?? "") { return "Nicht abgeschickt: " + SubmitCheck.short }

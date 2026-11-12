@@ -196,6 +196,47 @@ final class ChatTests: RelayTestCase {
         XCTAssertFalse(mockReceived("send", where: { $0["move"] != nil }, timeout: 2))
     }
 
+    func test15_RefusedMessageGoesOutLater() {
+        // Abgelehnt, weil die Sitzung am PC ohne tmux läuft: die Nachricht wartet (Zeile im Chat und in der Sitzungsliste)
+        // und geht von selbst hinaus, sobald die Sitzung in tmux läuft (am PC mit claude --resume neu geöffnet).
+        launchConnected()
+        openSession("Skript ohne tmux")
+        typeInto("chatInput", "Bitte später senden")
+        tapID("chatSend")
+        settle(1.5)
+        expect("Geht von selbst hinaus", 5)
+        shot("abgelehnt-wartet")
+        back()
+        reveal("Skript ohne tmux")
+        expect("1 Nachricht wartet auf die Sitzung", 5, soft: true)
+        shot("liste-nachricht-wartet")
+        ctl("trigger_desk_to_tmux")
+        let end = Date().addingTimeInterval(40)
+        var sends = 0
+        repeat {
+            sends = rpcLog().filter { ($0["method"] as? String) == "send" && (($0["params"] as? [String: Any])?["text"] as? String) == "Bitte später senden" }.count
+            if sends >= 2 { break }
+            settle(0.5)
+        } while Date() < end
+        XCTAssertGreaterThanOrEqual(sends, 2, "die abgelehnte Nachricht ging nicht von selbst noch einmal hinaus")
+    }
+
+    func test16_ReplyAfterReconnect() {
+        // 11.11.2026: Der Agent antwortete, während die Verbindung getrennt war; der offene Chat zeigte die Antwort nicht.
+        // Nach der neuen Verbindung lädt der Chat den Verlauf nach und meldet das Mitlesen neu an.
+        launchConnected()
+        openSession("API Refactoring")
+        settle(1)
+        ctl("offline"); ctl("kick")
+        settle(3)
+        ctl("trigger_late_reply")  // bleibt liegen, bis wieder eine Verbindung steht
+        ctlRemove("offline")
+        XCTAssertTrue(has("Antwort nach der Trennung", 40), "die Antwort erscheint nach dem Wiederverbinden nicht im offenen Chat")
+        shot("antwort-nach-wiederverbinden")
+        let watches = rpcLog().filter { ($0["method"] as? String) == "watch" }.count
+        XCTAssertGreaterThanOrEqual(watches, 2, "das Mitlesen wurde nach der neuen Verbindung nicht neu angemeldet")
+    }
+
     func test12_HideKeyboard() {
         // Tastatur offen: der Knopf sitzt rechts in der Schnellantwort-Zeile über dem Eingabefeld (seit 0.3.8), verdeckt
         // weder Senden noch Mikrofon und schließt die Tastatur; der getippte Text bleibt im Feld.

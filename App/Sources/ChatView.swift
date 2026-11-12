@@ -36,6 +36,7 @@ struct ChatView: View {
     @ObservedObject private var outbox = Outbox.shared
     @State private var error: String?
     @State private var confirmForce: String?
+    @State private var resyncing = false
     @State private var importing = false
     @State private var pickingPhoto = false
     /// Fotos und Videos aus der Mediathek, die als Vorschau über der Eingabe warten, bis „N Fotos hochladen“ getippt ist.
@@ -165,9 +166,9 @@ struct ChatView: View {
         }
         .confirmationDialog("Die Sitzung arbeitet gerade.", isPresented: Binding(get: { confirmForce != nil }, set: { if !$0 { confirmForce = nil } }), titleVisibility: .visible) {
             Button("Trotzdem senden") { if let id = confirmForce { Outbox.shared.retry(id, force: true) } }
-            Button("Abbrechen", role: .cancel) {}
+            Button("Warten", role: .cancel) {}
         } message: {
-            Text("Die Nachricht wartet im Chat, bis du sie trotzdem sendest, bearbeitest oder verwirfst.")
+            Text("Die Nachricht wartet im Postausgang und geht von selbst hinaus, sobald die Sitzung fertig ist. Du kannst sie auch gleich trotzdem senden, bearbeiten oder verwerfen.")
         }
         .task(id: key) { await openChat() }
         .onAppear {
@@ -175,7 +176,16 @@ struct ChatView: View {
             UsageRecorder.shared.screen("chat", session: key)
             if let q = initialSearch, !q.isEmpty, !initialDone { initialDone = true; showSearch = true }
         }
-        .onChange(of: scenePhase) { _, p in if p == .active { standTick += 1 } }
+        .onChange(of: scenePhase) { _, p in
+            if p == .active {
+                standTick += 1
+                // zurück im Vordergrund: steht die Verbindung noch, den Verlauf gleich abgleichen; ist sie weg, folgt
+                // das Nachladen auf die neue Verbindung (linkEpoch)
+                Task { if await model.ensureAlive() { await resync() } }
+            }
+        }
+        // neue Verbindung, der Chat ist offen geblieben: Verlauf nachladen und Mitlesen neu anmelden (2026-11-12)
+        .onChange(of: model.linkEpoch) { _, _ in Task { await resync() } }
         .onChange(of: error) { _, e in if let e { UsageRecorder.shared.record("chat", "fehler", session: key, error: e) } }
         .onChange(of: focused) { _, f in UsageRecorder.shared.record("chat", f ? "tastatur auf" : "tastatur zu", session: key, length: input.count) }
         .keepsScreenAwake()
@@ -561,6 +571,24 @@ struct ChatView: View {
             loadedOnce = true
             applyContext(r["context"])
         } catch { self.error = error.localizedDescription }
+    }
+
+    /// Nach einer neuen Verbindung (oder zurück im Vordergrund): das Mitlesen neu anmelden (`watch` gilt je Verbindung)
+    /// und die neueste Seite des Verlaufs abgleichen, damit Antworten erscheinen, die während der Trennung kamen
+    /// (Martin, 2026-11-11: der Agent hatte geantwortet, der offene Chat zeigte nichts).
+    private func resync() async {
+        guard loadedOnce, !resyncing, model.state == .connected else { return }
+        resyncing = true; defer { resyncing = false }
+        _ = try? await model.rpc("watch", ["key": .string(key)], timeout: 15)
+        guard let r = try? await model.rpc("transcript", ["key": .string(key), "limit": 50], timeout: 20) else { return }
+        let merged = TranscriptSync.merge(messages, latest: r["messages"].array.map(TMessage.from))
+        if merged.replaced { before = r["before"].string }
+        if merged.messages != messages { messages = merged.messages }
+        applyContext(r["context"])
+        if merged.added > 0 {
+            UsageRecorder.shared.record("chat", "verlauf nachgeladen", session: key, length: merged.added)
+            if model.isForeground { model.markRead(key) }
+        }
     }
 
     private func loadOlder() async {

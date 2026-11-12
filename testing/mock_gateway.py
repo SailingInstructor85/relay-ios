@@ -11,7 +11,8 @@ Control files in $MOCK_DIR/control (the UI tests or the CI script create them):
   kick           running connections end (the file is removed by the first one)
   trigger_<n>    emit a live event once: finish_busy, new_input, notice, rueckfrage, send_request, pc_detach, pc_attach,
                  cloud, desktop_sleep, location, end_session, routine_run,
-                 phone_command, phone_command_2
+                 phone_command, phone_command_2, late_reply (an answer in "API Refactoring"; left in the control
+                 directory while offline, the next connection emits it), desk_to_tmux ("Skript ohne tmux" now runs in tmux)
   routines_off   the team is not configured: routines, routine_run, routine_set, team_send answer enabled: false
 Logs: $MOCK_DIR/rpc.jsonl (every request received), $MOCK_DIR/mock.log (text).
 """
@@ -1115,6 +1116,19 @@ def trigger(name):
             st["overrides"].setdefault(K["pc"], {}).update(pc_attached=on)
         mutate(f)
         add_event("pc_attached", {"session_key": K["pc"], "pc_attached": on}, persist=False)
+    elif name == "late_reply":  # eine Antwort, die kam, während das Handy getrennt war (Nachladen nach dem Wiederverbinden)
+        def f(st):
+            arr = st["extra_msgs"].setdefault(K["idle"], [])
+            m = tmsg(1000 + len(arr), "assistant", "Antwort nach der Trennung: die zwei Dateien sind gedreht und abgelegt.")
+            arr.append(m)
+            st["overrides"].setdefault(K["idle"], {}).update(last_message=m["text"], last_activity=time.time())
+            return m
+        emit_append(K["idle"], [mutate(f)])
+    elif name == "desk_to_tmux":  # am PC beendet und mit `claude --resume` in tmux neu geöffnet: Senden geht wieder
+        def f(st):
+            st["overrides"].setdefault(K["desk"], {}).update(tmux_session="c1-webapp-desk", attachable=True, pc_attached=True)
+        mutate(f)
+        add_event("session_state", {"session": find_session(K["desk"]), "prev_state": "idle", "reason": "monitor"})
     elif name == "end_session":
         def f(st):
             st["overrides"].setdefault(K["asks"], {}).update(alive=False, state="exited", tmux_session=None)
