@@ -36,9 +36,6 @@ struct ChatView: View {
     @ObservedObject private var outbox = Outbox.shared
     @State private var error: String?
     @State private var confirmForce: String?
-    /// Postausgang-Kennung der Nachricht, für die Martin im Postausgang „Am PC beenden und hier fortsetzen…“ getippt hat;
-    /// die Bestätigung folgt (DeskTerminal). Seit 0.3.7 nicht mehr von selbst nach einer Absage.
-    @State private var confirmMove: String?
     @State private var importing = false
     @State private var pickingPhoto = false
     /// Fotos und Videos aus der Mediathek, die als Vorschau über der Eingabe warten, bis „N Fotos hochladen“ getippt ist.
@@ -75,7 +72,7 @@ struct ChatView: View {
                         }
                         ForEach(messages) { m in MessageRow(m: m, highlighted: m.id == highlight).id(m.id) }
                         ForEach(outbox.items(for: key)) { item in
-                            OutboxRow(item: item, onEdit: { text in input = text; focused = true }, onMove: { confirmMove = $0 })
+                            OutboxRow(item: item, onEdit: { text in input = text; focused = true })
                         }
                         if let s = session, s.state == "busy" || !runItems.isEmpty { workingLine(s) }
                         if let s = session, s.asksYou, !s.asksText.isEmpty {
@@ -166,9 +163,6 @@ struct ChatView: View {
                 if !providers.isEmpty { Task { await stagePicked(providers) } }
             }.ignoresSafeArea()
         }
-        .confirmationDialog(DeskTerminal.dialogTitle, isPresented: Binding(get: { confirmMove != nil }, set: { if !$0 { confirmMove = nil } }), titleVisibility: .visible) {
-            Button(DeskTerminal.moveConfirm, role: .destructive) { if let id = confirmMove { Outbox.shared.retry(id, move: true) } }
-        } message: { Text(DeskTerminal.dialogMessage) }
         .confirmationDialog("Die Sitzung arbeitet gerade.", isPresented: Binding(get: { confirmForce != nil }, set: { if !$0 { confirmForce = nil } }), titleVisibility: .visible) {
             Button("Trotzdem senden") { if let id = confirmForce { Outbox.shared.retry(id, force: true) } }
             Button("Abbrechen", role: .cancel) {}
@@ -208,12 +202,12 @@ struct ChatView: View {
         DictationSend.canSend(input: input, listening: voice.listening, sending: sending, hasSession: session != nil)
     }
 
-    /// Sitzung am PC in einem Terminal ohne tmux: Hinweis, keine Sperre. Nachrichten gehen in den Postausgang; der Umzug
-    /// in tmux nur über den Knopf dort und eine Bestätigung (Martin, 2026-11-07: nie ungefragt am PC beenden).
-    private var deskHint: some View {
+    /// Sitzung am PC in einem Terminal ohne tmux: Hinweis, keine Sperre. Nachrichten gehen in den Postausgang. Den Umzug
+    /// vom Handy aus gibt es seit 0.3.16 nicht mehr; der Hinweis nennt den Befehl für den PC (DeskTerminal).
+    private func deskHint(_ s: Session) -> some View {
         HStack(spacing: 8) {
             Image(systemName: PCPresence.symbol).foregroundStyle(.secondary)
-            Text(DeskTerminal.hint).font(.caption2).foregroundStyle(.secondary)
+            Text(DeskTerminal.hint(s)).font(.caption2).foregroundStyle(.secondary)
             Spacer(minLength: 0)
         }
         .padding(.horizontal).padding(.vertical, 4)
@@ -258,7 +252,7 @@ struct ChatView: View {
 
     private var inputBar: some View {
         VStack(spacing: 6) {
-            if let s = session, DeskTerminal.isDeskTerminal(s) { deskHint }
+            if let s = session, DeskTerminal.isDeskTerminal(s) { deskHint(s) }
             if !slashSuggestions.isEmpty {
                 quickRow([])
                 ScrollView {
@@ -666,8 +660,8 @@ struct ChatView: View {
             error = nil
             confirmForce = id
         } catch let e as RelayError where e.remote && DeskTerminal.isRefusal(e.message) {
-            // at the PC in a terminal outside tmux: the text waits in the outbox (grey bubble with the reason); the move
-            // into tmux only from the button there and after his yes, never offered by itself (Martin, 2026-11-07)
+            // at the PC in a terminal outside tmux: the text waits in the outbox (grey bubble with the reason);
+            // nothing at the PC is ended from here (the move button is gone since 0.3.16)
             Outbox.shared.addRefused(id: id, key: s.key, text: t, error: e.message)
             UsageRecorder.shared.content("chat", "abgelehnt (PC ohne tmux)", session: s.key, kind: "text", text: t)
             clearField()

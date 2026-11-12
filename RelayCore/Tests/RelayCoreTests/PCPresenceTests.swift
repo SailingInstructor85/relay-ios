@@ -26,6 +26,15 @@ final class PCPresenceTests: XCTestCase {
         XCTAssertFalse(DeskTerminal.isDeskTerminal(session(#""attachable":true,"tmux_session":null"#)))  // claude --bg
         XCTAssertFalse(DeskTerminal.isDeskTerminal(session(#""attachable":false,"tmux_session":null,"background":true"#)))
         XCTAssertFalse(DeskTerminal.isDeskTerminal(session(#""attachable":false,"tmux_session":null,"alive":false,"state":"exited""#)))
+        // Hinweis über der Eingabe: nur mitlesen, dazu der Befehl für den PC (seit 0.3.16 statt des Umzugsknopfs)
+        let desk = session(#""attachable":false,"tmux_session":null"#)
+        XCTAssertEqual(DeskTerminal.resumeCommand(desk), "claude --resume \(desk.sid)")
+        XCTAssertTrue(DeskTerminal.hint(desk).hasPrefix("Am PC in einem Terminal ohne tmux offen: vom Handy nur mitlesen."))
+        XCTAssertTrue(DeskTerminal.hint(desk).contains("claude --resume \(desk.sid)"))
+        XCTAssertTrue(DeskTerminal.hint(desk).contains("dann geht es in tmux weiter"))
+        let codex = Session.from(JSON.parse(Data(#"{"key":"codex:x1:abc","alive":true,"state":"idle","attachable":false,"tmux_session":null}"#.utf8))!)!
+        XCTAssertNil(DeskTerminal.resumeCommand(codex))
+        XCTAssertFalse(DeskTerminal.hint(codex).contains("--resume"))
         XCTAssertTrue(DeskTerminal.isRefusal("this session is open in a Desktop terminal outside tmux: reply there"))
         XCTAssertFalse(DeskTerminal.isRefusal("session is busy"))
     }

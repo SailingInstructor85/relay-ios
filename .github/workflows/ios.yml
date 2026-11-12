@@ -214,8 +214,8 @@ jobs:
             grep -E "Test Case .* failed" test.log | cut -c1-300 | sort -u || true
             echo "Fehlermeldungen:"
             grep -E "error: |Erwartet, aber nicht da|Nicht gefunden|Kennung nicht gefunden|Feld fehlt|crashed|Lost connection" test.log | cut -c1-400 | sort -u | tail -60 || true
-            echo "Mock-Aufrufe zu den gescheiterten Tests (wind_down, send mit move):"
-            grep -E '"method": "(wind_down|wind_down_status)"|"move": true' /tmp/relaymock/rpc-all.jsonl 2>/dev/null | cut -c1-300 | tail -30 || true
+            echo "Mock-Aufrufe zu den gescheiterten Tests (wind_down):"
+            grep -E '"method": "(wind_down|wind_down_status)"' /tmp/relaymock/rpc-all.jsonl 2>/dev/null | cut -c1-300 | tail -30 || true
             echo "Mock-Log (Fehler und Sitzungen):"
             grep -E "crashed|Traceback|Error|cut by|hello" /tmp/relaymock/mock.log 2>/dev/null | tail -30 || true
             tail -5 /tmp/relaymock/sshd.log 2>/dev/null || true

@@ -53,8 +53,9 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Handy und PC in derselben Sitzung:** Beide tippen abwechselnd in eine Sitzung, die in einer Agenten-tmux-Sitzung
   läuft (so startet die App jede Sitzung). Ein Monitor-Symbol im Chat-Kopf und in der Liste zeigt „Am PC offen“, wenn
   gerade ein Terminal am PC die Sitzung zeigt (nur Anzeige). Läuft eine Sitzung am PC als nacktes `claude` ohne tmux,
-  liest das Handy nur mit: Nachrichten warten im Postausgang, ein Hinweis steht über der Eingabe, der Umzug in tmux
-  nur auf Wunsch mit Bestätigung. Damit das nicht nötig ist, `claude` am PC per Wrapper in tmux starten: `docs/pc-tmux.md`.
+  liest das Handy nur mit: Nachrichten warten im Postausgang, über der Eingabe steht ein Hinweis mit dem Befehl, der
+  die Sitzung am PC in tmux neu öffnet (`claude --resume <id>`). Den Knopf „Am PC beenden und hier fortsetzen“ gibt es
+  seit 0.3.16 nicht mehr. Damit der Fall gar nicht eintritt, `claude` am PC per Wrapper in tmux starten: `docs/pc-tmux.md`.
 - **Telefonzugriff für Agenten** (Einstellungen → „Telefonzugriff für Agenten“, Stufe 1, nur Lesen): Agenten fragen
   über das Gateway Geräteinfos, Dateien aus freigegebenen Ordnern der Dateien-App (auch Google Drive), die neuesten
   Fotos oder die Zwischenablage ab. Jeder Bereich hat einen Schalter (anfangs aus), Lesen läuft dann ohne Rückfrage,

@@ -44,8 +44,8 @@ final class Outbox: ObservableObject {
     }
 
     /// A failed one goes again under a new `client_id` (the gateway answers a known id with its first, refusing answer).
-    func retry(_ id: String, force: Bool? = nil, move: Bool? = nil) {
-        update { $0.map { $0.id == id ? OutboxLogic.retried($0, force: force, newId: UUID().uuidString, move: move) : $0 } }
+    func retry(_ id: String, force: Bool? = nil) {
+        update { $0.map { $0.id == id ? OutboxLogic.retried($0, force: force, newId: UUID().uuidString) : $0 } }
     }
 
     /// `keepFiles`: "Bearbeiten" takes the attachments back into the field, so they stay on disk.
@@ -116,11 +116,10 @@ final class Outbox: ObservableObject {
         if VaultChat.isVault(item.key) { return try await deliverVault(item) }
         let model = AppModel.shared
         if let s = model.session(for: item.key) {
-            try await model.send(s, text: item.text, force: item.force, clientId: item.id, move: item.move)
+            try await model.send(s, text: item.text, force: item.force, clientId: item.id)
         } else {
             _ = try await model.rpc("send", .obj(["key": .string(item.key), "text": .string(item.text), "enter": true,
-                                                  "force": .bool(item.force), "client_id": .string(item.id),
-                                                  "move": item.move ? .bool(true) : nil]), timeout: 60)
+                                                  "force": .bool(item.force), "client_id": .string(item.id)]), timeout: 60)
         }
         return [item.id]
     }
@@ -229,8 +228,6 @@ struct OutboxRow: View {
     @EnvironmentObject var model: AppModel
     let item: OutItem
     let onEdit: (String) -> Void
-    /// „Am PC beenden und hier fortsetzen…“: der Chat fragt erst nach (DeskTerminal), dann `retry(move: true)`.
-    var onMove: (String) -> Void = { _ in }
 
     var body: some View {
         HStack {
@@ -249,7 +246,6 @@ struct OutboxRow: View {
                         // stuck in the PC's input field: a retry would type it twice there
                         if !SubmitCheck.isStuck(item.error ?? "") { Button("Wiederholen") { Outbox.shared.retry(item.id) } }
                         if OutboxLogic.isBusyRefusal(item.error ?? "") { Button("Trotzdem senden") { Outbox.shared.retry(item.id, force: true) } }
-                        if DeskTerminal.isRefusal(item.error ?? "") { Button(DeskTerminal.moveButton) { onMove(item.id) } }
                         Button("Bearbeiten") { onEdit(item.text); Outbox.shared.remove(item.id) }
                         Button("Verwerfen", role: .destructive) { UsageRecorder.shared.record("chat", "postausgang verworfen", session: item.key, kind: "text", length: item.text.count); Outbox.shared.remove(item.id) }
                     }.font(.caption).buttonStyle(.bordered).controlSize(.mini)

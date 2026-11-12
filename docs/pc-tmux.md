@@ -28,9 +28,15 @@ und bis 0.3.6 fragte die App von selbst „Am PC beenden und hier fortsetzen?“
 - Keine Rückfrage mehr von selbst. Die Nachricht bleibt als graue Blase im Postausgang mit dem Grund „Nicht gesendet:
   die Sitzung ist am PC in einem Terminal ohne tmux offen“. Über der Eingabe steht der Hinweis „Am PC in einem
   Terminal ohne tmux offen: vom Handy nur mitlesen. Nachrichten warten im Postausgang.“
-- Der Umzug in tmux gibt es weiterhin, aber nur auf ausdrückliche Wahl: Knopf „Am PC beenden und hier fortsetzen…“
-  in der Postausgangszeile, danach eine Bestätigung „Ja, am PC beenden und hier fortsetzen“. Ohne beides passiert am
-  PC nichts.
+- Von 0.3.7 bis 0.3.15 gab es den Umzug in tmux auf ausdrückliche Wahl (Knopf „Am PC beenden und hier
+  fortsetzen…“ in der Postausgangszeile, danach eine Bestätigung). **Seit 0.3.16 ist der Knopf entfernt** (Martin,
+  12.11.2026): Nach der Übernahme startete das Gateway die Sitzung per `claude --resume` in tmux neu, und die blieb an
+  der Abfrage „Trust this folder?“ hängen (`auto_trust: false`, das bleibt so). Am 11.11.2026 um 09:35 entstanden so
+  zwei hängende Sitzungen. Der Hinweis über der Eingabe nennt jetzt den Weg am PC: „Am PC beenden und mit
+  „claude --resume <id>“ neu öffnen, dann geht es in tmux weiter.“ (mit der echten Kennung der Sitzung). Seit dem
+  12.11.2026 startet `claude` am PC per Funktion in `~/.bashrc` immer in einer Agenten-tmux-Sitzung.
+- Das Gateway kennt `send` mit `move` weiterhin, weil „Alle Sitzungen beenden“ (`wind_down`) es für Sitzungen am PC
+  ohne tmux nutzt. Die App sendet `move` nicht mehr.
 - Symbol „Am PC offen“ (Monitor) im Chat-Kopf und in der Sitzungsliste, sobald ein Terminal am PC die Sitzung zeigt
   (Gateway `pc_attached`, Live-Ereignis `pc_attached` alle 2 Sekunden geprüft). Eine Sitzung ohne tmux ist am PC
   offen, solange sie lebt. Nur Anzeige, keine Sperre, keine Rückfrage.
@@ -65,8 +71,9 @@ Argumente werden durchgereicht. Geprüft: `agent-run` übernimmt für das Konto 
 (`skip_permissions: false` in der Gateway-Konfiguration, `auto_trust: false`), die Sitzung verhält sich also wie das
 nackte `claude`. Zum Vergleich `command claude` tippen, wenn es einmal ohne tmux sein soll.
 
-Für die Sitzungen, die heute noch ohne tmux laufen, gibt es zwei Wege: am PC beenden und mit dem Wrapper per
-`claude --resume <id>` wieder öffnen, oder in der App im Postausgang „Am PC beenden und hier fortsetzen…“ wählen.
+Für die Sitzungen, die noch ohne tmux laufen, gibt es einen Weg: am PC beenden und mit dem Wrapper per
+`claude --resume <id>` wieder öffnen (den Befehl mit der Kennung zeigt die App im Hinweis über der Eingabe). Den
+Knopf „Am PC beenden und hier fortsetzen…“ gibt es seit 0.3.16 nicht mehr.
 
 ## Vorschlag: `~/.tmux.conf`, damit es sich wie bisher anfühlt
 

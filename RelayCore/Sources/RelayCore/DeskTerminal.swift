@@ -1,10 +1,10 @@
 import Foundation
 
 /// Das Gateway kann in eine Sitzung, die am PC in einem Terminal ohne tmux läuft, nichts tippen. Die Nachricht bleibt
-/// im Postausgang, das Handy liest nur mit. Mit `move` (Gateway `send {move:true}`) beendet das Gateway die Sitzung am
-/// PC (SIGTERM, Claude speichert und endet) und setzt sie in tmux mit genau dieser Nachricht fort. Das geschieht nur auf
-/// ausdrückliche Wahl: Knopf im Postausgang, dann Bestätigung (Martin, 2026-11-07: nie ungefragt beenden; die Rückfrage
-/// erschien bis 0.3.6 von selbst nach jeder Absage).
+/// im Postausgang, das Handy liest nur mit. Den Umzug vom Handy aus („Am PC beenden und hier fortsetzen“, Gateway
+/// `send {move:true}`) gibt es seit 0.3.16 nicht mehr (Martin, 2026-11-12): die in tmux fortgesetzte Sitzung blieb an der
+/// Abfrage „Trust this folder?“ hängen. Der Weg ist jetzt am PC: die Sitzung dort beenden und mit `claude --resume <id>`
+/// neu öffnen (am PC startet `claude` in einer Agenten-tmux-Sitzung).
 public enum DeskTerminal {
     /// Die Absage des Gateways (`adapters/*.py send()`), an der die App den Fall erkennt.
     public static func isRefusal(_ message: String) -> Bool { message.lowercased().contains("outside tmux") }
@@ -16,13 +16,20 @@ public enum DeskTerminal {
     }
 
     public static let statusText = "Nicht gesendet: die Sitzung ist am PC in einem Terminal ohne tmux offen"
+
+    /// Der Befehl, mit dem die Sitzung am PC neu geöffnet wird (dann läuft sie in tmux). Nur Claude kennt `--resume <id>`
+    /// in dieser Form; bei anderen Werkzeugen nil.
+    public static func resumeCommand(_ s: Session) -> String? {
+        guard s.tool == "claude", !s.sid.isEmpty, !s.placeholder else { return nil }
+        return "claude --resume \(s.sid)"
+    }
+
     /// Hinweis über der Eingabe, solange die Sitzung so läuft.
-    public static let hint = "Am PC in einem Terminal ohne tmux offen: vom Handy nur mitlesen. Nachrichten warten im Postausgang."
-    /// Knopf im Postausgang; öffnet erst die Bestätigung.
-    public static let moveButton = "Am PC beenden und hier fortsetzen…"
-    public static let dialogTitle = "Die Sitzung am PC beenden und hier in tmux fortsetzen?"
-    public static let dialogMessage = "Die Sitzung läuft am PC in einem Terminal ohne tmux, dort kann das Gateway nichts eintippen. Nach Ja beendet es die Sitzung am PC (Claude speichert) und setzt sie in tmux mit dieser Nachricht fort. Ohne Ja passiert am PC nichts, die Nachricht bleibt im Postausgang."
-    public static let moveConfirm = "Ja, am PC beenden und hier fortsetzen"
+    public static func hint(_ s: Session) -> String {
+        let how = resumeCommand(s).map { "Am PC beenden und mit „\($0)“ neu öffnen, dann geht es in tmux weiter." }
+            ?? "Am PC beenden und dort in tmux neu öffnen, dann geht es weiter."
+        return "Am PC in einem Terminal ohne tmux offen: vom Handy nur mitlesen. \(how) Nachrichten warten im Postausgang."
+    }
 }
 
 /// Anzeige, ob die Sitzung gerade auch am PC offen ist (Chat-Kopf und Sitzungsliste). Nur Anzeige: keine Sperre, keine

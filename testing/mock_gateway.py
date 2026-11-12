@@ -221,7 +221,7 @@ def session_defs():
         # ein Terminal am PC zeigt die Sitzung gerade (pc_attached): die App zeigt das Symbol „Am PC offen“
         K["pc"]: dict(title="Nachtlauf planen", cwd=f"{W}", state="idle", alive=True, attachable=True, tmux_session="c1-webapp-pcpc",
                       last_activity=n - 2400, last_message="Der Plan steht, ich warte auf dein Zeichen.", pc_attached=True),
-        # am PC in einem Terminal ohne tmux: send wird abgelehnt, ausser mit move
+        # am PC in einem Terminal ohne tmux: send wird abgelehnt (die App sendet seit 0.3.16 kein move mehr)
         K["desk"]: dict(title="Skript ohne tmux", cwd=f"{W}", state="idle", alive=True, attachable=False, tmux_session=None,
                         last_activity=n - 3000, last_message="Das Skript laeuft im Terminal am PC."),
     }
@@ -487,15 +487,8 @@ def rpc_send(p):
         raise RpcError("tmux session is gone" if key.startswith("tmux:") else "unknown session")
     force = bool(p.get("force"))
     text = p.get("text")
-    moved = False
     if s["alive"] and not s.get("tmux_session") and not p.get("target"):  # am PC in einem Terminal ohne tmux
-        if not p.get("move"):
-            raise RpcError("this session is open in a Desktop terminal outside tmux: reply there, or close it there and send again from the phone (it then resumes here)")
-
-        def mv(st):
-            st["overrides"].setdefault(s["key"], {}).update(tmux_session="c1-moved-0001", attachable=True)
-        mutate(mv)
-        moved = True
+        raise RpcError("this session is open in a Desktop terminal outside tmux: reply there, or close it there and send again from the phone (it then resumes here)")
     if text and s["state"] == "busy" and not force and not p.get("target"):
         raise RpcError("session is busy")
     if not (text or p.get("keys") or p.get("steps")):
@@ -514,8 +507,6 @@ def rpc_send(p):
     if text or p.get("steps"):
         shown = text or " ".join(x if isinstance(x, str) else x.get("text", "") for x in p["steps"])
         threading.Thread(target=reply_to, args=(s["key"], shown), daemon=True).start()
-    if moved:
-        return {"how": "resumed in tmux c1-moved-0001 (moved from the PC terminal)"}
     return {"how": "tmux %" + s.get("tmux_session", "0") if s.get("tmux_session") else "resumed in tmux c1-resumed"}
 
 

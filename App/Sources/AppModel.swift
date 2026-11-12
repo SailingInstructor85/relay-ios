@@ -766,12 +766,9 @@ final class AppModel: ObservableObject {
         try? d.write(to: u, options: .atomic)
     }
 
-    /// `move`: the session runs at the PC in a terminal outside tmux; after the user's yes the gateway ends it there and
-    /// resumes it in tmux with this text (DeskTerminal).
-    func send(_ s: Session, text: String, force: Bool = false, clientId: String? = nil, move: Bool = false) async throws {
+    func send(_ s: Session, text: String, force: Bool = false, clientId: String? = nil) async throws {
         var p: [String: JSON] = ["text": .string(text), "enter": true, "force": .bool(force)]
         if let clientId { p["client_id"] = .string(clientId) }
-        if move { p["move"] = true }
         if s.liveTmux != nil { p["target"] = .string(s.target) } else { p["key"] = .string(s.key) }
         _ = try await rpc("send", .object(p))
     }

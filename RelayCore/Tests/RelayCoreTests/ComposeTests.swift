@@ -224,18 +224,23 @@ final class ComposeTests: XCTestCase {
 }
 
 final class DeskTerminalTests: XCTestCase {
-    func testRefusalIsRecognisedAndKeptWithMove() {
+    func testRefusalIsRecognisedAndKept() {
         let msg = "this session is open in a Desktop terminal outside tmux: reply there, or close it there and send again from the phone (it then resumes here)"
         XCTAssertTrue(DeskTerminal.isRefusal(msg))
         XCTAssertFalse(DeskTerminal.isRefusal("session is busy"))
         XCTAssertFalse(OutboxLogic.isBusyRefusal(msg))
         let i = OutItem(id: "1", key: "k", text: "hallo", at: 1, state: .failed, error: msg)
         XCTAssertEqual(OutboxLogic.status(i, connected: true, network: true), DeskTerminal.statusText)
-        let again = OutboxLogic.retried(i, force: nil, newId: "2", move: true)
+        let again = OutboxLogic.retried(i, force: nil, newId: "2")
         XCTAssertEqual(again.id, "2")
-        XCTAssertTrue(again.move)
+        XCTAssertEqual(again.state, .queued)
         XCTAssertEqual(OutboxLogic.decode(OutboxLogic.encode([again])), [again])  // survives the disk
-        XCTAssertFalse(OutboxLogic.retried(i, force: true, newId: "3").move)
+        // Der Umzug vom Handy aus ist seit 0.3.16 entfernt: ein alter Eintrag mit `move` auf der Platte wird ohne gelesen
+        // und nie wieder mit `move` gesendet.
+        let old = Data(#"[{"id":"9","key":"k","text":"alt","at":1,"state":"queued","move":true}]"#.utf8)
+        let read = OutboxLogic.decode(old)
+        XCTAssertEqual(read.map(\.id), ["9"])
+        XCTAssertFalse(String(decoding: OutboxLogic.encode(read), as: UTF8.self).contains("move"))
     }
 }
 
