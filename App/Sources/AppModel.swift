@@ -44,6 +44,7 @@ final class AppModel: ObservableObject {
     @AppStorage("favDirs") private var favDirsRaw = ""
     @AppStorage("lastAlias") var lastAlias = ""
     @AppStorage("vaultDir") var vaultDir = VaultDrop.defaultDir   // "Ins Vault einsortieren": the vault folder on the PC
+    @AppStorage("docsDir") var docsDir = DocDrop.defaultDir       // "In Dokumente ablegen": root of the paperwork on the PC
 
     @Published private(set) var state: ConnState = .off {
         didSet {

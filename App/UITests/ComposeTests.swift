@@ -132,4 +132,20 @@ final class ComposeTests: RelayTestCase {
         settle(2)
         shot("teilen-neue-sitzung")
     }
+
+    func test11_ShareToDocuments() {
+        // „In Dokumente ablegen“: ein Agent mit eigenem Auftrag (erst fragen, dann verschieben) startet.
+        launch(share: true)
+        XCTAssertTrue(id("shareDocs").waitForExistence(timeout: 60), "Ziel „In Dokumente ablegen“ fehlt")
+        tapID("shareDocs")
+        shot("teilen-dokumente")
+        if id("shareSend").waitForExistence(timeout: 5) { id("shareSend").tap() } else { app.buttons["Ablegen"].firstMatch.tap() }
+        XCTAssertTrue(mockReceived("launch", where: { p in
+            let prompt = p["prompt"] as? String ?? ""
+            return prompt.contains("testbrief.txt") && prompt.contains("~/Dokumente/privat/Dokumente")
+                && (p["name"] as? String) == "Dokument: testbrief.txt"
+        }, timeout: 40), "Dokumenten-Agent nicht gestartet")
+        settle(2)
+        shot("teilen-dokumente-gestartet")
+    }
 }

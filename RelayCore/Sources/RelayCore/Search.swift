@@ -80,10 +80,12 @@ public enum AppSearch {
     }
 }
 
-/// Where a shared file goes: a new agent session (the default), the vault filing agent, or a running session.
+/// Where a shared file goes: a new agent session (the default), the vault filing agent, the agent that files into
+/// the documents folder outside the vault, or a running session.
 public enum ShareTarget: Equatable {
     case newSession
     case vault
+    case documents
     case session(String)
 }
 
@@ -106,7 +108,7 @@ public enum ShareLogic {
     public static func confirmLabel(_ t: ShareTarget) -> String {
         switch t {
         case .newSession: return "Starten"
-        case .vault: return "Ablegen"
+        case .vault, .documents: return "Ablegen"
         case .session: return "Senden"
         }
     }
@@ -180,6 +182,46 @@ public enum VaultDrop {
                   "2. Lies sie und erkenne, worum es geht.",
                   "3. Sortiere sie ein: die Datei nach \"\(attachments)/\", dazu eine kurze Notiz oder ein Link im passenden Bereich. Halte dich an die AGENTS.md des Vaults.",
                   "4. Melde am Ende knapp: welche Datei, wohin, warum."]
+        return lines.joined(separator: "\n")
+    }
+}
+
+/// "In Dokumente ablegen": real paperwork that belongs outside the vault. A new agent session (started in the vault
+/// folder) reads the upload, looks at the folder tree below the root, proposes one to three existing folders and asks
+/// in the chat. It moves the file only after the answer and never creates or renames folders on its own.
+public enum DocDrop {
+    public static let defaultDir = "~/Dokumente/privat/Dokumente"
+
+    /// The root from the settings; empty means the default.
+    public static func root(_ setting: String) -> String {
+        let r = setting.trimmingCharacters(in: .whitespacesAndNewlines)
+        return r.isEmpty ? defaultDir : r
+    }
+
+    /// Session name: "Dokument: scan.pdf" or "Dokument: 3 Dateien".
+    public static func name(paths: [String]) -> String {
+        if paths.count == 1 { return "Dokument: " + (paths[0] as NSString).lastPathComponent }
+        return "Dokument: \(paths.count) Dateien"
+    }
+
+    /// The first message of the filing agent.
+    public static func prompt(paths: [String], note: String, root: String) -> String {
+        let dir = DocDrop.root(root)
+        var lines = ["Neue Dokumente vom iPhone zum Ablegen in Martins Dokumentenablage (außerhalb des Vaults).", "",
+                     "Dateien (Uploads des Gateways):"]
+        lines += paths.map { "- \($0)" }
+        let n = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !n.isEmpty { lines += ["", "Hinweis von Martin: \(n)"] }
+        lines += ["", "Wurzelordner der Ablage: \(dir)", "", "Vorgehen:",
+                  "1. Lies jede Datei und erkenne, worum es geht (Absender, Datum, Betreff).",
+                  "2. Sieh dir den Ordnerbaum unter dem Wurzelordner an (nur lesen).",
+                  "3. Schlage ein bis drei passende bestehende Zielordner vor und frage Martin im Chat, wohin es gehört. Berücksichtige seinen Hinweis und nenne den vorgesehenen Dateinamen.",
+                  "4. Verschiebe erst nach seiner Antwort (verschieben, nicht kopieren). Bis dahin bleibt die Datei, wo sie ist.",
+                  "", "Regeln:",
+                  "- Keine neuen Ordner anlegen und keine bestehenden Ordner umbenennen oder verschieben ohne Martins ausdrückliches Ja. Passt kein Ordner, frag nach.",
+                  "- Dateiname nach dem Muster JJMMTT_Stichwort.pdf (Endung der Datei beibehalten). Das Datum kommt nur aus dem Dokument selbst, nie aus Dateidatum oder Upload-Zeit. Steht keins darin, frag nach.",
+                  "- Nichts überschreiben. Gibt es den Namen im Zielordner schon, frag nach.",
+                  "- Melde am Ende knapp: welche Datei, welches Ziel, und ob dazu eine Notiz im Vault ergänzt werden sollte (nur vorschlagen, nichts anlegen)."]
         return lines.joined(separator: "\n")
     }
 }

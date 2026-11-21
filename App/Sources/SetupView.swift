@@ -11,6 +11,7 @@ struct SetupView: View {
     @State private var user = ""
     @State private var copied = ""
     @AppStorage("vaultDir") private var vaultDir = VaultDrop.defaultDir
+    @AppStorage("docsDir") private var docsDir = DocDrop.defaultDir
 
     var body: some View {
         Form {
@@ -83,6 +84,10 @@ struct SetupView: View {
                 Section("Ablage") {
                     TextField(VaultDrop.defaultDir, text: $vaultDir).textInputAutocapitalization(.never).autocorrectionDisabled()
                     Text("Vault-Ordner auf dem PC für „Ins Vault einsortieren“ beim Teilen einer Datei. Ein Agent legt sie dort in „\(VaultDrop.inbox)“ ab und sortiert sie ein.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    TextField(DocDrop.defaultDir, text: $docsDir).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .accessibilityIdentifier("docsDir")
+                    Text("Dokumenten-Ordner auf dem PC für „In Dokumente ablegen“. Ein Agent schlägt passende Unterordner vor und fragt dich im Chat, bevor er die Datei verschiebt.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Sicherheit") {

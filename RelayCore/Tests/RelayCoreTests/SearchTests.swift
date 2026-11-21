@@ -76,6 +76,8 @@ final class SearchTests: XCTestCase {
         // eine Sitzung bekommt die Datei nur, wenn sie angetippt wurde
         XCTAssertEqual(ShareLogic.target(picked: .session("claude:c1:a")), .session("claude:c1:a"))
         XCTAssertEqual(ShareLogic.target(picked: .vault), .vault)
+        XCTAssertEqual(ShareLogic.target(picked: .documents), .documents)
+        XCTAssertEqual(ShareLogic.confirmLabel(.documents), "Ablegen")
         XCTAssertEqual(ShareLogic.target(picked: .newSession), .newSession)
         XCTAssertEqual(ShareLogic.sessionName(paths: ["/u/2026-11-21/scan.pdf"]), "scan.pdf")
         XCTAssertEqual(ShareLogic.sessionName(paths: ["/u/a.pdf", "/u/b.pdf", "/u/c.pdf"]), "a.pdf und 2 weitere")
@@ -129,5 +131,27 @@ final class SearchTests: XCTestCase {
         XCTAssertTrue(p.contains("\"01 Inbox/\""))
         XCTAssertTrue(p.contains("\"07 Anhänge/\""))
         XCTAssertFalse(VaultDrop.prompt(paths: ["/x"], note: "  ").contains("Hinweis"))
+    }
+
+    func testDocDrop() {
+        XCTAssertEqual(DocDrop.name(paths: ["/u/2026/scan.pdf"]), "Dokument: scan.pdf")
+        XCTAssertEqual(DocDrop.name(paths: ["/a", "/b"]), "Dokument: 2 Dateien")
+        XCTAssertEqual(DocDrop.root("  "), "~/Dokumente/privat/Dokumente")
+        XCTAssertEqual(DocDrop.root(" ~/Ablage "), "~/Ablage")
+        let p = DocDrop.prompt(paths: ["/u/scan.pdf"], note: " Alphakraft, Klage ", root: "")
+        XCTAssertTrue(p.contains("- /u/scan.pdf"))
+        XCTAssertTrue(p.contains("Hinweis von Martin: Alphakraft, Klage"))
+        XCTAssertTrue(p.contains("Wurzelordner der Ablage: ~/Dokumente/privat/Dokumente"))
+        // erst fragen, dann verschieben; keine Ordner anlegen oder umbenennen ohne Ja
+        XCTAssertTrue(p.contains("ein bis drei passende bestehende Zielordner"))
+        XCTAssertTrue(p.contains("frage Martin im Chat"))
+        XCTAssertTrue(p.contains("Verschiebe erst nach seiner Antwort"))
+        XCTAssertTrue(p.contains("Keine neuen Ordner anlegen und keine bestehenden Ordner umbenennen"))
+        XCTAssertTrue(p.contains("JJMMTT_Stichwort.pdf"))
+        XCTAssertTrue(p.contains("Das Datum kommt nur aus dem Dokument selbst"))
+        XCTAssertTrue(p.contains("nur vorschlagen"))
+        let q = DocDrop.prompt(paths: ["/x"], note: "  ", root: "~/Ablage")
+        XCTAssertFalse(q.contains("Hinweis"))
+        XCTAssertTrue(q.contains("Wurzelordner der Ablage: ~/Ablage"))
     }
 }

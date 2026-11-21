@@ -4,7 +4,8 @@ import RelayCore
 /// "In Relay öffnen" (no Share Extension): a file opened from Files, Mail or another app arrives through `onOpenURL`.
 /// The sheet asks where it goes and uploads the files. Default is "Neue Sitzung": a new agent in the vault folder whose
 /// first message is the note plus the upload paths. "Ins Vault einsortieren" starts an agent that files the uploads
-/// (`VaultDrop`). A running session gets the paths only when it was tapped (`ShareLogic.target`).
+/// (`VaultDrop`), "In Dokumente ablegen" one that asks for the folder below the documents root first (`DocDrop`).
+/// A running session gets the paths only when it was tapped (`ShareLogic.target`).
 struct ShareView: View {
     @EnvironmentObject var model: AppModel
     let files: [URL]
@@ -53,6 +54,8 @@ struct ShareView: View {
                 Section("Ablegen") {
                     targetRow(.vault, id: "shareVault", icon: "archivebox", title: "Ins Vault einsortieren",
                               note: "Ein Agent legt die Datei in „\(VaultDrop.inbox)“ ab und sortiert sie ein")
+                    targetRow(.documents, id: "shareDocs", icon: "folder", title: "In Dokumente ablegen",
+                              note: "Ein Agent schlägt Ordner in deinen Dokumenten vor und fragt dich, wohin")
                 }
                 Section("Oder in eine bestehende Sitzung senden") {
                     TextField("Sitzung suchen", text: $query).textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -97,7 +100,7 @@ struct ShareView: View {
     private var hint: String {
         switch target {
         case .newSession: return "Was soll der Agent damit tun?"
-        case .vault: return "Hinweis für den Agenten (worum geht es?)"
+        case .vault, .documents: return "Hinweis für den Agenten (worum geht es?)"
         case .session: return "Was soll die Sitzung damit tun?"
         }
     }
@@ -148,10 +151,11 @@ struct ShareView: View {
             switch target {
             case .newSession: start = (ShareLogic.body(message: message, paths: paths, text: nil), ShareLogic.sessionName(paths: paths))
             case .vault: start = (VaultDrop.prompt(paths: paths, note: message), VaultDrop.name(paths: paths))
+            case .documents: start = (DocDrop.prompt(paths: paths, note: message, root: model.docsDir), DocDrop.name(paths: paths))
             case .session: start = nil
             }
             if let start {
-                progress = target == .newSession ? "Starte die neue Sitzung…" : "Starte den Agenten im Vault…"
+                progress = target == .newSession ? "Starte die neue Sitzung…" : "Starte den Agenten…"
                 let tmux = try await model.launch(alias: model.defaultLaunchAlias, cwd: model.vaultDir, prompt: start.prompt, name: start.name)
                 progress = ""
                 onDone()
