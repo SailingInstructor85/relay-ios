@@ -151,7 +151,8 @@ final class SearchTests: XCTestCase {
         XCTAssertTrue(p.contains("Das Datum kommt nur aus dem Dokument selbst"))
         XCTAssertTrue(p.contains("nur vorschlagen"))
         let q = DocDrop.prompt(paths: ["/x"], note: "  ", root: "~/Ablage")
-        XCTAssertFalse(q.contains("Hinweis"))
+        // the steps always mention "seinen Hinweis"; without a note only the line "Hinweis von Martin: …" is missing
+        XCTAssertFalse(q.contains("Hinweis von Martin"))
         XCTAssertTrue(q.contains("Wurzelordner der Ablage: ~/Ablage"))
     }
 }
