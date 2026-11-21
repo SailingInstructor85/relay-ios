@@ -80,9 +80,36 @@ public enum AppSearch {
     }
 }
 
+/// Where a shared file goes: a new agent session (the default), the vault filing agent, or a running session.
+public enum ShareTarget: Equatable {
+    case newSession
+    case vault
+    case session(String)
+}
+
 /// "Share to a session" (port of Android Share.kt, ShareLogic).
 public enum ShareLogic {
     public static let maxBytes = 50 * 1024 * 1024
+
+    /// The target of the share sheet. Nothing tapped: always a new session, with or without a message, never silently
+    /// the last used session. A running session gets the file only when it was tapped.
+    public static func target(picked: ShareTarget?) -> ShareTarget { picked ?? .newSession }
+
+    /// Name of the new session, from the file name: "scan.pdf" or "scan.pdf und 2 weitere".
+    public static func sessionName(paths: [String]) -> String {
+        guard let first = paths.first else { return "Geteilt vom iPhone" }
+        let name = String((first as NSString).lastPathComponent.prefix(60))
+        return paths.count == 1 ? name : "\(name) und \(paths.count - 1) weitere"
+    }
+
+    /// Label of the confirm button for a target.
+    public static func confirmLabel(_ t: ShareTarget) -> String {
+        switch t {
+        case .newSession: return "Starten"
+        case .vault: return "Ablegen"
+        case .session: return "Senden"
+        }
+    }
 
     /// "<message>\n\n<path>\n<path>"; without files the shared text is the body.
     public static func body(message: String, paths: [String], text: String?) -> String {

@@ -27,7 +27,7 @@ class RelayTestCase: XCTestCase {
 
     var env: [String: String] { ProcessInfo.processInfo.environment }
 
-    func launch(prefill: Bool = true) {
+    func launch(prefill: Bool = true, share: Bool = false) {
         app = XCUIApplication()
         app.launchArguments += ["-relayUITest", "-AppleLanguages", "(de)", "-AppleLocale", "de_DE"]
         app.launchEnvironment["RELAY_UI_HOST"] = "127.0.0.1"
@@ -35,6 +35,7 @@ class RelayTestCase: XCTestCase {
         app.launchEnvironment["RELAY_UI_USER"] = env["RELAY_UI_USER"] ?? NSUserName()
         app.launchEnvironment["RELAY_UI_SEED"] = Self.seedHex
         app.launchEnvironment["RELAY_UI_PREFILL"] = prefill ? "1" : "0"
+        if share { app.launchEnvironment["RELAY_UI_SHARE"] = "1" }
         app.launch()
         dismissSystemAlerts()
     }

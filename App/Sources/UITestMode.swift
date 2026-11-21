@@ -2,7 +2,8 @@ import Foundation
 
 /// UI-Testmodus: nur aktiv mit dem Startargument `-relayUITest`. Setzt den App-Zustand zurück, übernimmt Host, Port,
 /// Benutzer und den SSH-Seed (32 Byte, hex) aus der Startumgebung und schaltet die Face-ID-Sperre ab.
-/// Umgebung: RELAY_UI_HOST, RELAY_UI_PORT, RELAY_UI_USER, RELAY_UI_SEED, RELAY_UI_PREFILL (1: Einstellungen vorbelegen).
+/// Umgebung: RELAY_UI_HOST, RELAY_UI_PORT, RELAY_UI_USER, RELAY_UI_SEED, RELAY_UI_PREFILL (1: Einstellungen vorbelegen),
+/// RELAY_UI_SHARE (1: eine geteilte Testdatei liegt an, das Teilen-Blatt öffnet sich).
 enum UITestMode {
     static let active = ProcessInfo.processInfo.arguments.contains("-relayUITest")
     private static var env: [String: String] { ProcessInfo.processInfo.environment }
@@ -19,6 +20,14 @@ enum UITestMode {
     }
 
     static var seed: Data? { active ? env["RELAY_UI_SEED"].flatMap(hex) : nil }
+
+    /// RELAY_UI_SHARE=1: a small text file as if another app had shared it ("In Relay öffnen"), so the share sheet opens.
+    static func shareFile() -> URL? {
+        guard active, env["RELAY_UI_SHARE"] == "1" else { return nil }
+        let u = FileManager.default.temporaryDirectory.appendingPathComponent("testbrief.txt")
+        do { try Data("Testbrief vom 21.11.2026".utf8).write(to: u) } catch { return nil }
+        return u
+    }
 
     /// Vor dem ersten Zugriff auf Einstellungen und Dateien aufrufen.
     static func prepare() {

@@ -13,7 +13,10 @@ struct RelayApp: App {
             RootView()
                 .environmentObject(model)
                 .onOpenURL { model.receive($0) }
-                .onAppear { UsageRecorder.shared.appStarted(); model.start(); Outbox.shared.start(); model.requestNotificationPermission() }
+                .onAppear {
+                    UsageRecorder.shared.appStarted(); model.start(); Outbox.shared.start(); model.requestNotificationPermission()
+                    if let u = UITestMode.shareFile() { model.receive(u) }
+                }
                 .onChange(of: phase) { _, p in
                     model.setForeground(p == .active)
                     UsageRecorder.shared.phase(p)

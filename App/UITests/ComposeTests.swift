@@ -114,4 +114,22 @@ final class ComposeTests: RelayTestCase {
         let launches = rpcLog().filter { ($0["method"] as? String) == "launch" && (($0["params"] as? [String: Any])?["prompt"] as? String)?.contains("Notiz ohne Verbindung") == true }
         XCTAssertEqual(launches.count, 1, "Vault-Agent mehrfach gestartet")
     }
+
+    func test10_ShareOpensNewSession() {
+        // Geteilte Datei mit Nachricht: ohne Antippen eines Ziels startet eine neue Sitzung im Vault-Ordner,
+        // keine bestehende Sitzung bekommt die Datei.
+        launch(share: true)
+        XCTAssertTrue(id("shareNew").waitForExistence(timeout: 60), "Teilen-Blatt nicht geöffnet")
+        shot("teilen-blatt")
+        if (id("shareNew").value as? String) != "gewählt" { notes.append("Haken an „Neue Sitzung“ nicht lesbar") }
+        typeInto("shareMessage", "Bitte einsortieren")
+        if id("shareSend").waitForExistence(timeout: 5) { id("shareSend").tap() } else { app.buttons["Starten"].firstMatch.tap() }
+        XCTAssertTrue(mockReceived("launch", where: { p in
+            let prompt = p["prompt"] as? String ?? ""
+            return prompt.hasPrefix("Bitte einsortieren") && prompt.contains("testbrief.txt") && (p["name"] as? String) == "testbrief.txt"
+        }, timeout: 40), "Neue Sitzung nicht gestartet")
+        XCTAssertFalse(rpcLog().contains { ($0["method"] as? String) == "send" }, "Datei ging in eine bestehende Sitzung")
+        settle(2)
+        shot("teilen-neue-sitzung")
+    }
 }

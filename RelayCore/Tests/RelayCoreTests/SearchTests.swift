@@ -70,6 +70,24 @@ final class SearchTests: XCTestCase {
         XCTAssertEqual(ShareLogic.targets(s, lastKey: "", query: "neu").map(\.name), ["neu"])
     }
 
+    func testShareTarget() {
+        // nichts angetippt: immer eine neue Sitzung, nie stillschweigend die zuletzt genutzte
+        XCTAssertEqual(ShareLogic.target(picked: nil), .newSession)
+        // eine Sitzung bekommt die Datei nur, wenn sie angetippt wurde
+        XCTAssertEqual(ShareLogic.target(picked: .session("claude:c1:a")), .session("claude:c1:a"))
+        XCTAssertEqual(ShareLogic.target(picked: .vault), .vault)
+        XCTAssertEqual(ShareLogic.target(picked: .newSession), .newSession)
+        XCTAssertEqual(ShareLogic.sessionName(paths: ["/u/2026-11-21/scan.pdf"]), "scan.pdf")
+        XCTAssertEqual(ShareLogic.sessionName(paths: ["/u/a.pdf", "/u/b.pdf", "/u/c.pdf"]), "a.pdf und 2 weitere")
+        XCTAssertEqual(ShareLogic.sessionName(paths: []), "Geteilt vom iPhone")
+        XCTAssertEqual(ShareLogic.confirmLabel(.newSession), "Starten")
+        XCTAssertEqual(ShareLogic.confirmLabel(.vault), "Ablegen")
+        XCTAssertEqual(ShareLogic.confirmLabel(.session("k")), "Senden")
+        // erste Nachricht der neuen Sitzung: Martins Text plus die Upload-Pfade
+        XCTAssertEqual(ShareLogic.body(message: "In die Dokumente einsortieren", paths: ["/u/scan.pdf"], text: nil),
+                       "In die Dokumente einsortieren\n\n/u/scan.pdf")
+    }
+
     func testConnText() {
         XCTAssertTrue(ConnText.isPrivateLAN("192.168.1.20"))
         XCTAssertTrue(ConnText.isPrivateLAN("172.20.0.1"))
