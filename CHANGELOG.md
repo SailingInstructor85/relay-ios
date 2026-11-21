@@ -2,6 +2,19 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.17 (2026-11-21)
+
+**Neu**
+- Teilen an Relay: Oben im Blatt steht das Ziel „Neue Sitzung“. Relay lädt die Datei hoch und startet einen neuen Agenten im Vault-Ordner. Er bekommt deine Nachricht und die Datei, die Sitzung heißt wie die Datei, und der neue Chat öffnet sich.
+- Teilen an Relay: neues Ziel „In Dokumente ablegen“ für Unterlagen, die nicht ins Vault gehören. Ein Agent liest die Datei, schlägt ein bis drei passende Ordner in deinen Dokumenten vor und fragt dich im Chat, wohin sie soll. Erst nach deiner Antwort verschiebt er sie. Er legt keine Ordner an und benennt keine um, ohne dass du zustimmst.
+- Einstellungen, Abschnitt „Ablage“: Der Dokumenten-Ordner auf dem PC ist einstellbar (Standard `~/Dokumente/privat/Dokumente`).
+
+**Behoben**
+- Eine geteilte Datei landete ungefragt in der zuletzt genutzten Sitzung. Jetzt ist „Neue Sitzung“ vorausgewählt. Eine bestehende Sitzung bekommt die Datei nur noch, wenn du sie antippst.
+
+**Geändert**
+- Der Knopf oben rechts im Teilen-Blatt heißt je nach Ziel „Starten“, „Ablegen“ oder „Senden“.
+
 ## 0.3.16 (2026-11-12)
 
 **Behoben**

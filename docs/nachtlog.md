@@ -413,3 +413,27 @@ Offen für Martin:
 Version: `project.yml` 0.3.15 auf 0.3.16 (`c8d2baf`). Nicht gepusht, kein Tag; das übernimmt das Skript.
 
 CI Runde 1 (Lauf 43292895019, 12.11.2026 20:42 bis 20:57): rot ohne Fehler im Code. `ipa` und `core-tests` grün, alle vier Simulator-Teile „cancelled“ ohne einen einzigen Schritt. Anmerkung von GitHub: „The job was not acquired by Runner of type hosted even after multiple attempts“, dazu der Hinweis auf knappe macOS-arm64-Runner. Kein Test ist gelaufen, der Fehlerauszug war deshalb leer. Am Code nichts geändert; dieser Commit hält nur den Befund fest und gibt der nächsten Runde eine eigene Commit-Kennung, damit das Skript nicht den alten Lauf wiederfindet.
+
+## Nachtbau 21. November 2026, 20:30 (Version 0.3.17)
+
+Unbeaufsichtigt, Zweig `nachtbau/2026-11-21-2030`. Zwei Einträge aus dem Backlog, beide zum Teilen-Blatt („In Relay öffnen“). Nur App, Gateway unverändert.
+
+Gebaut:
+- **„Neue Sitzung“ als vorausgewähltes Ziel** (Eintrag 1): `ShareView.onAppear` wählte die zuletzt genutzte Sitzung vor (`targets.first`). Das ist weg. Die Auswahl ist jetzt ein `ShareTarget` (RelayCore: `newSession`, `vault`, `documents`, `session(key)`), `ShareLogic.target(picked:)` liefert ohne Antippen immer `newSession`. Neuer Abschnitt „Ziel“ mit der Zeile „Neue Sitzung“ (Kennung `shareNew`) über „Ablegen“, die Sitzungsliste heißt „Oder in eine bestehende Sitzung senden“. „Neue Sitzung“ lädt hoch und ruft `model.launch` im Vault-Ordner mit dem Standardkonto, erste Nachricht `ShareLogic.body` (Text plus Upload-Pfade), Name `ShareLogic.sessionName` (Dateiname, bei mehreren „a.pdf und 2 weitere“), danach `openLaunched`. Der Knopf oben rechts heißt je Ziel „Starten“, „Ablegen“ oder „Senden“ (`ShareLogic.confirmLabel`, Kennung `shareSend`), das Nachrichtenfeld hat die Kennung `shareMessage`.
+- **„In Dokumente ablegen“** (Eintrag 2): zweite Zeile im Abschnitt „Ablegen“ (Kennung `shareDocs`). `DocDrop` in RelayCore (`Search.swift`): Auftrag an einen neuen Agenten im Vault-Ordner. Datei lesen, Ordnerbaum unter dem Wurzelordner ansehen, ein bis drei bestehende Ordner vorschlagen, im Chat fragen, erst nach der Antwort verschieben. Keine neuen Ordner, keine Umbenennung ohne ausdrückliches Ja, nichts überschreiben, Dateiname `JJMMTT_Stichwort.pdf`, Datum nur aus dem Dokument, am Ende Meldung mit Vorschlag zur Vault-Notiz. Sitzungsname „Dokument: <Datei>“. Wurzelordner in Einstellungen, Abschnitt „Ablage“ (`docsDir`, Standard `~/Dokumente/privat/Dokumente`, leer gilt als Standard).
+- Tests: RelayCore `testShareTarget` und `testDocDrop` in `SearchTests`. UI-Tests `ComposeTests.test10_ShareOpensNewSession` und `test11_ShareToDocuments`. Dafür gibt es den Testhaken `RELAY_UI_SHARE=1` (`UITestMode.shareFile`): Die App legt beim Start eine kleine Textdatei `testbrief.txt` an und reicht sie wie eine geteilte Datei herein, das Teilen-Blatt öffnet sich. Bisher hatte das Blatt keinen UI-Test.
+- Version 0.3.17, Doku: CHANGELOG, README (neuer Punkt „Datei an Relay teilen“), `feature-parity.md` H1.
+
+Entscheidungen:
+- Die Vorauswahl hängt nicht am Nachrichtenfeld. Der Eintrag verlangt „Neue Sitzung“ mit Text und auch ohne Text, also gilt sie immer, solange nichts angetippt ist.
+- Verschwindet eine angetippte Sitzung, bevor gesendet wird, meldet das Blatt das und fällt nicht still auf „Neue Sitzung“ zurück.
+- Der Agent für „In Dokumente ablegen“ startet im Vault-Ordner (wie im Eintrag beschrieben), nicht im Dokumenten-Ordner. So gelten die Regeln des Vaults, und für die vorgeschlagene Notiz ist er am richtigen Ort.
+- Der Sitzungsname der neuen Sitzung ist der Dateiname samt Endung, gekürzt auf 60 Zeichen.
+
+Risiken: nicht auf dem Gerät getestet, Swift lokal nicht kompiliert. Stellen, an denen der Compiler meckern könnte: das optionale Tupel `start` in `ShareView.send`, `targetRow` mit `some View`. UI-Tests: Beide neuen Tests starten die App mit anliegender Datei und warten bis 60 s auf das Blatt (Kennungen `shareNew`, `shareDocs`). Öffnet es sich nicht, zuerst prüfen, ob der Dialog „Mitteilungen erlauben“ davor liegt oder ob `receive` vor `configured` läuft. Der Knopf `shareSend` sitzt in der Navigationsleiste; findet der Test die Kennung nicht, tippt er den Knopf über seinen Text („Starten“, „Ablegen“). `test10` prüft außerdem, dass kein `send` an den Mock ging. Der Haken an „Neue Sitzung“ wird nur als Notiz geprüft (`accessibilityValue` „gewählt“).
+
+Offen für Martin:
+- Am Gerät prüfen: aus Genius Scan teilen, Text eingeben, „Starten“. Es muss eine neue Sitzung mit dem Dateinamen aufgehen.
+- „In Dokumente ablegen“ einmal mit einem echten Dokument probieren und sehen, ob die Ordnervorschläge taugen. Der Auftragstext steht in `DocDrop.prompt` und lässt sich nachschärfen.
+
+Version: `project.yml` 0.3.16 auf 0.3.17. Nicht gepusht, kein Tag; das übernimmt das Skript.

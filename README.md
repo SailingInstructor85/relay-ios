@@ -77,6 +77,11 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Anhänge warten auf dem iPhone („wartet auf Verbindung“). Steht die Verbindung wieder, startet Relay einen Agenten im
   Vault-Ordner (Einstellungen → Ablage) mit allen wartenden Nachrichten in der richtigen Reihenfolge; spätere gehen in
   dieselbe Sitzung, solange sie läuft. Nichts geht doppelt raus.
+- **Datei an Relay teilen (seit 0.3.17 mit neuen Zielen):** Eine Datei aus einer anderen App über „Teilen“ oder
+  „Öffnen in“ an Relay geben. Das Blatt zeigt die Ziele: „Neue Sitzung“ (vorausgewählt, ein neuer Agent im Vault-Ordner
+  bekommt Nachricht und Datei), „Ins Vault einsortieren“, „In Dokumente ablegen“ (der Agent schlägt Ordner unter dem
+  Dokumenten-Ordner vor und fragt im Chat, bevor er verschiebt; Ordner in Einstellungen → Ablage) oder eine bestehende
+  Sitzung, die du antippst. Ohne Antippen geht nichts mehr in eine laufende Sitzung.
 - **Verpasste Antworten und wartende Nachrichten (seit 0.3.16):** Bricht die Verbindung ab, während ein Chat offen ist
   (iOS trennt sie im Hintergrund nach kurzer Zeit), lädt der Chat nach dem Wiederverbinden den Verlauf nach und liest
   wieder live mit. Antworten, die in der Zwischenzeit kamen, erscheinen ohne Schließen und Öffnen. Arbeitet beim
