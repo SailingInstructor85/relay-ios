@@ -7,7 +7,8 @@ import XCTest
 ///
 /// Farbschema: Die App folgt sonst dem System. Im Testmodus erzwingt die Startumgebung `RELAY_UI_SCHEME`
 /// (`launch(scheme:)`, in der App `UITestMode.colorScheme` mit `preferredColorScheme`) dunkel oder hell. Die Tests
-/// 01 bis 03 laufen dunkel, Test 04 nimmt dieselben Bildschirme hell auf.
+/// 01 bis 03 laufen dunkel, Test 04 nimmt dieselben Bildschirme hell auf. Die Tests 05 und 06 zeigen die Tabs Heute,
+/// Dein Zug, Posteingang und Mehr dunkel und hell.
 final class DesignTests: RelayTestCase {
     static let session = "API Refactoring"
 
@@ -61,6 +62,32 @@ final class DesignTests: RelayTestCase {
         closeMainMenu()
     }
 
+    /// Die neuen Tabs: Heute, Dein Zug (mit Rückfrage und Freigabe aus dem Mock), Posteingang, Mehr.
+    private func tabs(_ prefix: String) {
+        ctl("trigger_rueckfrage")
+        ctl("trigger_send_request")
+        settle(3)
+        showTab(Self.tabToday)
+        settle(1.5)
+        shot(prefix + "heute")
+        app.swipeUp()
+        settle(0.8)
+        shot(prefix + "heute-unten")
+        showTab(Self.tabYourTurn)
+        settle(1)
+        shot(prefix + "deinzug")
+        app.swipeUp()
+        settle(0.8)
+        shot(prefix + "deinzug-unten")
+        showTab(Self.tabInbox)
+        settle(0.8)
+        shot(prefix + "posteingang")
+        showTab(Self.tabMore)
+        settle(0.8)
+        shot(prefix + "mehr-tab")
+        showSessions()
+    }
+
     func test01_Sitzungsliste() {
         launchConnected(scheme: "dark")
         // Die Kennung selbst muss da sein (launchConnected nimmt notfalls noch den alten Starttext).
@@ -83,5 +110,15 @@ final class DesignTests: RelayTestCase {
         sessionList("hell-")
         chat("hell-")
         menu("hell-")
+    }
+
+    func test05_TabsDunkel() {
+        launchConnected(scheme: "dark")
+        tabs("dunkel-")
+    }
+
+    func test06_TabsHell() {
+        launchConnected(scheme: "light")
+        tabs("hell-")
     }
 }

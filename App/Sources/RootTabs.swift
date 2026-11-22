@@ -16,7 +16,7 @@ struct RootTabs: View {
 
     var body: some View {
         TabView(selection: Binding(get: { router.tab }, set: { router.select($0) })) {
-            tab(.today) { ComingSoonView(title: AppTab.today.title, symbol: AppTab.today.symbol, text: "Die Übersicht des Tages kommt bald.") }
+            tab(.today) { TodayView() }
             tab(.yourTurn) { YourTurnView() }
                 .badge(TabRouting.badge(yourTurnCount).map { Text($0) })
             tab(.sessions) { SessionsView() }
@@ -109,18 +109,6 @@ struct TabEmptyState: View {
         }
         .padding(.horizontal, 32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// Platzhalter für einen Tab, dessen Inhalt in einem späteren Paket kommt.
-struct ComingSoonView: View {
-    let title: String
-    let symbol: String
-    let text: String
-
-    var body: some View {
-        TabEmptyState(symbol: symbol, title: "Kommt bald", text: text)
-            .relayRootTitle(title)
     }
 }
 
