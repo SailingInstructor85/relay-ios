@@ -2,6 +2,20 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.18 (2026-11-22)
+
+**Behoben**
+- Codex: Nach der ersten Antwort ließ sich keine zweite Nachricht senden. Die App meldete, die Sitzung sei am PC in einem Terminal ohne tmux offen, obwohl dort nichts lief. Ursache war eine Änderung in Codex 0.171, die das Gateway auf dem PC falsch gedeutet hat. Das Gateway ist korrigiert und läuft schon, die Sitzung behält jetzt ihre Verbindung zum Fenster, und Nachrichten kommen an.
+- Codex-Sitzungen standen nach der ersten Nachricht doppelt in der Liste (einmal als „neu, noch keine Nachrichten“, einmal mit Titel). Jetzt steht jede Sitzung einmal da.
+
+**Neu**
+- Dieselbe Codex-Unterhaltung am Rechner und am Handy: Du kannst an beiden Geräten in derselben Unterhaltung weiterschreiben, ohne Übergabe und ohne dass ein Gerät gesperrt wird. Nachrichten vom Handy laufen der Reihe nach, auch wenn Codex gerade arbeitet oder du am PC schon etwas ins Eingabefeld getippt hast.
+- Das geht auch für Codex-Unterhaltungen, die am PC in einem Terminal ohne tmux offen sind. Über der Eingabe steht dann „Auch am PC offen (ohne tmux)“. Slash-Befehle und den Live-Bildschirm gibt es dort nicht.
+
+**Geändert**
+- Nachrichten an Codex, die mit „ohne tmux“ abgelehnt wurden und noch keine Stunde alt sind, gehen jetzt von selbst hinaus.
+- Noch nicht geprüft: das Zusammenspiel mit der geöffneten Codex-App am PC und der Ablauf am iPhone selbst.
+
 ## 0.3.17 (2026-11-21)
 
 **Neu**

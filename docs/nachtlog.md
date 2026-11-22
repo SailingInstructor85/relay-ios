@@ -441,3 +441,48 @@ Version: `project.yml` 0.3.16 auf 0.3.17. Nicht gepusht, kein Tag; das übernimm
 CI Runde 1 (Lauf 44941680828, 21.11.2026 20:34 bis 21:08): rot in zwei Jobs, `ipa` und die Simulator-Teile „chat“, „liste“, „info“ grün.
 - `core-tests`: `SearchTests.testDocDrop` (Zeile 154). Der Test verlangte, dass der Auftrag ohne Notiz das Wort „Hinweis“ gar nicht enthält. Schritt 3 des Auftrags sagt aber immer „Berücksichtige seinen Hinweis“. Fehler im Test, nicht im Auftragstext. Der Test prüft jetzt, dass die Zeile „Hinweis von Martin“ fehlt. Die übrigen 194 Tests liefen durch.
 - Simulator „eingabe“: `ComposeTests.test04_OutboxWhenOffline` scheiterte in beiden Versuchen nach gut 200 s mit „Failed to get matching snapshots: Timed out while evaluating UI query“ (`Base.swift`, `find`). Die neuen Tests `test10` und `test11` zum Teilen-Blatt stehen nicht unter den gescheiterten. Dasselbe Bild gab es schon am 10.11.2026 auf `main` (Lauf 42895820675, Stand 0.3.15, dort zusätzlich „process main thread busy for 30.0s“), während derselbe Commit im Nachtbau-Zweig grün war. Der Test und der Weg ohne Verbindung sind in diesem Lauf nicht geändert worden. Befund: Die App blockiert gelegentlich den Hauptthread, während die Verbindung getrennt ist. Die Ursache ist nicht gefunden (im App-Code kein blockierender Aufruf per Suche nach Semaphoren und `sleep`), deshalb hier nichts geändert. Bleibt der Test in Runde 2 rot, braucht es `test.log` und den Absturzbericht aus dem Artefakt `simulator-results-eingabe`.
+
+## Nachtbau 22. November 2026, 16:30 (Version 0.3.18)
+
+Unbeaufsichtigt, Zweig `nachtbau/2026-11-22-1630`. Zwei Einträge aus dem Backlog, beide zu Codex. Mit Gateway-Anteil in `~/relay` auf `lokal-clear-beendet` (`4cbb059`, `6b9534c`), nicht gepusht. notifyd zweimal neu gestartet (16:45 und kurz danach), der Dienst läuft mit dem neuen Stand. Swift läuft lokal nicht, die App prüft die CI. Das Gateway ist mit seiner Testsuite (1072 bestanden, 13 übersprungen, 14 neu) und echten Durchläufen geprüft.
+
+Befund zu Eintrag 1 (zweite Codex-Nachricht vom Handy abgelehnt):
+- Nutzungsprotokoll 22.11.: „gesendet“ an den Platzhalter `codex:x1:tmux-x1-zweites-Gehirn-24e4`, 16 s später „abgelehnt (PC ohne tmux)“ an die echte Sitzung `codex:x1:01a203d5-…`. App 0.3.17 (110), also aktuell.
+- Codex 0.171 (`/usr/lib/chatgpt/resources/codex`): Das TUI ist nur noch Client eines gemeinsamen Dienstes (`codex app-server --managed-daemon`, ein Prozess). `/proc/locks` zeigt, dass dieser Dienst alle Sperren in `thread-writer-locks` hält. Das Gateway (`adapters/codex.py`, `list_sessions`) suchte die Pane über den Sperrhalter (`tmux.pane_for_pid`), fand keine und meldete die Sitzung als lebend ohne Pane. `send` lehnte dann mit „Desktop terminal outside tmux“ ab. Die erste Nachricht ging über den Platzhalter, der die Pane kennt.
+- Nebenbefund: `s.pid` war die Prozessnummer des Dienstes. `_close` hätte bei „Sitzung schließen“ ein SIGTERM an den Dienst geschickt (alle Codex-Unterhaltungen beendet).
+- Der Dienst hält eine Unterhaltung nach dem Schließen des TUI noch ein bis zwei Minuten geladen (Sperre bleibt so lange).
+
+Gebaut:
+- **Gateway, Zuordnung** (Eintrag 1, `4cbb059`): `match_clients` ordnet Sitzungen des Dienstes den Codex-TUIs in tmux zu. Zuerst über die Kennung auf der Befehlszeile (`codex resume <id>`), sonst über die Zeit: Entstehung der Unterhaltung (aus der UUIDv7, `thread_created`) gegen den Start des TUI (`/proc/<pid>/stat`), Fenster 2 s davor bis 30 s danach, gleicher Ordner, nächstes Paar zuerst. Gemessen: 0 bis 2,1 s Abstand. `s.pid` ist das TUI oder leer. Zustand ohne Pane aus dem Ende des Rollouts (`turn_open`: `task_started` ohne `task_complete`/`turn_aborted`, höchstens 15 min alt).
+- **Gateway, Senden** (Eintrag 2, `4cbb059`, `6b9534c`): `CodexAdapter.send` reicht Text an `codex queue --thread <id> --message=<text> --resume` (Zeitgrenze 20 s). Slash-Befehle und Text ohne Enter gehen weiter in die Pane, ohne Pane gibt es dafür eine klare Absage. Scheitert `queue`: Pane, sonst Absage mit Grund, bei beendeter Sitzung wie bisher `codex exec resume`. `daemon._send` nutzt den Weg auch bei `target: tmux:<name>` (so sendet die App in tmux-Sitzungen) und lehnt eingereihten Text nicht mehr mit „busy“ ab. `list_sessions` meldet `queue_input` für lebende Codex-Sitzungen ohne Agenten-tmux, ohne `pc_attached`. PROTOCOL.md ergänzt.
+- **App** (Eintrag 2, `48a0336`): `Session.queueInput`, `QueueInput` in RelayCore (`DeskTerminal.swift`), `DeskTerminal.isDeskTerminal` nimmt solche Sitzungen aus, `OutboxLogic.resendable` lässt früher abgelehnte Nachrichten hinaus, `status` und ChatView übersetzen die Slash-Absage. Hinweis über der Eingabe (Kennung `queueHint`). Test `PCPresenceTests.testQueueInputIsNotADeskTerminal`.
+- **Doku**: `docs/pc-tmux.md` (zwei neue Abschnitte: Befund und Behebung, Wege, Prüfstand, Grenzen), README, `feature-parity.md` C28 und Verweis in C21, CHANGELOG. Eintrag 1 im App-Repo: `428f71d` (Doku und Durchlaufskript).
+
+Geprüft mit echtem Codex (Konto `x1`, je Nachricht ein Wort als Antwort, 18 kurze Züge, 5-Stunden-Fenster von 21 auf 27 %):
+- Von Hand: `codex queue` in eine offene Unterhaltung, zwei Nachrichten direkt hintereinander (laufen nacheinander), eine Nachricht nach dem Schließen des TUI.
+- `testing/gateway_codex_beide_geraete.py` Teil A (Start wie vom Handy, tmux): Handy an Platzhalter (`tmux %39`), danach echte Sitzung mit Pane, tmux-Namen und TUI-Prozessnummer. Handy 2 und 3 (`codex queue`, bei 3 stand „ENTWURF-AM-PC“ im Eingabefeld und blieb stehen), PC getippt, Handy 5 per Schlüssel. Verlauf: ALPHA, BRAVO, CHARLIE, DELTA, ECHO je einmal, eine Sitzungs-ID.
+- Teil B (Start am PC im pty ohne tmux): PC getippt, Handy 2 und 3 über `codex queue`. FOXTROT, GOLF, HOTEL je einmal. Sitzung: `queue_input: true`, keine Pane, keine Prozessnummer.
+- Erster Lauf von Teil A: Handy 5 per Schlüssel wurde mit „session is busy“ abgelehnt (Zustand hinkt 5 s nach). Daraufhin die Ausnahme für eingereihten Text, zweiter Lauf grün.
+- Live-Dienst nach dem Neustart: `notifyd status` zeigt Martins drei Codex-Sitzungen vom Nachmittag mit `x1-zweites-Gehirn-…`, keine doppelten Platzhalter.
+
+Entscheidungen:
+- Text an Codex geht auch in tmux über `codex queue` statt in die Pane. Grund: Der Dienst ordnet die Nachrichten selbst, ein Entwurf am PC wird nicht angefasst, und das Problem „Enter kam nicht an“ entfällt. Slash-Befehle müssen ins TUI, die bleiben bei der Pane.
+- Eine Sitzung, deren Sperre der Dienst hält, gilt weiter als lebend, auch ohne Fenster. Der Dienst gibt sie nach ein bis zwei Minuten frei, dann steht sie unter „Beendet“.
+- Kein UI-Test für den neuen Hinweis: Der Mock müsste eine weitere Sitzung in die Liste bekommen, das hätte die Listentests berührt. Die Logik ist in RelayCore getestet.
+- Kein Wrapper für `codex` in `~/.bashrc`: Für Text ist tmux nicht mehr nötig.
+- Die Testsitzungen liefen im vertrauten Ordner `/home/martin`, damit Codex keinen Vertrauensdialog zeigt und die Konfiguration unberührt bleibt. Der Live-Dienst hat sie kurz gesehen (`x1-martin-3c96`, `x1-martin-7d57` und zwei ohne tmux), sie sind beendet.
+
+Risiken und Grenzen:
+- Nicht am iPhone geprüft. Die PC-App (ChatGPT/Codex Desktop) lief nicht, das Zusammenspiel mit der offenen App ist ungeprüft. Sie nutzt denselben Ordner `~/.codex`, ihre Unterhaltungen stehen im Index.
+- Freigaben in Unterhaltungen ohne tmux erscheinen am PC, nicht in der Relay-App. Ohne offenes Fenster wartet der Lauf vermutlich. Ungeprüft.
+- `/new` oder `/resume` im TUI: Die Pane bleibt der Start-Unterhaltung zugeordnet. Text kommt richtig an, Live-Bildschirm und Slash-Befehle können auf die falsche Unterhaltung zeigen.
+- `codex queue` meldet einen gescheiterten `--resume` nur als Warnung. Die Nachricht ist dann eingereiht und läuft, sobald die Unterhaltung geöffnet wird. Das Gateway meldet in dem Fall trotzdem Erfolg.
+- Swift lokal nicht kompiliert. Stellen, die der Compiler prüfen muss: neues Feld in `Session.from` (einziger Konstruktor), `catch`-Zweig in `ChatView.send`.
+- Die alte App 0.3.17 zeigt bei Unterhaltungen ohne tmux weiter „nur mitlesen“, das Senden klappt aber.
+
+Offen für Martin:
+- Am iPhone: Codex-Sitzung starten, nach der Antwort zwei weitere Nachrichten senden.
+- Am PC `codex` in einem Konsole-Fenster öffnen, etwas schreiben, vom Handy in derselben Unterhaltung antworten und am PC nachsehen, ob die Nachricht dort erscheint.
+- Dasselbe einmal mit der geöffneten Codex-App am PC.
+
+Version: `project.yml` 0.3.17 auf 0.3.18. Nicht gepusht, kein Tag. Das übernimmt das Skript.
