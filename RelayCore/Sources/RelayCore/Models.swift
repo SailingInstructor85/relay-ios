@@ -75,6 +75,10 @@ public struct Session: Sendable, Hashable, Identifiable {
     public let asksText: String
     /// `pc_attached` des Gateways (2026-11-07): ein Terminal am PC zeigt die Sitzung gerade. nil: unbekannt (älteres Gateway).
     public var pcAttached: Bool?
+    /// `queue_input` des Gateways (2026-11-22): eine Codex-Unterhaltung, die am PC ohne Agenten-tmux offen ist (Terminal,
+    /// PC-App) oder die Codex nur geladen hält. Text vom Handy reiht Codex selbst in dieselbe Unterhaltung ein
+    /// (`codex queue`); Slash-Befehle, Tasten und Live-Bildschirm brauchen tmux.
+    public let queueInput: Bool
 
     public var name: String { title.isEmpty ? String(sid.prefix(8)) : title }
     public var asksYou: Bool { asks && state == "idle" }
@@ -111,7 +115,8 @@ public struct Session: Sendable, Hashable, Identifiable {
             duplicates: o["duplicates"].int ?? 1, remoteUrl: o.str("remote_url"), background: o.flag("background"),
             question: Question.from(o["question"]), hibernated: o.flag("hibernated"), closed: o.flag("closed"), closedReason: o.str("closed_reason"),
             seenAt: o.num("seen_at"), context: SessionContext.from(o["context"]),
-            asks: o.flag("asks"), asksText: o.str("asks_text"), pcAttached: o["pc_attached"].bool)
+            asks: o.flag("asks"), asksText: o.str("asks_text"), pcAttached: o["pc_attached"].bool,
+            queueInput: o.flag("queue_input"))
     }
 
     /// Ereignisse des Monitors (`session_state`, `session_started`) tragen kein `pc_attached`: die Anzeige „am PC offen“

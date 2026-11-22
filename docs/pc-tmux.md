@@ -170,3 +170,68 @@ Die App war nicht veraltet (Nutzungsprotokoll: iOS 0.3.17, Build 110). Die Ursac
 - Am Live-Dienst nach dem Neustart (22.11., 16:45): Martins drei Codex-Sitzungen vom Nachmittag stehen mit ihren
   tmux-Sitzungen `x1-zweites-Gehirn-…` in der Liste, die doppelten Platzhalter sind weg.
 - Nicht geprüft: am iPhone selbst.
+
+## Codex: dieselbe Unterhaltung am Rechner und am Handy
+
+Stand 22. November 2026 (Version 0.3.18). Backlog-Eintrag „Dieselbe Codex-Unterhaltung am Rechner und am Handy
+bedienen“: beide Geräte sehen dieselbe Unterhaltung und schreiben darin weiter, ohne Übergabe, Beenden oder
+Aussperren.
+
+### Wie es jetzt läuft
+
+Codex bringt den passenden Weg selbst mit: `codex queue --thread <id> --message <text> --resume` reiht eine Nachricht
+in eine bestehende Unterhaltung ein. Der Dienst arbeitet eingereihte Nachrichten nacheinander in derselben
+Unterhaltung ab, gleich, ob sie aus dem TUI, aus der PC-App oder vom Handy kommen. Das Gateway nutzt diesen Weg für
+jeden normalen Text an eine Codex-Sitzung, die der Dienst hält:
+
+| Wo die Unterhaltung läuft | Handy liest mit | Handy schreibt | Slash-Befehle, Tasten, Live-Bildschirm |
+|---|---|---|---|
+| In tmux (aus der App gestartet, „Wieder öffnen“, `agent-run x1`) | ja | ja, über `codex queue` | ja, über die Pane |
+| Am PC im Terminal ohne tmux (nacktes `codex`) | ja | ja, über `codex queue` | nein |
+| PC-App (ChatGPT/Codex Desktop), gleicher Ordner `~/.codex` | ja | ja, über `codex queue` (nicht mit offener App geprüft) | nein |
+| Beendet (kein Fenster mehr offen) | ja | ja, Codex setzt die Unterhaltung im Dienst fort | nein, erst nach „Wieder öffnen“ |
+
+- Zeitgleiche Eingaben: Ein Text vom Handy landet nicht mehr im Eingabefeld des TUI. Ein Entwurf, der am PC gerade
+  getippt wird, bleibt unberührt. Läuft ein Zug, startet die Nachricht danach. Es gibt einen Agentenlauf je
+  Unterhaltung, weil alles durch denselben Dienst geht. Die Absage „arbeitet gerade“ entfällt für solche Nachrichten.
+- Die Rechteprüfung bleibt, wie sie ist: `codex queue` übernimmt Modell und Einstellungen der Unterhaltung, das
+  Gateway gibt keine Schalter zum Umgehen mit (`skip_permissions: false`). Freigaben, die Codex braucht, erscheinen
+  in tmux wie bisher als Auswahlkarte in der App.
+- In der App (ab 0.3.18): Eine Unterhaltung ohne tmux trägt vom Gateway `queue_input`. Die App zeigt dann nicht
+  mehr „vom Handy nur mitlesen“, sondern „Auch am PC offen (ohne tmux): Nachrichten gehen in dieselbe Unterhaltung
+  und laufen der Reihe nach. Slash-Befehle und Live-Bildschirm gibt es hier nicht.“ Früher abgelehnte Nachrichten
+  („ohne tmux“) gehen innerhalb einer Stunde von selbst hinaus. Mit der App 0.3.17 klappt das Schreiben ebenfalls,
+  sie zeigt in diesem Fall nur noch den alten Hinweis.
+
+### Geprüft (echter Durchlauf am 22.11.2026, `testing/gateway_codex_beide_geraete.py`)
+
+- Start am Handy (tmux): Handy, Handy, Handy (mit Entwurf „ENTWURF-AM-PC“ im Eingabefeld des TUI), PC getippt,
+  Handy. Fünf Nachrichten, fünf Antworten, eine Sitzungs-ID, jede Nachricht genau einmal im Verlauf, der Entwurf
+  stand danach unverändert im Eingabefeld.
+- Start am PC im Terminal ohne tmux (pty wie ein Konsole-Fenster): am PC getippt, dann zweimal Handy. Drei
+  Nachrichten, drei Antworten, eine Sitzungs-ID, jede genau einmal. Die Sitzung meldet `queue_input`, keine
+  Prozessnummer, kein „Terminal ohne tmux“.
+- Von Hand vorab: zwei Nachrichten direkt hintereinander eingereiht, während die erste lief. Die zweite startete
+  nach der ersten (vier Züge, vier Antworten in Reihenfolge). Nach dem Schließen des TUI nahm dieselbe Unterhaltung
+  eine weitere Nachricht an und beantwortete sie.
+
+### Grenzen, offen dokumentiert
+
+- **PC-App:** Die App `/usr/lib/chatgpt` legt ihre Unterhaltungen im selben Ordner ab (im Index stehen acht mit
+  Herkunft „Codex Desktop“, zuletzt vom 9.11.2026). Das Handy listet sie und kann hineinschreiben. Ob die offene
+  PC-App eine vom Handy eingereihte Nachricht sofort anzeigt, ist nicht geprüft: Die App lief während des Nachtbaus
+  nicht, und ohne Martin lässt sie sich nicht bedienen.
+- **Freigaben ohne offenes Fenster:** Braucht Codex in einer Unterhaltung ohne tmux eine Freigabe, erscheint sie am
+  PC (TUI oder PC-App), nicht in der Relay-App. Ist dort kein Fenster offen, wartet der Lauf vermutlich, bis jemand
+  die Unterhaltung öffnet. Nicht geprüft.
+- **`/new` und `/resume` im TUI:** Wechselt man im TUI in eine andere Unterhaltung, kennt das Gateway die Pane nur
+  für die Unterhaltung, mit der das TUI gestartet ist. Text vom Handy kommt trotzdem in der richtigen Unterhaltung
+  an (er geht über die Kennung, nicht über die Pane). Live-Bildschirm und Slash-Befehle zeigen in dem Fall auf das
+  Fenster, das inzwischen etwas anderes zeigt.
+- **Zwei neue Sitzungen im selben Ordner innerhalb weniger Sekunden:** Die Zuordnung nach Startzeit nimmt das
+  jeweils nächste Paar. Für Text ist das ohne Belang, für Live-Bildschirm und Tasten könnten zwei Sitzungen
+  vertauscht sein. Nicht beobachtet.
+- **Schließen vom Handy** geht nur für Sitzungen in tmux. Eine Unterhaltung ohne tmux gehört dem Fenster am PC.
+- **Älteres Codex** (TUI hält die Sperre selbst): Verhalten wie bisher, ohne tmux lehnt das Gateway ab.
+- **Claude** ist unverändert: in tmux tippen beide Geräte in dieselbe Sitzung, ohne tmux liest das Handy mit.
+- Am iPhone ist der Ablauf noch nicht geprüft.

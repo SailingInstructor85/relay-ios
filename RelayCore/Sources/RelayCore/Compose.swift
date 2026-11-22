@@ -262,7 +262,7 @@ public enum OutboxLogic {
     public static func resendable(_ i: OutItem, session: Session?, now: Double) -> Bool {
         guard waitsForSession(i, now: now), let s = session, let e = i.error else { return false }
         guard s.alive, !s.exited, !s.closed, !s.placeholder, s.state == "idle" else { return false }
-        if DeskTerminal.isRefusal(e) { return !DeskTerminal.isDeskTerminal(s) && s.liveTmux != nil }
+        if DeskTerminal.isRefusal(e) { return !DeskTerminal.isDeskTerminal(s) && (s.liveTmux != nil || QueueInput.applies(s)) }
         return !DeskTerminal.isDeskTerminal(s)
     }
 
@@ -293,6 +293,7 @@ public enum OutboxLogic {
             if isBusyRefusal(i.error ?? "") { return "Nicht gesendet: die Sitzung arbeitet gerade" }
             if DeskTerminal.isRefusal(i.error ?? "") { return DeskTerminal.statusText }
             if SubmitCheck.isStuck(i.error ?? "") { return "Nicht abgeschickt: " + SubmitCheck.short }
+            if QueueInput.isSlashRefusal(i.error ?? "") { return "Nicht gesendet: " + QueueInput.slashText }
             return "Nicht gesendet: " + (i.error ?? "abgelehnt").replacingOccurrences(of: "not sent: ", with: "")
         case .sending: return "sendet…"
         case .queued:

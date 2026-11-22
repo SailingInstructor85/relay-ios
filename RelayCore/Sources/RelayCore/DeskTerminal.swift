@@ -11,9 +11,11 @@ public enum DeskTerminal {
     public static func isRefusal(_ message: String) -> Bool { message.lowercased().contains("outside tmux") }
 
     /// Die Sitzung lebt am PC außerhalb einer Agenten-tmux-Sitzung: ein nacktes `claude` (Codex, agy) im Terminal.
-    /// `claude --bg`-Sitzungen zählen nicht (attachable: das Gateway öffnet sie bei Bedarf selbst).
+    /// `claude --bg`-Sitzungen zählen nicht (attachable: das Gateway öffnet sie bei Bedarf selbst), Codex-Unterhaltungen
+    /// mit `queue_input` auch nicht (dort kommt Text vom Handy ohne tmux an, siehe `QueueInput`).
     public static func isDeskTerminal(_ s: Session) -> Bool {
         s.alive && !s.exited && !s.closed && !s.background && !s.attachable && s.tmuxSession == nil && !s.placeholder
+            && !s.queueInput
     }
 
     public static let statusText = "Nicht gesendet: die Sitzung ist am PC in einem Terminal ohne tmux offen"
@@ -31,6 +33,25 @@ public enum DeskTerminal {
             ?? "Am PC beenden und dort in tmux neu öffnen, dann geht es weiter."
         return "Am PC in einem Terminal ohne tmux offen: vom Handy nur mitlesen. \(how) Nachrichten warten im Postausgang und gehen danach von selbst hinaus."
     }
+}
+
+/// Dieselbe Codex-Unterhaltung am Rechner und am Handy (Martin, 2026-11-22). Seit Codex 0.171 laufen alle Unterhaltungen
+/// über einen gemeinsamen Dienst am PC. Ist eine Unterhaltung dort ohne Agenten-tmux offen (Terminal, PC-App), meldet
+/// das Gateway `queue_input`: Text vom Handy reiht Codex selbst in dieselbe Unterhaltung ein, hinter einem laufenden
+/// Zug und ohne einen Entwurf am PC anzufassen. Nichts wird gesperrt oder beendet. Nur Slash-Befehle, Tasten und der
+/// Live-Bildschirm brauchen tmux.
+public enum QueueInput {
+    public static func applies(_ s: Session) -> Bool {
+        s.queueInput && s.alive && !s.exited && !s.closed && s.liveTmux == nil
+    }
+
+    /// Hinweis über der Eingabe.
+    public static let hint = "Auch am PC offen (ohne tmux): Nachrichten gehen in dieselbe Unterhaltung und laufen der Reihe nach. Slash-Befehle und Live-Bildschirm gibt es hier nicht."
+
+    /// Die Absage des Gateways (`adapters/codex.py send()`), wenn ein Slash-Befehl in eine solche Unterhaltung soll.
+    public static func isSlashRefusal(_ message: String) -> Bool { message.lowercased().contains("slash commands and text without enter") }
+
+    public static let slashText = "Slash-Befehle gehen nur, wenn die Unterhaltung in tmux läuft. Normale Nachrichten kommen an."
 }
 
 /// Anzeige, ob die Sitzung gerade auch am PC offen ist (Chat-Kopf und Sitzungsliste). Nur Anzeige: keine Sperre, keine

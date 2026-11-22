@@ -56,6 +56,12 @@ iPhone 16 Pro (iOS 17 oder neuer).
   liest das Handy nur mit: Nachrichten warten im Postausgang, über der Eingabe steht ein Hinweis mit dem Befehl, der
   die Sitzung am PC in tmux neu öffnet (`claude --resume <id>`); danach gehen die wartenden Nachrichten von selbst hinaus. Den Knopf „Am PC beenden und hier fortsetzen“ gibt es
   seit 0.3.16 nicht mehr. Damit der Fall gar nicht eintritt, `claude` am PC per Wrapper in tmux starten: `docs/pc-tmux.md`.
+- **Codex am Rechner und am Handy** (seit 0.3.18, braucht das Gateway vom 22.11.2026): Dieselbe Codex-Unterhaltung
+  lässt sich an beiden Geräten weiterschreiben, ohne Übergabe und ohne dass ein Gerät ausgesperrt wird. Nachrichten
+  vom Handy reiht Codex selbst in die Unterhaltung ein: Sie laufen der Reihe nach, auch wenn am PC gerade ein Zug
+  läuft oder ein Entwurf im Eingabefeld steht. Das gilt für Sitzungen aus der App (tmux) und für Unterhaltungen, die
+  am PC in einem Terminal ohne tmux offen sind. Dort stehen über der Eingabe der Hinweis „Auch am PC offen (ohne
+  tmux)“, Slash-Befehle und Live-Bildschirm gibt es nur in tmux. Grenzen und Prüfstand: `docs/pc-tmux.md`.
 - **Telefonzugriff für Agenten** (Einstellungen → „Telefonzugriff für Agenten“, Stufe 1, nur Lesen): Agenten fragen
   über das Gateway Geräteinfos, Dateien aus freigegebenen Ordnern der Dateien-App (auch Google Drive), die neuesten
   Fotos oder die Zwischenablage ab. Jeder Bereich hat einen Schalter (anfangs aus), Lesen läuft dann ohne Rückfrage,

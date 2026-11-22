@@ -225,6 +225,18 @@ struct ChatView: View {
         .accessibilityIdentifier("deskHint")
     }
 
+    /// Codex-Unterhaltung, die am PC ohne tmux offen ist: Text vom Handy kommt trotzdem an (QueueInput). Nur Hinweis.
+    private var queueHint: some View {
+        HStack(spacing: 8) {
+            Image(systemName: PCPresence.symbol).foregroundStyle(.secondary)
+            Text(QueueInput.hint).font(.caption2).foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal).padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("queueHint")
+    }
+
     /// Knopf „Tastatur ausblenden“: am rechten Ende der Schnellantwort-Zeile statt in der Leiste über der Tastatur, wo
     /// er Senden und Mikrofon teilweise verdeckte (Martin, 2026-11-07). Tippfläche mindestens 44 pt.
     private var hideKeyboardButton: some View {
@@ -263,6 +275,7 @@ struct ChatView: View {
     private var inputBar: some View {
         VStack(spacing: 6) {
             if let s = session, DeskTerminal.isDeskTerminal(s) { deskHint(s) }
+            if let s = session, QueueInput.applies(s) { queueHint }
             if !slashSuggestions.isEmpty {
                 quickRow([])
                 ScrollView {
@@ -699,6 +712,9 @@ struct ChatView: View {
             UsageRecorder.shared.content("chat", "nicht abgeschickt (eingabefeld)", session: s.key, kind: "text", text: t)
             clearField()
             error = SubmitCheck.text
+        } catch let e as RelayError where e.remote && QueueInput.isSlashRefusal(e.message) {
+            // Codex am PC ohne tmux: Text kommt an, Slash-Befehle nicht (der Text bleibt im Feld)
+            error = QueueInput.slashText
         } catch {
             if OutboxLogic.retries(error) { queue() } else { self.error = error.localizedDescription }
         }

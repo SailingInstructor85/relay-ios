@@ -39,6 +39,41 @@ final class PCPresenceTests: XCTestCase {
         XCTAssertFalse(DeskTerminal.isRefusal("session is busy"))
     }
 
+    /// Codex seit 0.171 (2026-11-22): Unterhaltung am PC ohne Agenten-tmux offen, das Gateway reiht Text über Codex ein.
+    func testQueueInputIsNotADeskTerminal() {
+        func codex(_ extra: String) -> Session {
+            let base = #"{"key":"codex:x1:01a2","alive":true,"state":"idle","attachable":false,"tmux_session":null}"#
+            guard case .object(let b) = JSON.parse(base)!, case .object(let e) = JSON.parse("{" + extra + "}")! else { fatalError("Testdaten") }
+            return Session.from(.object(b.merging(e) { $1 }))!
+        }
+        let open = codex(#""queue_input":true"#)
+        XCTAssertTrue(open.queueInput)
+        XCTAssertTrue(QueueInput.applies(open))
+        XCTAssertFalse(DeskTerminal.isDeskTerminal(open))      // kein „nur mitlesen“, nichts wartet im Postausgang
+        XCTAssertEqual(PCPresence.of(open), .unknown)           // ob gerade ein Fenster offen ist, weiß das Gateway nicht
+        XCTAssertEqual(open.target, open.key)                   // gesendet wird an den Schlüssel, nicht an tmux
+        // älteres Gateway oder Codex, das die Sperre selbst hält: wie bisher „am PC ohne tmux“
+        let old = codex("")
+        XCTAssertFalse(old.queueInput)
+        XCTAssertFalse(QueueInput.applies(old))
+        XCTAssertTrue(DeskTerminal.isDeskTerminal(old))
+        // beendet oder in tmux: kein Hinweis
+        XCTAssertFalse(QueueInput.applies(codex(#""queue_input":true,"alive":false,"state":"exited""#)))
+        XCTAssertFalse(QueueInput.applies(session(#""attachable":true,"tmux_session":"x1-v-1","queue_input":true"#)))
+        // eine früher abgelehnte Nachricht („ohne tmux“) geht von selbst hinaus, sobald das Gateway einreihen kann
+        let refused = OutItem(id: "a", key: open.key, text: "zweite Nachricht", at: 1000, state: .failed,
+                              error: "this session is open in a Desktop terminal outside tmux: reply there")
+        XCTAssertTrue(OutboxLogic.resendable(refused, session: open, now: 1010))
+        XCTAssertFalse(OutboxLogic.resendable(refused, session: old, now: 1010))
+        // Slash-Befehl in eine solche Unterhaltung: klare Absage auf Deutsch
+        let msg = "not sent: slash commands and text without Enter need the conversation open in tmux (it is open at the PC without it); plain messages go through"
+        XCTAssertTrue(QueueInput.isSlashRefusal(msg))
+        XCTAssertFalse(QueueInput.isSlashRefusal("session is busy"))
+        XCTAssertFalse(DeskTerminal.isRefusal(msg))             // sonst wartete der Befehl im Postausgang und ginge immer wieder hinaus
+        let slash = OutItem(id: "b", key: open.key, text: "/status", at: 1000, state: .failed, error: msg)
+        XCTAssertEqual(OutboxLogic.status(slash, connected: true, network: true, now: 1010), "Nicht gesendet: " + QueueInput.slashText)
+    }
+
     func testMonitorEventsKeepTheMark() {
         let listed = session(#""attachable":true,"tmux_session":"c1-x-1","pc_attached":true"#)
         let fromEvent = session(#""attachable":true,"tmux_session":"c1-x-1","state":"busy""#)
