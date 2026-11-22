@@ -186,6 +186,21 @@ final class ComposeTests: XCTestCase {
         XCTAssertEqual(ChatHeader.subtitle(model: "", effort: "", tool: "codex", cwd: "", tokens: nil), "Codex")
     }
 
+    func testChatHeaderAgent() {
+        // der Agent steht als eigene Marke im Kopf, der Rest des Untertitels kommt ohne ihn aus
+        XCTAssertEqual(ChatHeader.details(model: "claude-opus-5-5", effort: "low", cwd: "/home/martin/relay", tokens: 120_000),
+                       "opus 5.5 · low effort · ~/relay · 120k ctx")
+        XCTAssertEqual(ChatHeader.details(model: "", effort: "", cwd: "", tokens: nil), "")
+        XCTAssertEqual(ChatHeader.details(model: "", effort: "", cwd: "/home/martin/x", tokens: 0), "~/x")
+        XCTAssertEqual(ChatHeader.agentLabel("claude"), "Agent: Claude")
+        XCTAssertEqual(ChatHeader.agentLabel("codex"), "Agent: Codex")
+        XCTAssertEqual(ChatHeader.agentLabel("agy"), "Agent: Antigravity")
+        XCTAssertEqual(ChatHeader.agentLabel(""), "")
+        XCTAssertEqual(ChatHeader.agentLine(tool: "codex", alias: "x1"), "Agent: Codex · Konto x1")
+        XCTAssertEqual(ChatHeader.agentLine(tool: "claude", alias: ""), "Agent: Claude")
+        XCTAssertEqual(ChatHeader.agentLine(tool: "", alias: "c1"), "Konto c1")
+    }
+
     func testSendWhileDictating() {
         XCTAssertTrue(DictationSend.canSend(input: "", listening: true, sending: false, hasSession: true))
         XCTAssertTrue(DictationSend.canSend(input: " hi ", listening: false, sending: false, hasSession: true))

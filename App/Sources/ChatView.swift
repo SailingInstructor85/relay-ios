@@ -337,7 +337,23 @@ struct ChatView: View {
         guard let s = session else { return "" }
         let tokens = chatCtx.tokens > 0 ? chatCtx.tokens : s.context?.tokens
         let model = chatCtx.model.isEmpty ? (s.context?.model ?? "") : chatCtx.model
-        return ChatHeader.subtitle(model: model, effort: chatCtx.effort, tool: s.tool, cwd: s.cwd, tokens: tokens)
+        return ChatHeader.details(model: model, effort: chatCtx.effort, cwd: s.cwd, tokens: tokens)
+    }
+
+    /// Welcher Agent in der Sitzung arbeitet: Symbol und Name, farbig, vor dem Untertitel. Feste Breite, damit der Name
+    /// nie abgeschnitten wird (der Rest des Untertitels kürzt sich vorn). Kommt aus `session.tool`, gilt also auch für
+    /// fortgesetzte Sitzungen und folgt jeder Aktualisierung der Liste.
+    @ViewBuilder private var agentBadge: some View {
+        if let s = session, !s.tool.isEmpty {
+            HStack(spacing: 2) {
+                Image(systemName: s.toolIcon).font(.system(size: 9, weight: .bold))
+                Text(ChatHeader.toolName(s.tool)).font(.caption2.weight(.semibold)).lineLimit(1)
+            }
+            .foregroundStyle(s.toolColor)
+            .fixedSize()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(ChatHeader.agentLabel(s.tool)).accessibilityIdentifier("agentBadge")
+        }
     }
 
     @ViewBuilder private var titleView: some View {
@@ -349,7 +365,12 @@ struct ChatView: View {
                         .accessibilityLabel(PCPresence.openLabel).accessibilityIdentifier("pcOpen")
                 }
             }
-            Text(headerSubtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
+            HStack(spacing: 4) {
+                agentBadge
+                if !headerSubtitle.isEmpty {
+                    Text(headerSubtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
+                }
+            }
             if let la = session?.lastActivity, la > 0 {
                 // the clock is read anew on every pass and when the app comes back (a timer alone sleeps with the phone)
                 TimelineView(.periodic(from: .now, by: 30)) { _ in
@@ -505,7 +526,7 @@ struct ChatView: View {
                         Button(role: .destructive) { Task { await model.close(s) } } label: { Label("Sitzung schließen", systemImage: "xmark.circle") }
                     }
                     if !s.remoteUrl.isEmpty, let u = URL(string: s.remoteUrl) { Link(destination: u) { Label("In Claude öffnen", systemImage: "safari") } }
-                    Section("\(s.alias) · \(s.tool)") {
+                    Section(ChatHeader.agentLine(tool: s.tool, alias: s.alias)) {
                         Text(s.cwd)
                         if let c = s.context { Text("Kontext: \(c.label) (\(c.pct) %)") }
                     }

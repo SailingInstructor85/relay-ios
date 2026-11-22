@@ -117,6 +117,10 @@ extension Session {
     var toolIcon: String {
         switch tool { case "codex": return "chevron.left.forwardslash.chevron.right"; case "agy": return "sparkles"; default: return "asterisk" }
     }
+    /// Farbe der Agentenmarke im Chat-Kopf: Claude orange, Codex türkis, Antigravity violett.
+    var toolColor: Color {
+        switch tool { case "codex": return .teal; case "agy": return .purple; default: return .orange }
+    }
 }
 
 /// The state of a session as a small shape: spinner (busy), red ring with dot (waits), green dot (ready), hollow ring (ended).

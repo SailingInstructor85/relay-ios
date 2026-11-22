@@ -576,6 +576,31 @@ public enum ChatHeader {
         return parts.joined(separator: " · ")
     }
 
+    /// Der Untertitel ohne den Agenten: "opus 5.5 · low effort · ~/ordner · 120k ctx". Der Agent steht im Kopf als eigene
+    /// Marke davor (`agentLabel`), damit er nie abgeschnitten wird (Martin, 2026-11-22: im langen Untertitel fiel
+    /// "Claude" oder "Codex" vorn weg, sobald der Ordner lang war).
+    public static func details(model: String, effort: String, cwd: String, tokens: Int?) -> String {
+        var parts: [String] = []
+        let m = ContextText.model(model)
+        if !m.isEmpty { parts.append(m) }
+        if !effort.isEmpty { parts.append("\(effort) effort") }
+        if !cwd.isEmpty { parts.append(shortPath(cwd)) }
+        if let t = tokens, t > 0 { parts.append(ContextText.tokens(t) + " ctx") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Für VoiceOver und die UI-Tests: "Agent: Codex". Leeres Werkzeug (Sitzung noch nicht geladen): leer.
+    public static func agentLabel(_ tool: String) -> String {
+        tool.isEmpty ? "" : "Agent: " + toolName(tool)
+    }
+
+    /// Zeile im Sitzungsmenü: "Agent: Codex · Konto x1".
+    public static func agentLine(tool: String, alias: String) -> String {
+        let a = agentLabel(tool)
+        if alias.isEmpty { return a }
+        return a.isEmpty ? "Konto \(alias)" : "\(a) · Konto \(alias)"
+    }
+
     public static let models = ["opus", "sonnet", "haiku"]
     public static let efforts = ["low", "medium", "high", "xhigh", "max"]
 }

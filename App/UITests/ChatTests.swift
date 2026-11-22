@@ -237,6 +237,26 @@ final class ChatTests: RelayTestCase {
         XCTAssertGreaterThanOrEqual(watches, 2, "das Mitlesen wurde nach der neuen Verbindung nicht neu angemeldet")
     }
 
+    /// Im Chat-Kopf steht, welcher Agent arbeitet (Martin, 2026-11-22): je eine Claude- und eine Codex-Sitzung.
+    func test17_AgentInHeader() {
+        launchConnected()
+        openSession("API Refactoring")
+        XCTAssertTrue(id("agentBadge").waitForExistence(timeout: 6), "Agentenmarke fehlt (Claude)")
+        if id("agentBadge").label != "Agent: Claude" { notes.append("Agentenmarke Claude: \(id("agentBadge").label)") }
+        expect("opus", 3, soft: true)
+        shot("kopf-claude")
+        back()
+        settle(1)
+        openSession("Datenbank migrieren")
+        XCTAssertTrue(id("agentBadge").waitForExistence(timeout: 6), "Agentenmarke fehlt (Codex)")
+        XCTAssertEqual(id("agentBadge").label, "Agent: Codex")
+        shot("kopf-codex")
+        tapID("chatMenu"); settle(0.6)
+        expect("Agent: Codex · Konto x1", 3, soft: true)
+        shot("kopf-codex-menue")
+        app.tap()
+    }
+
     func test12_HideKeyboard() {
         // Tastatur offen: der Knopf sitzt rechts in der Schnellantwort-Zeile über dem Eingabefeld (seit 0.3.8), verdeckt
         // weder Senden noch Mikrofon und schließt die Tastatur; der getippte Text bleibt im Feld.

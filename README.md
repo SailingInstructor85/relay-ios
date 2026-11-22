@@ -13,7 +13,8 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Chat pro Sitzung:** Transkript mit Nachladen älterer Nachrichten, Live-Anhänge (`watch`), eingeklappte
   Werkzeugaufrufe, Codeblöcke, Statuszeile während die Sitzung arbeitet. Lesemodus über den Knopf oben rechts
   (Leisten und Tastatur weg, der Verlauf füllt den Bildschirm). Die Tastatur schließt ein Knopf rechts in der Schnellantwort-Zeile über dem Eingabefeld,
-  ein Tipp in den Verlauf oder Wischen nach unten.
+  ein Tipp in den Verlauf oder Wischen nach unten. Im Kopf steht unter dem Namen, welcher Agent in der Sitzung arbeitet
+  (Claude oder Codex, farbig mit Symbol), dahinter Modell, Ordner und Kontext; dieselbe Angabe steht unten im Sitzungsmenü.
 - **Antwortkarten** für Fragen, Auswahllisten (`/model`, Berechtigungsabfragen, Plan-Freigabe) und Panels (`/usage`,
   `/status`), mit `expect_menu`, damit eine veraltete Karte keinen neuen Dialog beantwortet
 - **Live-Bildschirm** (tmux-Aufnahme) mit Tastenleiste: Esc, Enter, Pfeiltasten, Tab, Ctrl-C, Ziffern
