@@ -504,27 +504,38 @@ public enum RunningText {
 
 // MARK: Tastatur und Lesemodus
 
-/// Knopf „Tastatur ausblenden“ im Chat (2026-11-07): Er schließt die Tastatur, Text und Diktat bleiben dabei.
-/// Seit 0.3.8 sitzt er nicht mehr in der Leiste über der Tastatur (dort lag er über Senden und Mikrofon), sondern am
-/// rechten Ende der Schnellantwort-Zeile. Ohne Schnellantworten bekommt er eine eigene schmale Zeile darüber.
+/// „Tastatur ausblenden“ im Chat (2026-11-07): schließt die Tastatur, Text und Diktat bleiben dabei.
+/// Seit dem Umbau der Eingabeleiste (Schnellantworten und Slash-Chips entfernt) ist es ein Eintrag im Befehlsmenü
+/// („/“ links neben der Büroklammer) und erscheint dort nur bei offener Tastatur. In der Leiste über der Tastatur
+/// lag der Knopf früher über Senden und Mikrofon, deshalb steht er dort nicht.
 public enum KeyboardBar {
     public static let hideLabel = "Tastatur ausblenden"
-    /// Mindestgröße der Tippfläche (Apple: 44 pt).
-    public static let minTapSize: Double = 44
+}
 
-    /// Was die Zeile über dem Eingabefeld zeigt.
-    public struct Row: Equatable, Sendable {
-        public let quickReplies: Bool, hideButton: Bool
-        public init(quickReplies: Bool, hideButton: Bool) { self.quickReplies = quickReplies; self.hideButton = hideButton }
-        /// Die Zeile erscheint überhaupt nur, wenn sie etwas zeigt.
-        public var visible: Bool { quickReplies || hideButton }
+/// Befehlsmenü an der Eingabeleiste des Chats: ersetzt die frühere Chipzeile. Oben die eingestellten Befehle des
+/// Werkzeugs, im Untermenü die übrigen Standardbefehle, dazu „Esc senden“ und „Tastatur ausblenden“.
+public enum CommandMenu {
+    public static let label = "Befehle"
+    public static let moreLabel = "Weitere Befehle"
+    public static let escLabel = "Esc senden"
+
+    public struct Items: Equatable, Sendable {
+        /// Die vom Nutzer eingestellten Befehle (jeder einmal, in seiner Reihenfolge).
+        public let top: [String]
+        /// Standardbefehle des Werkzeugs, die nicht schon oben stehen.
+        public let more: [String]
+        public init(top: [String], more: [String]) { self.top = top; self.more = more }
     }
 
-    /// Schnellantworten stehen, sofern eingestellt und keine Slash-Vorschläge offen sind. Der Knopf erscheint nur bei
-    /// offener Tastatur, auch während Slash-Vorschläge offen sind.
-    public static func row(quickCount: Int, keyboardOpen: Bool, slashSuggestions: Bool) -> Row {
-        Row(quickReplies: quickCount > 0 && !slashSuggestions, hideButton: keyboardOpen)
+    public static func items(tool: String, user: [String]) -> Items {
+        var seen = Set<String>()
+        let top = user.filter { seen.insert($0).inserted }
+        let more = SlashCatalog.forTool(tool, user: top).filter { !seen.contains($0) }
+        return Items(top: top, more: more)
     }
+
+    /// Ob „Tastatur ausblenden“ im Menü steht: nur bei offener Tastatur.
+    public static func showsHideKeyboard(keyboardOpen: Bool) -> Bool { keyboardOpen }
 }
 
 /// Lesemodus im Chat (2026-11-07): Navigationsleiste, Eingabezeile und Tastatur verschwinden, der Verlauf füllt den

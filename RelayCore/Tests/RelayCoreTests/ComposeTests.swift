@@ -336,26 +336,33 @@ final class KeyboardBarTests: XCTestCase {
     func testHideButtonLabel() {
         XCTAssertEqual(KeyboardBar.hideLabel, "Tastatur ausblenden")
     }
+}
 
-    func testRowShowsHideButtonOnlyWithOpenKeyboard() {
-        let open = KeyboardBar.row(quickCount: 3, keyboardOpen: true, slashSuggestions: false)
-        XCTAssertEqual(open, KeyboardBar.Row(quickReplies: true, hideButton: true))
-        let closed = KeyboardBar.row(quickCount: 3, keyboardOpen: false, slashSuggestions: false)
-        XCTAssertEqual(closed, KeyboardBar.Row(quickReplies: true, hideButton: false))
-        XCTAssertTrue(closed.visible)
+final class CommandMenuTests: XCTestCase {
+    func testUserCommandsOnTopRestInSubmenu() {
+        let m = CommandMenu.items(tool: "claude", user: SlashChips.parse(SlashChips.defaults["claude"] ?? ""))
+        XCTAssertEqual(m.top, ["/compact", "/clear", "/model", "/usage", "/resume", "/cost"])
+        XCTAssertTrue(m.more.contains("/status"))
+        XCTAssertTrue(m.more.contains("/effort"))
+        XCTAssertTrue(Set(m.top).isDisjoint(with: m.more), "Befehl steht doppelt")
+        XCTAssertEqual(Set(m.top + m.more).count, (m.top + m.more).count)
     }
 
-    func testRowWithoutQuickRepliesIsOwnSlimRowOnlyWhileTyping() {
-        let typing = KeyboardBar.row(quickCount: 0, keyboardOpen: true, slashSuggestions: false)
-        XCTAssertEqual(typing, KeyboardBar.Row(quickReplies: false, hideButton: true))
-        XCTAssertTrue(typing.visible)
-        XCTAssertFalse(KeyboardBar.row(quickCount: 0, keyboardOpen: false, slashSuggestions: false).visible)
+    func testDuplicatesAndUnknownTool() {
+        let m = CommandMenu.items(tool: "codex", user: ["/status", "/mine", "/status"])
+        XCTAssertEqual(m.top, ["/status", "/mine"])
+        XCTAssertFalse(m.more.contains("/status"))
+        XCTAssertTrue(m.more.contains("/model"))
+        let empty = CommandMenu.items(tool: "claude", user: [])
+        XCTAssertTrue(empty.top.isEmpty)
+        XCTAssertEqual(empty.more.first, "/clear")
+        XCTAssertEqual(CommandMenu.items(tool: "fremd", user: ["/a"]), CommandMenu.Items(top: ["/a"], more: []))
     }
 
-    func testSlashSuggestionsHideQuickRepliesButKeepTheButton() {
-        let r = KeyboardBar.row(quickCount: 3, keyboardOpen: true, slashSuggestions: true)
-        XCTAssertEqual(r, KeyboardBar.Row(quickReplies: false, hideButton: true))
-        XCTAssertGreaterThanOrEqual(KeyboardBar.minTapSize, 44)
+    func testHideKeyboardOnlyWithOpenKeyboard() {
+        XCTAssertTrue(CommandMenu.showsHideKeyboard(keyboardOpen: true))
+        XCTAssertFalse(CommandMenu.showsHideKeyboard(keyboardOpen: false))
+        XCTAssertEqual(CommandMenu.escLabel, "Esc senden")
     }
 }
 
