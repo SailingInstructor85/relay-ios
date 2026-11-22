@@ -14,6 +14,9 @@ Control files in $MOCK_DIR/control (the UI tests or the CI script create them):
                  phone_command, phone_command_2, late_reply (an answer in "API Refactoring"; left in the control
                  directory while offline, the next connection emits it), desk_to_tmux ("Skript ohne tmux" now runs in tmux)
   routines_off   the team is not configured: routines, routine_run, routine_set, team_send answer enabled: false
+  inbox_off      a gateway without inbox and calendar: inbox_feed, inbox_search, inbox_mail, inbox_mail_suggest and
+                 calendar answer "unknown rpc" (inbox_put stays: it is the phone bridge)
+  inbox_empty    inbox_feed and inbox_mail_suggest answer without items, calendar without events
 Logs: $MOCK_DIR/rpc.jsonl (every request received), $MOCK_DIR/mock.log (text).
 """
 import base64, json, os, struct, sys, threading, time, zlib, hashlib, re
@@ -910,6 +913,186 @@ def rpc_phone_command_result(p):
 
 def rpc_inbox_put(p):
     return {"stored": len(p.get("items", [])), "duplicates": 0}
+
+
+# ---------------------------------------------------------------- Posteingang und Kalender (nur lesend)
+# Felder wie im Gateway (PROTOCOL.md "Inbox" und `calendar`; inbox.py, mailsuggest.py, agenda.py). Alle Daten erfunden.
+# Steuerdateien: inbox_off (das Gateway kennt die RPCs nicht), inbox_empty (nichts im Posteingang, keine Termine).
+
+def _inbox_check(method):
+    if os.path.exists(os.path.join(CTL, "inbox_off")):
+        raise RpcError(f"unknown rpc {method!r}")
+
+
+def _inbox_empty():
+    return os.path.exists(os.path.join(CTL, "inbox_empty"))
+
+
+# (id, Minuten vor jetzt, Absender, Betreff, Anhänge, Text)
+MAILS = [
+    ("1042", 12, "Anna Muster <anna.muster@example.org>", "Unterlagen für Donnerstag", ["Ablaufplan.pdf", "Teilnehmer.xlsx"],
+     "Hallo,\n\nanbei der Ablaufplan für Donnerstag und die Liste der Teilnehmer. Bitte schau bis Mittwoch kurz drüber, "
+     "ob die Zeiten für dich passen.\n\nDer Raum im zweiten Stock ist ab 9 Uhr reserviert. Kaffee und Wasser stehen bereit.\n\n"
+     "Viele Grüße\nAnna"),
+    ("1041", 95, "Stadtbibliothek Beispielstadt <service@bibliothek.example.org>", "Ihre Vormerkung liegt bereit", [],
+     "Guten Tag,\n\ndas vorgemerkte Buch liegt bis Samstag an der Ausleihe für Sie bereit.\n\n"
+     "Mit freundlichen Grüßen\nIhre Stadtbibliothek"),
+    ("1040", 260, "Ben Beispiel <ben@example.com>", "Re: Wanderung am Wochenende", [],
+     "Hi,\n\nSamstag passt mir gut. Treffpunkt um 8:30 Uhr am Parkplatz, ich bringe die Karte mit.\n\nBis dann\nBen"),
+    ("1039", 60 * 26, "Rundbrief Gartenfreunde <rundbrief@gartenfreunde.example.org>", "Rundbrief November: Beete winterfest machen", [],
+     "Liebe Gartenfreunde,\n\nin dieser Ausgabe: Beete abdecken, Werkzeug pflegen und der Termin für das Wintertreffen.\n\n"
+     "Ihr Vorstand"),
+    ("1038", 60 * 31, "Carla Schmidt <carla.schmidt@example.org>", "Protokoll der Sitzung", ["Protokoll.pdf"],
+     "Hallo zusammen,\n\ndas Protokoll der letzten Sitzung hängt an. Ergänzungen bitte bis Freitag an mich.\n\nGruß\nCarla"),
+    ("1037", 60 * 75, "Beispielladen <angebote@laden.example.com>", "Nur diese Woche: Herbstangebote", [],
+     "Guten Tag,\n\ndiese Woche gibt es Herbstangebote in allen Abteilungen.\n\nIhr Beispielladen"),
+    ("1036", 60 * 99, "Hausverwaltung Musterweg <verwaltung@musterweg.example.org>", "Ablesung der Zähler", [],
+     "Sehr geehrte Damen und Herren,\n\ndie Zähler werden am Dienstag zwischen 8 und 12 Uhr abgelesen. "
+     "Bitte sorgen Sie für Zugang zum Keller.\n\nMit freundlichen Grüßen\nIhre Hausverwaltung"),
+    ("1035", 60 * 24 * 6 - 30, "", "", [], ""),  # ohne Absender und Betreff
+]
+MAIL_ACCOUNT = "WEB.DE"
+MAIL_TO = "ich@example.org"
+
+
+def _sender_name(frm):
+    m = re.match(r'\s*"?([^"<]+?)"?\s*<([^>]+)>', frm or "")
+    return (m.group(1).strip() or m.group(2)) if m else (frm or "").strip() or "?"
+
+
+def _mail_ts(minutes):
+    # wie das Gateway: aus der lokalen Zeit auf die Minute genau
+    return float(int((time.time() - minutes * 60) // 60) * 60)
+
+
+def _mail_item(m):
+    mid, minutes, frm, subject, att, _body = m
+    return {"type": "mail", "id": mid, "source": "mail", "account": MAIL_ACCOUNT, "title": _sender_name(frm), "from": frm,
+            "subject": subject, "ts": _mail_ts(minutes), **({"attachments": True} if att else {})}
+
+
+def rpc_inbox_feed(p):
+    _inbox_check("inbox_feed")
+    days = min(max(int(p.get("days") or 7), 1), 30)
+    limit = min(max(int(p.get("limit") or 300), 1), 500)
+    items = [] if _inbox_empty() else [_mail_item(m) for m in MAILS if m[1] <= days * 24 * 60]
+    return {"items": items[:limit], "days": days}
+
+
+def rpc_inbox_search(p):
+    _inbox_check("inbox_search")
+    q = str(p.get("q") or "").strip()
+    if not 2 <= len(q) <= 200:
+        raise RpcError("the search needs 2 to 200 characters")
+    limit = min(max(int(p.get("limit") or 50), 1), 200)
+    words = [w.rstrip("*").casefold() for w in q.split()]
+    items = []
+    for m in MAILS:
+        hay = f"{m[2]} {m[3]} {m[5]}".casefold()
+        if all(w in hay for w in words):
+            body = re.sub(r"\s+", " ", m[5]).strip()
+            at = max(0, body.casefold().find(words[0]) - 40) if words[0] in body.casefold() else 0
+            items.append({**_mail_item(m), "snippet": body[at:at + 160]})
+    # ein älterer Treffer aus dem Archiv und eine eigene, gesendete Mail: die Suche reicht über alle Jahre
+    if all(w in "rechnung handwerker archiv".casefold() for w in words) or "rechn" in q.casefold():
+        items.append({"type": "mail", "id": "311", "source": "mail", "account": "Archive", "title": "Handwerker Beispiel",
+                      "from": "Handwerker Beispiel <buero@handwerk.example.org>", "subject": "Rechnung 2024-118",
+                      "ts": _mail_ts(60 * 24 * 700), "snippet": "anbei die Rechnung für die Arbeiten im Bad", "attachments": True})
+        items.append({"type": "mail", "id": "312", "source": "mail", "account": MAIL_ACCOUNT, "title": "To Handwerker Beispiel",
+                      "from": MAIL_TO, "subject": "Re: Rechnung 2024-118", "ts": _mail_ts(60 * 24 * 699),
+                      "snippet": "die Rechnung ist überwiesen", "sent": True})
+    items.sort(key=lambda i: -i["ts"])
+    return {"items": items[:limit], "q": q, "mail_total": len(items)}
+
+
+def rpc_inbox_mail(p):
+    _inbox_check("inbox_mail")
+    mid = str(p.get("id") or "")
+    if not re.fullmatch(r"\d{1,12}", mid):
+        raise RpcError("bad mail id")
+    extra = {"311": ("Handwerker Beispiel <buero@handwerk.example.org>", "Rechnung 2024-118", 60 * 24 * 700, ["Rechnung-2024-118.pdf"],
+                     "Guten Tag,\n\nanbei die Rechnung für die Arbeiten im Bad.\n\nMit freundlichen Grüßen\nHandwerker Beispiel"),
+             "312": (MAIL_TO, "Re: Rechnung 2024-118", 60 * 24 * 699, [], "Guten Tag,\n\ndie Rechnung ist überwiesen.\n\nFreundliche Grüße")}
+    m = next((m for m in MAILS if m[0] == mid), None)
+    if m:
+        _, minutes, frm, subject, att, body = m
+    elif mid in extra:
+        frm, subject, minutes, att, body = extra[mid]
+    else:
+        raise RpcError("no such mail")
+    return {"id": mid, "ts": _mail_ts(minutes), "from": frm, "to": MAIL_TO, "subject": subject, "account": MAIL_ACCOUNT,
+            "body": body, "truncated": False, "attachments": list(att), "reply_from": ""}
+
+
+def rpc_inbox_mail_suggest(p):
+    _inbox_check("inbox_mail_suggest")
+    now = time.time()
+    if _inbox_empty():
+        return {"groups": [], "ts": now}
+
+    def group(key, sender, reason, subjects, total, size):
+        mails = [{"id": str(900 - 10 * n - len(key) % 7), "subject": subjects[n % len(subjects)], "ts": _mail_ts(60 * 24 * (3 + 9 * n)),
+                  "account": MAIL_ACCOUNT, "size": size} for n in range(total)]
+        examples = list(dict.fromkeys(m["subject"] for m in mails))[:3]
+        return {"key": key, "sender": sender, "address": key, "reason": reason, "count": len(mails), "total": total,
+                "first_ts": mails[-1]["ts"], "last_ts": mails[0]["ts"], "examples": examples, "accounts": [MAIL_ACCOUNT],
+                "bytes": size * len(mails), "mails": mails}
+
+    return {"groups": [
+        group("rundbrief@gartenfreunde.example.org", "Rundbrief Gartenfreunde", "newsletter",
+              ["Rundbrief Oktober: Ernte und Lager", "Rundbrief September: Herbstschnitt", "Rundbrief August: Gießen im Urlaub"], 14, 48200),
+        group("angebote@laden.example.com", "Beispielladen", "promotions",
+              ["Nur diese Woche: Herbstangebote", "Neu eingetroffen", "Ihr Gutschein wartet"], 9, 131000),
+        group("hinweise@forum.example.org", "Forum Beispiel", "notifications",
+              ["Neue Antwort in einem Thema, dem du folgst"], 6, 9100),
+    ], "ts": now}
+
+
+def rpc_calendar(p):
+    _inbox_check("calendar")
+    from datetime import date, timedelta
+    try:
+        frm = date.fromisoformat(str(p["from"])[:10]) if p.get("from") else date.today()
+        days = min(max(int(p.get("days") or 28), 1), 120)
+    except (TypeError, ValueError):
+        raise RpcError("from must be YYYY-MM-DD and days a number") from None
+    to = frm + timedelta(days=days - 1)
+    today = date.today()
+
+    def day(n):
+        return (today + timedelta(days=n)).isoformat()
+
+    sources = [{"key": "cal:Privat", "label": "Privat", "color": "#1E88E5", "kind": "cal", "count": 0, "read_only": False, "error": "",
+                "synced": time.strftime("%Y-%m-%d %H:%M")},
+               {"key": "cal:Planung", "label": "Planung", "color": "#43A047", "kind": "cal", "count": 0, "read_only": False, "error": ""},
+               {"key": "cal:Verein", "label": "Verein", "color": "#8E24AA", "kind": "cal", "count": 0, "read_only": False, "error": ""}]
+    # (Kalender, Titel, Start, Ende, ganztägig, Serie, Ort)
+    raw = [
+        ("Privat", "Besuch der Eltern", day(0), day(1), True, False, ""),
+        ("Privat", "Zahnarzt", day(0) + " 09:30", day(0) + " 10:15", False, False, "Praxis am Markt"),
+        ("Planung", "Unterlagen durchsehen", day(0) + " 14:00", day(0) + " 15:30", False, False, ""),
+        ("Verein", "Chorprobe", day(0) + " 19:30", day(0) + " 21:00", False, True, "Gemeindehaus"),
+        ("Privat", "Werkstatt, Reifenwechsel", day(1) + " 08:00", day(1) + " 08:45", False, False, "Autohaus Beispiel"),
+        ("Planung", "Wochenplanung", day(1) + " 10:00", day(1) + " 11:00", False, True, ""),
+        ("Privat", "Abendessen mit Ben", day(3) + " 19:00", day(3) + " 22:00", False, False, "Zum Beispielwirt"),
+        ("Verein", "Wintertreffen", day(5), day(5), True, False, "Vereinsheim"),
+        ("Planung", "Nachtzug", day(6) + " 22:10", day(7) + " 06:40", False, False, "Hauptbahnhof"),
+    ]
+    events = []
+    by_label = {s["label"]: s for s in sources}
+    for cal, title, start, end, all_day, recurring, place in ([] if _inbox_empty() else raw):
+        if not (start[:10] <= to.isoformat() and max(start[:10], end[:10]) >= frm.isoformat()):
+            continue
+        src = by_label[cal]
+        src["count"] += 1
+        e = {"title": title, "start": start, "end": end, "all_day": all_day, "source": src["key"], "calendar": cal,
+             "recurring": recurring}
+        if place:
+            e["location"] = place
+        e["id"] = hashlib.sha1(f"{e['source']}\0{title}\0{start}\0{end}".encode()).hexdigest()[:12]
+        events.append(e)
+    events.sort(key=lambda e: (e["start"][:10], 0 if e["all_day"] else 1, e["start"], e["end"], e["calendar"], e["title"]))
+    return {"from": frm.isoformat(), "to": to.isoformat(), "events": events, "sources": sources, "warnings": []}
 
 
 def rpc_file_info(p):
