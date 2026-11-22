@@ -123,3 +123,50 @@ Ja. Ein lebendes `claude` ohne tmux-Pane hat ein Terminal (pty), das kein tmux-P
 Sitzungen als `pc_attached: true`, solange sie leben; `claude --bg`-Sitzungen (ohne eigenes Terminal) und von Agenten
 gestartete `claude -p`-Läufe bekommen kein Feld (unbekannt, kein Symbol). Ein Live-Ereignis gibt es dafür nicht, es
 ändert sich erst mit dem Ende der Sitzung.
+
+## Codex seit 0.171: zweite Nachricht vom Handy wurde abgelehnt
+
+Stand 22. November 2026 (Version 0.3.18, Gateway `4cbb059` und `6b9534c` in `~/relay`, Zweig `lokal-clear-beendet`).
+Backlog-Eintrag „Codex: Zweite Nachricht am Handy blockiert mit Hinweis auf PC-Sitzung“.
+
+### Befund
+
+Die App war nicht veraltet (Nutzungsprotokoll: iOS 0.3.17, Build 110). Die Ursache lag im Gateway und in einer
+Änderung von Codex:
+
+- Seit Codex 0.171 ist die Oberfläche im Terminal (TUI) nur noch ein Fenster auf einen gemeinsamen Hintergrunddienst
+  (`codex app-server`, ein Prozess für alle Unterhaltungen). Dieser Dienst hält die Sperrdatei jeder Unterhaltung
+  (`~/.codex/thread-writer-locks/<id>.lock`), nicht mehr das TUI.
+- Das Gateway fand die tmux-Pane einer Codex-Sitzung über den Prozess, der die Sperre hält. Der Dienst hängt an
+  keiner Pane. Ergebnis: Jede Codex-Sitzung galt als „lebt, aber ohne tmux“, also als Sitzung in einem Terminal am
+  PC, und `send` lehnte mit „Desktop terminal outside tmux“ ab.
+- Die erste Nachricht ging trotzdem durch, weil eine neue Sitzung zuerst als Platzhalter (`tmux-x1-…`) in der Liste
+  steht und der Platzhalter die Pane kennt. Sobald Codex die Unterhaltung nach der ersten Nachricht in seinen Index
+  schrieb, erschien sie ein zweites Mal unter ihrer echten Kennung, ohne Pane. Im Nutzungsprotokoll vom 22.11. ist
+  genau das zu sehen: „gesendet“ an `codex:x1:tmux-x1-zweites-Gehirn-24e4`, 16 Sekunden später „abgelehnt (PC ohne
+  tmux)“ an `codex:x1:01a203d5-…`. Am PC lief dafür kein eigenes Fenster, daher der Eindruck „dort ist nichts offen“.
+- Nebenbefund: Die Sitzung trug die Prozessnummer des Dienstes. „Sitzung schließen“ vom Handy hätte bei einer solchen
+  Sitzung den Dienst beendet und damit alle Codex-Unterhaltungen. Das ist mit behoben.
+- Der Dienst hält eine Unterhaltung nach dem Schließen des Fensters noch ein bis zwei Minuten geladen. So lange
+  steht sie weiter als laufend in der Liste.
+
+### Behebung im Gateway
+
+- Sitzungen, deren Sperre der Dienst hält, bekommen ihre Pane über die Codex-TUIs in tmux: Steht die Kennung auf der
+  Befehlszeile (`codex resume <id>`, so öffnet „Wieder öffnen“), gehört die Pane zu dieser Unterhaltung. Sonst gehört
+  eine Unterhaltung zu dem TUI, das kurz vor ihr gestartet ist (höchstens 2 s danach bis 30 s davor, gleicher Ordner,
+  das nächste Paar zuerst, jede Pane einmal). Die Entstehungszeit steckt in der Kennung (UUIDv7).
+- Eine Sitzung trägt die Prozessnummer ihres TUI oder keine, nie die des Dienstes.
+- Ob eine Sitzung ohne Pane arbeitet, liest das Gateway am Ende der Verlaufsdatei ab (`task_started` ohne
+  `task_complete`).
+
+### Geprüft
+
+- Gateway-Tests: 1072 bestanden, 13 übersprungen, davon 14 neu in `tests/test_codex_appserver.py`.
+- Echter Durchlauf `testing/gateway_codex_beide_geraete.py` gegen den geänderten Gateway-Code (eigener Daemon im
+  Skript, Codex 0.171, Konto `x1`): Sitzung wie vom Handy gestartet, erste Nachricht an den Platzhalter, danach hat
+  die echte Sitzung Pane und tmux-Namen. Zweite und dritte Handy-Nachricht jeweils nach fertiger Antwort: angekommen
+  und beantwortet. Eine Sitzungs-ID, jede Nachricht genau einmal im Verlauf.
+- Am Live-Dienst nach dem Neustart (22.11., 16:45): Martins drei Codex-Sitzungen vom Nachmittag stehen mit ihren
+  tmux-Sitzungen `x1-zweites-Gehirn-…` in der Liste, die doppelten Platzhalter sind weg.
+- Nicht geprüft: am iPhone selbst.
