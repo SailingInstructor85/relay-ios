@@ -10,18 +10,14 @@ struct RootTabs: View {
     @ObservedObject private var approvals = Approvals.shared
     @ObservedObject private var notices = NoticeStore.shared
 
-    /// Zahl am Tab „Dein Zug“: alles, was auf eine Antwort wartet.
-    private var yourTurnCount: Int {
-        Triage.counts(model.triageSessions, unread: model.unread).need
-            + approvals.count
-            + DriveQueue.open(notices.items).count
-            + model.cloudSessions.filter { $0.waiting }.count
-    }
+    /// Zahl am Tab „Dein Zug“: alles, was auf eine Antwort wartet (`YourTurn`). Freigaben und Hinweise werden oben
+    /// beobachtet, damit die Zahl mit ihnen mitgeht.
+    private var yourTurnCount: Int { YourTurnData.items(model).count }
 
     var body: some View {
         TabView(selection: Binding(get: { router.tab }, set: { router.select($0) })) {
             tab(.today) { ComingSoonView(title: AppTab.today.title, symbol: AppTab.today.symbol, text: "Die Übersicht des Tages kommt bald.") }
-            tab(.yourTurn) { ComingSoonView(title: AppTab.yourTurn.title, symbol: AppTab.yourTurn.symbol, text: "Was auf dich wartet, erscheint bald hier.") }
+            tab(.yourTurn) { YourTurnView() }
                 .badge(TabRouting.badge(yourTurnCount).map { Text($0) })
             tab(.sessions) { SessionsView() }
             tab(.inbox) { InboxPlaceholderView() }

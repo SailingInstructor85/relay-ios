@@ -246,7 +246,8 @@ struct RelayTonalButtonStyle: ButtonStyle {
 
 /// Punkt für den Zustand der Verbindung: verbunden Akzent, verbindet Grün, sonst grau oder rot.
 struct ConnDot: View {
-    @EnvironmentObject var model: AppModel
+    // Bewusst kein EnvironmentObject: Der Punkt sitzt in Titelzeilen, dort ist die Umgebung nicht sicher gesetzt.
+    @ObservedObject private var model = AppModel.shared
 
     var body: some View {
         let (color, word): (Color, String) = {
