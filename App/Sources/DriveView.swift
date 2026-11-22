@@ -348,7 +348,7 @@ struct DriveView: View {
                 .buttonStyle(.bordered)
             }
             if live.isEmpty { Text("Keine laufende Sitzung.").foregroundStyle(.secondary) }
-            NavigationLink(value: SessionsView.Dest.jarvisListening) {
+            NavigationLink(value: Route.jarvisListening) {
                 Label("Mit Jarvis sprechen", systemImage: "waveform").font(.title3).frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.bordered)

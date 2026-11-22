@@ -100,10 +100,11 @@ struct RootView: View {
         VStack(spacing: 0) {
             if model.configured && !model.locked { TopNotices() }
             ZStack {
-                if model.configured { SessionsView() } else { NavigationStack { SetupView(firstRun: true) } }
+                if model.configured { RootTabs() } else { NavigationStack { SetupView(firstRun: true) } }
                 if model.locked { LockView() }
             }
         }
+        .tint(RelayColor.primary)
         .sheet(isPresented: $approvals.showSheet) { ApprovalSheet() }
         .sheet(isPresented: Binding(get: { !model.incomingFiles.isEmpty && !model.locked && model.configured },
                                     set: { if !$0 { model.dropIncoming() } })) {

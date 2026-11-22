@@ -4,11 +4,9 @@ import RelayCore
 /// The overview: every session of every account, the ones waiting for the user first.
 struct SessionsView: View {
     @EnvironmentObject var model: AppModel
-    @State private var path = NavigationPath()
+    @ObservedObject private var router = AppRouter.shared
     @State private var search = ""
     @State private var showNew = false
-    @State private var showPower = false
-    @State private var showWindDown = false
     @State private var confirmClose: Session?
     @State private var showConfirmClose = false
     @State private var renameTarget: Session?
@@ -19,7 +17,8 @@ struct SessionsView: View {
     @State private var showKill = false
     @ObservedObject private var outbox = Outbox.shared
 
-    enum Dest: Hashable { case chat(String), chatSearch(String, String), settings, usage, memory, jarvis, jarvisListening, notices, notice(String), digest, tokens, routines, drive, vaultChat }
+    /// Schiebt eine Unterseite auf den Stapel des Tabs „Sitzungen“ (der Stapel selbst gehört dem `AppRouter`).
+    private func push(_ d: Dest) { router.push(d, in: .sessions) }
 
     private func haystack(_ s: Session) -> String { "\(s.name) \(s.alias) \(s.folder) \(s.cwd)" }
 
@@ -60,9 +59,9 @@ struct SessionsView: View {
         }
         if !search.trimmingCharacters(in: .whitespaces).isEmpty {
             SearchExtras(searcher: searcher, query: search,
-                         openChat: { key, q in path.append(Dest.chatSearch(key, q)) },
-                         openJarvis: { path.append(Dest.jarvis) },
-                         openRoutines: { path.append(Dest.routines) })
+                         openChat: { key, q in push(.chatSearch(key, q)) },
+                         openJarvis: { push(.jarvis) },
+                         openRoutines: { push(.routines) })
         }
         if all.isEmpty && model.state == .connected && search.trimmingCharacters(in: .whitespaces).isEmpty {
             ContentUnavailableView(model.showDormant ? "Keine letzten Sitzungen" : "Keine Sitzungen", systemImage: "terminal",
@@ -79,7 +78,7 @@ struct SessionsView: View {
                 }.pickerStyle(.segmented)
             }.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
             if model.state != .connected { connectionRow }
-            if let help = model.connectHelp, !help.isEmpty { ConnectHelpRow(help: help) { path.append(Dest.settings) } }
+            if let help = model.connectHelp, !help.isEmpty { ConnectHelpRow(help: help) { push(.settings) } }
             if model.state != .connected || outbox.items(for: VaultChat.key).contains(where: { $0.state != .delivered }) { vaultRow }
             listContent
         }
@@ -91,32 +90,17 @@ struct SessionsView: View {
         .navigationTitle("Relay").navigationBarTitleDisplayMode(.inline)
         .onAppear { UsageRecorder.shared.screen("liste") }
         .toolbar {
+            // Das frühere Hauptmenü liegt im Tab „Mehr“. Hier bleibt, was nur die Liste betrifft.
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
-                    Button { path.append(Dest.jarvis) } label: { Label("Jarvis fragen", systemImage: "waveform") }
-                    // Untermenü, damit das Hauptmenü auf dem Bildschirm bleibt (mit „Routinen“ wären es 13 Einträge;
-                    // ein zu langes Menü schneidet „Einstellungen“ unten ab, die UI-Tests fanden es nicht mehr).
-                    Menu {
-                        Button { path.append(Dest.usage) } label: { Label("Nutzung & Limits", systemImage: "gauge.with.dots.needle.33percent") }
-                        Button { path.append(Dest.memory) } label: { Label("RAM-Monitor", systemImage: "memorychip") }
-                        Button { path.append(Dest.digest) } label: { Label("Was war los", systemImage: "newspaper") }
-                        Button { path.append(Dest.tokens) } label: { Label("Token-Verbrauch", systemImage: "chart.bar") }
-                    } label: { Label("Übersichten", systemImage: "chart.xyaxis.line") }
-                    Button { path.append(Dest.notices) } label: { Label("Hinweise", systemImage: "bell.badge") }
-                    Button { path.append(Dest.routines) } label: { Label("Routinen", systemImage: "calendar.badge.clock") }
                     Button { model.markAllRead() } label: { Label("Alle gelesen", systemImage: "checkmark.circle") }
                         .disabled(model.unread.isEmpty)
                     Toggle(isOn: $model.showBackground) { Label("Hintergrundläufe", systemImage: "moon.zzz") }
                     Button { model.reconnect() } label: { Label("Neu verbinden", systemImage: "arrow.clockwise") }
-                    Button { showWindDown = true } label: { Label("Alle Sitzungen beenden ...", systemImage: "xmark.circle") }
-                        .disabled(model.state != .connected)
-                    Button { showPower = true } label: { Label("Desktop ausschalten ...", systemImage: "power") }
-                        .disabled(model.state != .connected)
-                    Button { path.append(Dest.settings) } label: { Label("Einstellungen", systemImage: "gear") }
-                } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("Menü").accessibilityIdentifier("mainMenu")
+                } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("Listenmenü").accessibilityIdentifier("listMenu")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { path.append(Dest.jarvisListening) } label: { Image(systemName: "mic") }
+                Button { push(.jarvisListening) } label: { Image(systemName: "mic") }
                     .accessibilityLabel("Jarvis per Sprache")
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -126,13 +110,11 @@ struct SessionsView: View {
         .task { await model.pollTriage() }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 4) {
-                TriageStrip(openNext: openNext, openUsage: { path.append(Dest.usage) }, openMemory: { path.append(Dest.memory) })
+                TriageStrip(openNext: openNext, openUsage: { push(.usage) }, openMemory: { push(.memory) })
                 ErrorBanner(text: $model.lastError)
             }
         }
         .safeAreaInset(edge: .bottom) { undoBar }
-        // Marke für die UI-Tests (nur im Testmodus): verbunden und Sitzungen geladen
-        .overlay(alignment: .topLeading) { HomeReadyMarker(ready: model.state == .connected && !model.sessions.isEmpty) }
         .confirmationDialog("Arbeitende Sitzung stoppen und schließen?", isPresented: $showConfirmClose, titleVisibility: .visible, presenting: confirmClose) { s in
             Button("Stoppen und schließen", role: .destructive) { model.softClose(s) }
         }
@@ -146,34 +128,16 @@ struct SessionsView: View {
         }
     }
 
-    private func destinations<V: View>(_ v: V) -> some View {
-        v
-        .navigationDestination(for: Dest.self) { d in
-            switch d {
-            case .chat(let key): ChatView(sessionKey: key)
-            case .chatSearch(let key, let q): ChatView(sessionKey: key, initialSearch: q)
-            case .settings: SetupView()
-            case .usage: UsageView()
-            case .memory: MemoryView()
-            case .digest: DigestView()
-            case .tokens: TokensView()
-            case .jarvis: JarvisView()
-            case .jarvisListening: JarvisView(autoListen: true)
-            case .notices: NoticeView(ref: nil, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice, onDrive: { path.append(Dest.drive) })
-            case .notice(let ref): NoticeView(ref: ref, onOpen: { path.append(Dest.notice($0)) }, onGo: goNotice, onDrive: { path.append(Dest.drive) })
-            case .drive: DriveView()
-            case .vaultChat: VaultChatView()
-            case .routines: RoutinesView()
-            }
-        }
-        .sheet(isPresented: $showPower) { PowerView().environmentObject(model) }
-        .sheet(isPresented: $showWindDown) { WindDownView().environmentObject(model) }
+    /// Der Stapel (`NavigationStack`) und die Ziele gehören zum Tab-Rahmen (`TabStack`, `RouteView`), die Sprünge aus
+    /// Mitteilungen zu `RootTabs`.
+    var body: some View {
+        listView
         .sheet(isPresented: $showNew) {
             NewSessionView { target in
                 showNew = false
                 Task { // the placeholder appears shortly after launch
                     for _ in 0..<20 {
-                        if let s = model.session(for: "tmux:\(target)") { path.append(Dest.chat(s.key)); return }
+                        if let s = model.session(for: "tmux:\(target)") { push(.chat(s.key)); return }
                         try? await Task.sleep(nanoseconds: 500_000_000)
                         await model.refresh()
                     }
@@ -182,44 +146,8 @@ struct SessionsView: View {
         }
     }
 
-    private func handlers<V: View>(_ v: V) -> some View {
-        v
-        .onChange(of: model.showDormant) { _, _ in Task { await model.refresh() } }
-        .onChange(of: model.showBackground) { _, _ in Task { await model.refresh() } }
-        .onChange(of: model.openChat) { _, key in
-            if let key { path = NavigationPath(); path.append(VaultChat.isVault(key) ? Dest.vaultChat : Dest.chat(key)); model.openChat = nil }
-        }
-        .onChange(of: model.openNotice) { _, ref in
-            if let ref { path = NavigationPath(); path.append(Dest.notice(ref)); model.openNotice = nil }
-        }
-        .onChange(of: model.openJarvis) { _, open in
-            if open { path = NavigationPath(); path.append(Dest.jarvisListening); model.openJarvis = false }
-        }
-        .onChange(of: model.openDrive) { _, open in
-            if open { path = NavigationPath(); path.append(Dest.drive); model.openDrive = false }
-        }
-        .onAppear {
-            if let ref = model.openNotice { path.append(Dest.notice(ref)); model.openNotice = nil }
-            if model.openJarvis { path.append(Dest.jarvisListening); model.openJarvis = false }
-            if model.openDrive { path.append(Dest.drive); model.openDrive = false }
-        }
-    }
-
-    var body: some View {
-        NavigationStack(path: $path) { handlers(destinations(listView)) }
-    }
-
-    private func goNotice(_ g: NoticeLogic.Goto) {
-        switch g {
-        case .accounts: path.append(Dest.usage)
-        case .jarvis: path.append(Dest.jarvis)
-        case .sessions: path = NavigationPath()
-        case .none: break
-        }
-    }
-
     private func openNext() {
-        if let n = Triage.next(model.triageSessions, unread: model.unread) { path.append(Dest.chat(n.key)) }
+        if let n = Triage.next(model.triageSessions, unread: model.unread) { push(.chat(n.key)) }
     }
 
     @ViewBuilder private var undoBar: some View {
@@ -244,7 +172,7 @@ struct SessionsView: View {
 
     /// Ohne Verbindung (oder solange etwas wartet): Chat für den Agenten im Vault, Nachrichten gehen später raus.
     private var vaultRow: some View {
-        Button { path.append(Dest.vaultChat) } label: {
+        Button { push(.vaultChat) } label: {
             HStack {
                 Label(VaultChat.openButton, systemImage: "tray.and.arrow.up")
                 Spacer()

@@ -50,16 +50,15 @@ final class DesignTests: RelayTestCase {
         settle(0.8)
     }
 
+    /// Das frühere Hauptmenü: die Seite im Tab „Mehr“.
     private func menu(_ prefix: String) {
         openMainMenu()
         settle(1)
-        shot(prefix + "hauptmenue")
-        if tap("Übersichten", 2, soft: true) {
-            settle(0.8)
-            shot(prefix + "hauptmenue-uebersichten")
-        }
+        shot(prefix + "mehr")
+        app.swipeUp()
+        settle(0.6)
+        shot(prefix + "mehr-unten")
         closeMainMenu()
-        if id("mainMenu").exists, !id("mainMenu").isHittable { closeMainMenu() }
     }
 
     func test01_Sitzungsliste() {

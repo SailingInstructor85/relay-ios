@@ -63,7 +63,7 @@ enum UITestMode {
 
 /// Unsichtbare Marke für die UI-Tests: Der Startbildschirm ist da und hat Daten vom Gateway. Die Tests warten beim
 /// Start auf die Kennung `homeReady` statt auf einen sichtbaren Text, damit Umbenennungen und der Umbau auf Tabs sie
-/// nicht brechen. Heute setzt sie die Sitzungsliste, nach dem Tab-Umbau der Tab-Rahmen. Außerhalb des Testmodus
+/// nicht brechen. Gesetzt wird sie am Tab-Rahmen (`RootTabs`), unabhängig vom gewählten Tab. Außerhalb des Testmodus
 /// entsteht kein Element (auch nicht für VoiceOver). Bewusst ohne Beschriftung: Die Tests suchen Texte per „enthält“,
 /// ein Wort wie „bereit“ würde mit dem Abschnitt „Bereit“ verwechselt.
 struct HomeReadyMarker: View {

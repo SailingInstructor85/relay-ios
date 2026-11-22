@@ -58,14 +58,16 @@ class RelayTestCase: XCTestCase {
         launch(scheme: scheme)
         XCTAssertTrue(waitHome(60), "Startbildschirm nicht geladen")
         settle(1)
+        // Die App startet im Tab „Heute“. Die bestehenden Tests erwarten die Sitzungsliste vorn.
+        showSessions()
     }
 
     // MARK: Wege durch die App
     //
-    // Nur die Hilfen in diesem Abschnitt wissen, wie die Navigation aufgebaut ist (heute: eine Sitzungsliste mit
-    // Hauptmenü oben links). Nach dem Umbau auf Tabs werden nur sie angepasst, die Tests selbst bleiben:
-    // `waitHome` (Tab-Rahmen setzt die Kennung), `showSessions` (Tab „Sitzungen“ wählen), `openMainMenu` und
-    // `mainMenu` (Weg zu Übersichten, Hinweisen, Routinen, Einstellungen), `openSession`.
+    // Nur die Hilfen in diesem Abschnitt wissen, wie die Navigation aufgebaut ist: fünf Tabs (Heute, Dein Zug,
+    // Sitzungen, Posteingang, Mehr), das frühere Hauptmenü liegt als Seite im Tab „Mehr“, drei Einträge, die nur die
+    // Liste betreffen, zusätzlich im Menü `listMenu` der Sitzungsliste. Ändert sich die Navigation, werden nur diese
+    // Hilfen angepasst: `waitHome`, `showTab`, `showSessions`, `openMainMenu`, `mainMenu`, `openSession`.
 
     /// Kennung, die der Startbildschirm setzt, sobald er verbunden ist und Sitzungen hat (HomeReadyMarker in der App).
     static let homeReadyID = "homeReady"
@@ -90,21 +92,35 @@ class RelayTestCase: XCTestCase {
         return false
     }
 
-    /// Bringt die Sitzungsliste nach vorn. Heute ist sie der Startbildschirm, hier ist nichts zu tun; mit Tabs wählt
-    /// diese Funktion den Tab „Sitzungen“.
-    func showSessions() {}
+    static let tabToday = "Heute", tabYourTurn = "Dein Zug", tabSessions = "Sitzungen", tabInbox = "Posteingang", tabMore = "Mehr"
 
-    /// Öffnet das Hauptmenü, ohne etwas zu wählen (für Bilder). Schließen mit `closeMainMenu`.
-    func openMainMenu() {
-        showSessions()
-        tapID("mainMenu")
+    /// Wählt einen Tab über die Leiste unten. In Chat, Jarvis und Sprachmodus ist die Leiste ausgeblendet, dann geht es
+    /// erst zurück. Ein Tipp auf den schon gewählten Tab führt zu dessen Wurzel (AppRouter.select).
+    func showTab(_ title: String) {
+        for _ in 0..<5 {
+            let b = app.tabBars.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+            if b.exists {
+                if b.isHittable { b.tap(); settle(0.6); return }
+                // Leiste von der Tastatur verdeckt: nichts antippen, was den Bildschirm wechselt
+                if app.keyboards.count > 0 {
+                    if !b.isSelected { notes.append("Tab-Leiste verdeckt, Tab \(title) nicht gewählt") }
+                    return
+                }
+            }
+            back()
+        }
+        notes.append("Tab nicht erreichbar: \(title)")
+        shot("tab-fehlt-" + title)
     }
 
-    /// Schließt das offene Hauptmenü wieder (Tipp neben das Menü).
-    func closeMainMenu() {
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)).tap()
-        settle(0.6)
-    }
+    /// Bringt die Sitzungsliste nach vorn (Tab „Sitzungen“).
+    func showSessions() { showTab(Self.tabSessions) }
+
+    /// Öffnet das frühere Hauptmenü, ohne etwas zu wählen (für Bilder): die Seite im Tab „Mehr“.
+    func openMainMenu() { showTab(Self.tabMore) }
+
+    /// Verlässt das Hauptmenü wieder: zurück zur Sitzungsliste.
+    func closeMainMenu() { showSessions() }
 
     // MARK: finden
 
@@ -165,12 +181,38 @@ class RelayTestCase: XCTestCase {
         Thread.sleep(forTimeInterval: 0.5)
     }
 
-    /// Öffnet das Hauptmenü und tippt einen Eintrag; die Übersichten (Nutzung, RAM, Was war los, Token) liegen im
-    /// Untermenü „Übersichten“.
+    /// Einträge, die nur die Sitzungsliste betreffen: Sie liegen im Menü `listMenu` der Liste (und zusätzlich in „Mehr“).
+    static let listMenuItems = ["Hintergrundläufe", "Alle gelesen", "Neu verbinden"]
+
+    /// Wählt einen Eintrag des früheren Hauptmenüs. Die meisten liegen als Zeile im Tab „Mehr“ (Jarvis fragen,
+    /// Hinweise, Routinen, Einstellungen, die vier Übersichten, Alle Sitzungen beenden, Desktop ausschalten), die
+    /// Einträge aus `listMenuItems` im Menü der Sitzungsliste, damit der Test danach wieder auf der Liste steht.
     func mainMenu(_ item: String) {
+        if Self.listMenuItems.contains(where: { item.hasPrefix($0) }) {
+            showSessions()
+            tapID("listMenu")
+            tap(item, 4)
+            return
+        }
         openMainMenu()
-        if !has(item, 1.5), has("Übersichten", 1) { tap("Übersichten", 2); settle(0.6) }
+        if !revealInPage(item) { notes.append("Eintrag in „Mehr“ nicht sichtbar: \(item)") }
         tap(item, 4)
+    }
+
+    /// Scrollt eine Seite (kein List), bis ein Eintrag antippbar ist. Anders als `reveal` ohne Ziehen nach unten am
+    /// Anfang, damit nichts neu geladen wird.
+    @discardableResult
+    func revealInPage(_ s: String) -> Bool {
+        for _ in 0..<4 { if let e = find(s), e.isHittable { return true }; Thread.sleep(forTimeInterval: 0.3) }
+        for _ in 0..<4 {
+            app.swipeUp(velocity: .slow)
+            if let e = find(s), e.isHittable { return true }
+        }
+        for _ in 0..<5 {
+            app.swipeDown(velocity: .slow)
+            if let e = find(s), e.isHittable { return true }
+        }
+        return false
     }
 
     /// Scrollt die Liste, bis ein Eintrag sichtbar ist (List rendert nur, was auf dem Bildschirm ist).

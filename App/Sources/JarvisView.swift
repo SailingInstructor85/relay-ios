@@ -6,6 +6,9 @@ import RelayCore
 struct JarvisView: View {
     @EnvironmentObject var model: AppModel
     var autoListen = false
+    /// Eine Frage, die beim Öffnen sofort gestellt wird (Eingabeleiste auf „Heute“).
+    var initialQuestion: String?
+    @State private var askedInitial = false
 
     struct Turn: Identifiable { var id = UUID(); let q: String; var a: String; var done: Bool; let voice: Bool; var ts = Date().timeIntervalSince1970 }
     @State private var turns: [Turn] = []
@@ -91,6 +94,11 @@ struct JarvisView: View {
         .task {
             turns = JarvisStore.load().map { Turn(id: $0.id, q: $0.q, a: $0.a, done: true, voice: $0.voice, ts: $0.ts) }
             model.warmJarvis()
+            if let q = initialQuestion, !askedInitial {
+                askedInitial = true
+                UsageRecorder.shared.content("jarvis", "gesendet", session: nil, kind: "text", text: q)
+                Task { await ask(q, byVoice: false) }
+            }
             await loadVocab()
             if autoListen { startVoice(trigger: "mic") }
         }
