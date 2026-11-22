@@ -486,3 +486,32 @@ Offen für Martin:
 - Dasselbe einmal mit der geöffneten Codex-App am PC.
 
 Version: `project.yml` 0.3.17 auf 0.3.18. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 22. November 2026, 17:30 (Version 0.3.19)
+
+Zwei Backlog-Einträge, beide umgesetzt.
+
+1. Anzeigen, ob Claude oder Codex in der Sitzung arbeitet.
+   Befund: Der Agent stand schon im Untertitel des Chat-Kopfs ("opus 5.5 · low effort · Claude · ~/ordner · 120k ctx"). Der Kopf ist 190 Punkte breit und kürzt vorn. Bei langem Ordner (Vault) fiel genau der Agent weg. Bei Codex fehlen Modell und Effort, dort stand er ganz vorn und fiel als Erstes weg.
+   Gebaut: Der Agent steht als eigene Marke vor dem Untertitel (Symbol und Name, Claude orange, Codex türkis, Antigravity violett), mit fester Breite, wird also nie gekürzt. Der Rest (`ChatHeader.details`) kürzt weiter vorn. Kennung `agentBadge`, VoiceOver "Agent: Codex". Im Sitzungsmenü heißt der unterste Abschnitt "Agent: Codex · Konto x1" statt "x1 · codex". Die Angabe kommt aus `session.tool`, gilt also für laufende und fortgesetzte Sitzungen und folgt jeder Aktualisierung.
+   Tests: RelayCore `testChatHeaderAgent`. UI-Test `ChatTests.test17_AgentInHeader` mit der Claude-Sitzung "API Refactoring" und der Codex-Sitzung "Datenbank migrieren" des Mocks.
+
+2. Neue Sitzung startet standardmäßig im Vault.
+   Gebaut: `NewSessionView` setzt beim Öffnen den Vault-Ordner aus den Einstellungen (Einstellungen → Ablage, leer heißt `~/Dokumente/zweites-gehirn/zweites Gehirn`) als Ordner. Darunter steht "Vault, voreingestellt. Ein anderer Ordner lässt sich unten wählen." "Starten" ist sofort aktiv. Jede Wahl (zuletzt benutzt, Suche, Blättern, neuer Ordner) ersetzt die Voreinstellung. Für Claude und Codex gleich: Das Konto bestimmt den Agenten, der Ordner ist davon unabhängig, und das Gateway löst die Tilde in `launch_account` auf (nachgelesen in `~/relay/gateway/src/notifyd/launcher.py`).
+   Tests: RelayCore `testNewSessionStartsInVault`. UI-Tests `NewSessionTests.test01` (Voreinstellung sichtbar) und neu `test04_LaunchInVaultByDefault` (Start ohne Ordnerwahl ruft `launch` mit dem Vault-Pfad).
+
+Entscheidungen:
+- Keine zweite Einstellung für den Startordner. Es gilt der vorhandene Vault-Ordner, den auch "Teilen an Relay" nutzt.
+- Der Agent steht in der zweiten Zeile des Kopfs, nicht neben dem Namen. Dort ist schon das Symbol "Am PC offen", und lange Namen brauchen den Platz.
+- Die Kurzbefehl-Aktion "Neue Sitzung starten" bleibt unverändert (Ordner ist dort ein Pflichtfeld).
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert, nicht am iPhone geprüft. Stellen, die der Compiler prüfen muss: `agentBadge` in `ChatView.titleView`, `Session.toolColor` in RelayApp.swift, `Section(ChatHeader.agentLine(...))` im Sitzungsmenü.
+- UI-Test: Die Marke liegt bei Claude-Sitzungen im Titelmenü (wie `pcOpen`, das dort per Kennung gefunden wird). Die Beschriftung "Agent: Claude" wird deshalb nur notiert, bei Codex hart geprüft.
+- Wechselt der Agent innerhalb derselben Sitzung, zeigt die App, was das Gateway als `tool` meldet. Einen solchen Wechsel gibt es im Gateway derzeit nicht (jede Sitzung gehört zu einem Konto und damit zu einem Agenten).
+
+Offen für Martin:
+- Am iPhone je eine Claude- und eine Codex-Sitzung öffnen und im Kopf unter dem Namen nachsehen, ob "Claude" bzw. "Codex" steht.
+- "Neue Sitzung" öffnen: Der Vault-Ordner muss schon dastehen, einmal mit Claude-Konto und einmal mit Codex-Konto starten.
+
+Version: `project.yml` 0.3.18 auf 0.3.19. Nicht gepusht, kein Tag. Das übernimmt das Skript.

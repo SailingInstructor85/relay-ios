@@ -2,6 +2,15 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.19 (2026-11-22)
+
+**Neu**
+- Im Chat steht jetzt immer, ob du mit Claude oder mit Codex sprichst: oben unter dem Namen der Sitzung, farbig und mit Symbol (Claude orange, Codex türkis). Das gilt für laufende und für fortgesetzte Sitzungen. Dieselbe Angabe steht unten im Sitzungsmenü (drei Punkte oben rechts), zum Beispiel „Agent: Codex · Konto x1“.
+- Neue Sitzung: Der Vault-Ordner ist als Startordner vorgewählt, du kannst sofort auf „Starten“ tippen. Ein anderer Ordner bleibt wie bisher wählbar (zuletzt benutzt, Suche, Durchsuchen). Gilt für Claude und Codex gleich. Welcher Ordner der Vault ist, steht in Einstellungen → Ablage.
+
+**Behoben**
+- Der Name des Agenten stand bisher mitten in der kleinen Zeile unter dem Sitzungsnamen und wurde bei langen Ordnernamen abgeschnitten. Deshalb war oft nicht zu erkennen, wer gerade arbeitet.
+
 ## 0.3.18 (2026-11-22)
 
 **Behoben**

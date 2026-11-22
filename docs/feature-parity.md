@@ -105,7 +105,7 @@ Spalten: Nr, Funktion, was sie tut, rpc und Events (Parameter), Android-Quellen,
 
 | Nr | Funktion | Beschreibung | rpc / Events | Android-Quellen | iOS | Kl. |
 |---|---|---|---|---|---|---|
-| D1 | Neue Sitzung | Konto (auch `auto`), Ordner (zuletzt, Suche, Blättern, anlegen), Name, erste Nachricht | `accounts`, `recent_dirs {limit=30}`, `find_dirs {query,limit=50,wait_s=20}`, `list_dirs {path,show_hidden}`, `mkdir {path}`, `launch {alias,cwd,prompt?,name?}` -> `{tmux_session,target}` | NewSessionScreen.kt, FolderSearch.kt | vorhanden (A: NewSessionView.swift) | K |
+| D1 | Neue Sitzung | Konto (auch `auto`), Ordner (zuletzt, Suche, Blättern, anlegen), Name, erste Nachricht | `accounts`, `recent_dirs {limit=30}`, `find_dirs {query,limit=50,wait_s=20}`, `list_dirs {path,show_hidden}`, `mkdir {path}`, `launch {alias,cwd,prompt?,name?}` -> `{tmux_session,target}` | NewSessionScreen.kt, FolderSearch.kt | vorhanden (A: NewSessionView.swift; seit 0.3.19 ist der Vault-Ordner aus den Einstellungen als Startordner vorgewählt, `NewSessionStart` in C: Search.swift, Kennung `newSessionDir`) | K |
 | D2 | Favoriten-Ordner, letztes Konto | Ordner merken, letztes Konto vorauswählen | lokal | Settings.kt (`favDirs`, `lastAlias`) | vorhanden (A: Stern in der Ordnerliste, `favDirs`, `lastAlias`; C: `FavDirs`) | K |
 | D3 | Wieder öffnen | Beendete oder geschlossene Sitzung per `--resume` in neuem tmux | `reopen {key}` -> `{tmux_session,target,alias}` | Relay.kt | vorhanden | K |
 | D4 | Übernehmen auf anderes Konto | Nur im Gateway (`takeover`), Android ruft es nicht auf | `takeover {key, alias, force?}` | (nicht in Android) | fehlt | K, aber sinnlos mit nur einem Claude-Konto; nicht umsetzen |
