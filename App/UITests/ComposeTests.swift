@@ -27,6 +27,34 @@ final class ComposeTests: RelayTestCase {
         shot("slash-gewaehlt")
     }
 
+    func test12_CommandMenu() {
+        // Die Chipzeilen (Schnellantworten, Slash-Chips, Esc) sind weg; Befehle und Esc stehen im Befehlsmenü.
+        launchConnected()
+        openSession("API Refactoring")
+        shot("eingabeleiste-ohne-chips")
+        XCTAssertNil(find("Status?", exact: true), "Schnellantwort steht noch im Chat")
+        XCTAssertNil(find("/compact", exact: true), "Slash-Chip steht noch über dem Eingabefeld")
+        tapID("commandMenu")
+        settle(0.8)
+        shot("befehlsmenue")
+        expect("/compact", 3)
+        expect("Weitere Befehle", 3, soft: true)
+        expect("Esc senden", 3)
+        // Ein Befehl landet im Feld, gesendet wird erst mit Senden.
+        tap("/clear", 3, exact: true)
+        settle(1.2)
+        let value = id("chatInput").value as? String ?? ""
+        XCTAssertTrue(value.hasPrefix("/clear"), "Befehl nicht im Feld: \(value)")
+        XCTAssertFalse(rpcLog().contains { ($0["method"] as? String) == "send" }, "Befehl wurde sofort gesendet")
+        shot("befehl-im-feld")
+        // Esc geht als Taste an die Sitzung.
+        tapID("commandMenu")
+        settle(0.8)
+        tap("Esc senden", 3)
+        XCTAssertTrue(mockReceived("send", where: { ($0["keys"] as? [String]) == ["Escape"] }), "Esc kam nicht beim Mock an")
+        shot("esc-gesendet")
+    }
+
     func test03_SendToBusySession() {
         launchConnected()
         openSession("Bench-Skript reparieren")

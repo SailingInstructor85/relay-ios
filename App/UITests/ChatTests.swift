@@ -258,22 +258,24 @@ final class ChatTests: RelayTestCase {
     }
 
     func test12_HideKeyboard() {
-        // Tastatur offen: der Knopf sitzt rechts in der Schnellantwort-Zeile über dem Eingabefeld (seit 0.3.8), verdeckt
-        // weder Senden noch Mikrofon und schließt die Tastatur; der getippte Text bleibt im Feld.
+        // Tastatur offen: „Tastatur ausblenden“ steht im Befehlsmenü („/“ links an der Eingabeleiste, seit dem Wegfall der
+        // Chipzeilen). Das Menü verdeckt weder Senden noch Mikrofon, der Eintrag schließt die Tastatur, der Text bleibt.
         launchConnected()
         openSession("API Refactoring")
         typeInto("chatInput", "Tastatur zu")
         settle(0.8)
         shot("tastatur-offen")
-        XCTAssertTrue(id("hideKeyboard").waitForExistence(timeout: 4), "Knopf Tastatur ausblenden fehlt bei offener Tastatur")
-        let hide = id("hideKeyboard").frame, send = id("chatSend").frame, mic = id("chatMic").frame, field = id("chatInput").frame
-        XCTAssertFalse(hide.intersects(send), "Knopf überdeckt Senden: \(hide) / \(send)")
-        XCTAssertFalse(hide.intersects(mic), "Knopf überdeckt Mikrofon: \(hide) / \(mic)")
-        XCTAssertLessThanOrEqual(hide.maxY, field.minY + 1, "Knopf liegt nicht über dem Eingabefeld: \(hide) / \(field)")
-        XCTAssertGreaterThanOrEqual(hide.height, 43, "Tippfläche zu klein: \(hide)")
+        XCTAssertTrue(id("commandMenu").waitForExistence(timeout: 4), "Befehlsmenü fehlt an der Eingabeleiste")
+        let menu = id("commandMenu").frame, send = id("chatSend").frame, mic = id("chatMic").frame, field = id("chatInput").frame
+        XCTAssertFalse(menu.intersects(send), "Befehlsmenü überdeckt Senden: \(menu) / \(send)")
+        XCTAssertFalse(menu.intersects(mic), "Befehlsmenü überdeckt Mikrofon: \(menu) / \(mic)")
+        XCTAssertFalse(menu.intersects(field), "Befehlsmenü überdeckt das Eingabefeld: \(menu) / \(field)")
         XCTAssertTrue(id("chatSend").isHittable, "Senden bei offener Tastatur nicht antippbar")
         XCTAssertTrue(id("chatMic").isHittable, "Mikrofon bei offener Tastatur nicht antippbar")
-        tapID("hideKeyboard")
+        tapID("commandMenu")
+        settle(0.8)
+        shot("befehlsmenue-tastatur-offen")
+        tap("Tastatur ausblenden", 4)
         settle(1)
         shot("tastatur-zu")
         XCTAssertEqual(app.keyboards.count, 0, "Tastatur noch offen")

@@ -237,39 +237,48 @@ struct ChatView: View {
         .accessibilityIdentifier("queueHint")
     }
 
-    /// Knopf „Tastatur ausblenden“: am rechten Ende der Schnellantwort-Zeile statt in der Leiste über der Tastatur, wo
-    /// er Senden und Mikrofon teilweise verdeckte (Martin, 2026-11-07). Tippfläche mindestens 44 pt.
-    private var hideKeyboardButton: some View {
-        Button { focused = false } label: {
-            Image(systemName: "keyboard.chevron.compact.down").font(.body)
-                .frame(minWidth: KeyboardBar.minTapSize, minHeight: KeyboardBar.minTapSize)
-                .contentShape(Rectangle())
+    /// Befehlsmenü an der Eingabeleiste („/“ links neben der Büroklammer). Es ersetzt die frühere Zeile mit
+    /// Schnellantworten und Slash-Chips: oben die eingestellten Befehle des Werkzeugs, im Untermenü die übrigen,
+    /// darunter „Esc senden“ und bei offener Tastatur „Tastatur ausblenden“. Ein Befehl landet wie bisher im Feld
+    /// und wird nicht sofort gesendet.
+    private var commandMenu: some View {
+        let items = CommandMenu.items(tool: tool, user: slashChips)
+        return Menu {
+            ForEach(items.top, id: \.self) { c in Button(c) { insertFromMenu(c) } }
+            if !items.more.isEmpty {
+                Menu(CommandMenu.moreLabel) {
+                    ForEach(items.more, id: \.self) { c in Button(c) { insertFromMenu(c) } }
+                }
+            }
+            Divider()
+            Button(role: .destructive) { sendEscape() } label: { Label(CommandMenu.escLabel, systemImage: "escape") }
+                .disabled(session == nil)
+            if CommandMenu.showsHideKeyboard(keyboardOpen: focused) {
+                Button { focused = false } label: { Label(KeyboardBar.hideLabel, systemImage: "keyboard.chevron.compact.down") }
+                    .accessibilityIdentifier("hideKeyboard")
+            }
+        } label: {
+            Text("/").font(.system(.title3, design: .monospaced).weight(.semibold))
+                .frame(minWidth: 28, minHeight: 28).contentShape(Rectangle())
         }
-        .buttonStyle(.plain).foregroundStyle(Color.accentColor)
-        .accessibilityLabel(KeyboardBar.hideLabel).accessibilityIdentifier("hideKeyboard")
+        .menuOrder(.fixed)
+        .accessibilityLabel(CommandMenu.label).accessibilityIdentifier("commandMenu")
     }
 
-    /// Schnellantworten und rechts daneben der Tastatur-Knopf; ohne Schnellantworten nur der Knopf in einer schmalen Zeile.
-    @ViewBuilder private func quickRow(_ quick: [String]) -> some View {
-        let row = KeyboardBar.row(quickCount: quick.count, keyboardOpen: focused, slashSuggestions: !slashSuggestions.isEmpty)
-        if row.visible {
-            HStack(spacing: 4) {
-                if row.quickReplies {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(quick, id: \.self) { q in
-                                Button(q) { Task { await send(q) } }.font(.callout)
-                                    .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.small)
-                                    .disabled(session == nil)
-                            }
-                        }.padding(.horizontal)
-                    }
-                } else {
-                    Spacer(minLength: 0)
-                }
-                if row.hideButton { hideKeyboardButton.padding(.trailing, 8) }
-            }
-        }
+    private func insertCommand(_ c: String) { input = c + " "; focused = true }
+
+    /// Aus dem Menü heraus: Der Fokus kommt einen Moment später, damit das Menü erst zugeht (ein Fokuswechsel während
+    /// des Schließens ging auf dem iPhone verloren, wie beim Anhang-Menü).
+    private func insertFromMenu(_ c: String) {
+        input = c + " "
+        Task { try? await Task.sleep(nanoseconds: 350_000_000); focused = true }
+    }
+
+    /// Esc an die Sitzung (bricht eine Auswahl oder Eingabe im Terminal ab); „Stoppen“ im Sitzungsmenü bleibt daneben.
+    private func sendEscape() {
+        guard let s = session else { return }
+        UsageRecorder.shared.record("chat", "esc", session: s.key)
+        Task { try? await model.sendKeys(s, ["Escape"]); await refreshScreen() }
     }
 
     private var inputBar: some View {
@@ -277,34 +286,23 @@ struct ChatView: View {
             if let s = session, DeskTerminal.isDeskTerminal(s) { deskHint(s) }
             if let s = session, QueueInput.applies(s) { queueHint }
             if !slashSuggestions.isEmpty {
-                quickRow([])
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(slashSuggestions, id: \.self) { c in
-                            Button { input = c + " "; focused = true } label: {
+                            Button { insertCommand(c) } label: {
                                 Text(c).font(.system(.callout, design: .monospaced)).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
                             }.buttonStyle(.plain)
                             Divider()
                         }
                     }.padding(.horizontal)
                 }.frame(maxHeight: 190)
-            } else {
-                quickRow(ChatPrefs.quickReplies)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(slashChips, id: \.self) { c in
-                            Button(c) { input = c + " "; focused = true }.font(.caption).buttonStyle(.bordered).buttonBorderShape(.capsule)
-                        }
-                        Button { Task { if let s = session { try? await model.sendKeys(s, ["Escape"]); await refreshScreen() } } } label: { Text("Esc") }
-                            .font(.caption).buttonStyle(.bordered).buttonBorderShape(.capsule).tint(.red)
-                    }.padding(.horizontal)
-                }
             }
             if voice.listening {
                 Label(voice.partial.isEmpty ? "Höre zu…" : voice.partial, systemImage: "waveform").font(.footnote)
                     .foregroundStyle(.red).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal)
             }
             HStack(alignment: .bottom, spacing: 8) {
+                commandMenu
                 Menu {
                     // A picker inside a Menu does not open on iOS; the menu item sets a flag for the sheet below, a moment
                     // later so the menu has closed first (presenting while it closes was dropped on the iPhone).

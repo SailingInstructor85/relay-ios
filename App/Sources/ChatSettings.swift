@@ -17,7 +17,8 @@ enum ChatPrefs {
     static var cleanDictation: Bool { UserDefaults.standard.bool(forKey: "cleanDictation") }
 }
 
-/// Settings section "Sitzungen": slash chips per tool, quick replies, dictation clean-up.
+/// Settings section "Sitzungen": slash commands per tool (command menu and suggestions), the quick reply of the
+/// "fertig" notification, dictation clean-up.
 struct ChatSettingsSection: View {
     @AppStorage("slash.claude") private var claude = SlashChips.defaults["claude"] ?? ""
     @AppStorage("slash.codex") private var codex = SlashChips.defaults["codex"] ?? ""
@@ -31,12 +32,12 @@ struct ChatSettingsSection: View {
             field("Claude", $claude, SlashChips.defaults["claude"] ?? "")
             field("Codex", $codex, SlashChips.defaults["codex"] ?? "")
             field("Antigravity", $agy, SlashChips.defaults["agy"] ?? "")
-            Text("Slash-Befehle über dem Eingabefeld, durch Leerzeichen getrennt.").font(.caption).foregroundStyle(.secondary)
+            Text("Slash-Befehle je Werkzeug, durch Leerzeichen getrennt. Sie stehen im Befehlsmenü („/“ links neben dem Eingabefeld) und zuerst in den Vorschlägen beim Tippen von „/“.").font(.caption).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Schnellantworten").font(.footnote).foregroundStyle(.secondary)
                 TextField(QuickReplies.standard, text: $quick).textInputAutocapitalization(.never).autocorrectionDisabled()
             }
-            Text("Durch | getrennt, höchstens 8. Ein Tipp sendet sofort. Die erste erscheint auch als Aktion an der „fertig“-Mitteilung.")
+            Text("Die erste Antwort (vor dem ersten |) erscheint als Aktion an der „fertig“-Mitteilung; ein Tipp dort sendet sie sofort. Im Chat gibt es keine Schnellantworten mehr.")
                 .font(.caption).foregroundStyle(.secondary)
             Toggle("Return sendet", isOn: $returnSends)
             Text("Die Eingabetaste zeigt „Senden“ und schickt die Nachricht ab. Zeilenumbruch dann nur noch über die Zwischenablage.")
