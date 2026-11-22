@@ -2,21 +2,18 @@ import SwiftUI
 import RelayCore
 
 /// Tab „Heute“: die Übersicht des Tages wie „Today“ der Android-App. Von oben: Kopfzeile mit Pille und Kennzahlen,
-/// Abschnitt „Braucht dich“ (kompakt, die Karten stehen in „Dein Zug“), Assistent-Karte, Kalenderkarte (erst mit
-/// Daten sichtbar), Abschnitt „Sitzungen“. Unten schwebt die Eingabeleiste für den Assistenten.
+/// Abschnitt „Braucht dich“ (kompakt, die Karten stehen in „Dein Zug“), Assistent-Karte, Kalenderkarte (heute und
+/// morgen, sobald das Gateway Termine liefert), Abschnitt „Sitzungen“. Unten schwebt die Eingabeleiste für den Assistenten.
 struct TodayView: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject private var router = AppRouter.shared
     @ObservedObject private var approvals = Approvals.shared
     @ObservedObject private var notices = NoticeStore.shared
+    @ObservedObject private var calendar = CalendarStore.shared
     @State private var jarvisTurns: [JarvisTurn] = []
     @State private var ask = ""
     @State private var showNew = false
     @FocusState private var askFocused: Bool
-
-    /// Termine des Tages. Die Quelle (Gateway, rpc `calendar`) kommt mit einem späteren Paket; solange die Liste
-    /// leer ist, erscheint keine Kalenderkarte.
-    private var agenda: [Today.AgendaItem] { [] }
 
     private func push(_ r: Route) { router.push(r, in: .today) }
 
@@ -33,16 +30,16 @@ struct TodayView: View {
                     ErrorBanner(text: $model.lastError)
                     needsSection(turn)
                     assistantCard(now)
-                    if !agenda.isEmpty {
-                        SectionLabel(title: "Kalender")
-                        AgendaCard(items: agenda)
-                    }
+                    calendarSection(now)
                     sessionsSection(rows, now: now)
                 }
                 .padding(.bottom, 16)
             }
             .scrollDismissesKeyboard(.interactively)
-            .refreshable { await model.refresh() }
+            .refreshable {
+                await model.refresh()
+                await calendar.refresh(model, force: true)
+            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .relayRootTitle(AppTab.today.title)
@@ -55,9 +52,15 @@ struct TodayView: View {
             }
         }
         .task { await model.pollTriage() }
+        .task { await calendar.refresh(model) }
+        .onChange(of: model.state) { _, s in
+            // Beim Start steht „Heute“ vor der Verbindung: Termine holen, sobald sie da ist.
+            if s == .connected { Task { await calendar.refresh(model) } }
+        }
         .onAppear {
             UsageRecorder.shared.screen("heute")
             jarvisTurns = JarvisStore.load()
+            Task { await calendar.refresh(model) }
         }
         .sheet(isPresented: $showNew) {
             NewSessionView { target in
@@ -225,6 +228,27 @@ struct TodayView: View {
         .accessibilityIdentifier("assistantCard")
     }
 
+    // MARK: Kalender
+
+    /// Kalenderkarte: Termine von heute und morgen, ein Tipp öffnet die Wochenliste. Ohne Antwort des Gateways
+    /// entfällt der Abschnitt; scheitert der Abruf bei bestehender Verbindung, steht dort der Grund.
+    @ViewBuilder private func calendarSection(_ now: Date) -> some View {
+        if let feed = calendar.feed {
+            SectionLabel(title: "Kalender")
+            Button {
+                UsageRecorder.shared.record("heute", "kalender geöffnet")
+                push(.calendar)
+            } label: {
+                AgendaCard(days: Agenda.card(feed, today: DayText.key(now)), now: now)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("calendarCard")
+        } else if let failure = calendar.failure, model.state == .connected {
+            SectionLabel(title: "Kalender")
+            QuietLine(text: failure)
+        }
+    }
+
     // MARK: Sitzungen
 
     @ViewBuilder private func sessionsSection(_ rows: [Today.Row], now: Date) -> some View {
@@ -308,31 +332,5 @@ struct TodayView: View {
         askFocused = false
         UsageRecorder.shared.record("heute", "jarvis gefragt", kind: "text", length: q.count)
         push(.jarvisAsk(q))
-    }
-}
-
-/// Kalenderkarte auf „Heute“: Zeit und Titel je Termin. Wird nur mit Einträgen gezeigt.
-struct AgendaCard: View {
-    let items: [Today.AgendaItem]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(items) { item in
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(Today.agendaTime(item)).font(RelayFont.labelLarge).monospacedDigit().foregroundStyle(RelayColor.primary)
-                        .frame(minWidth: 52, alignment: .leading)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(item.title).font(RelayFont.titleSmall).foregroundStyle(RelayColor.onSurface).lineLimit(2)
-                        if !item.location.isEmpty {
-                            Text(item.location).font(RelayFont.bodySmall).foregroundStyle(RelayColor.onSurfaceVariant).lineLimit(1)
-                        }
-                    }
-                }
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .relayCard()
-        .padding(.horizontal, RelaySpace.rowOuter)
     }
 }

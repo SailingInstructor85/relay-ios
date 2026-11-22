@@ -20,13 +20,17 @@ struct RootTabs: View {
             tab(.yourTurn) { YourTurnView() }
                 .badge(TabRouting.badge(yourTurnCount).map { Text($0) })
             tab(.sessions) { SessionsView() }
-            tab(.inbox) { InboxPlaceholderView() }
+            tab(.inbox) { InboxView() }
             tab(.more) { MoreView() }
         }
         .tint(RelayColor.primary)
         // Marke für die UI-Tests (nur im Testmodus): verbunden und Sitzungen geladen
         .overlay(alignment: .topLeading) { HomeReadyMarker(ready: model.state == .connected && !model.sessions.isEmpty) }
-        .onChange(of: router.tab) { _, t in UsageRecorder.shared.record("app", "tab", detail: t.rawValue) }
+        .onChange(of: router.tab) { old, t in
+            UsageRecorder.shared.record("app", "tab", detail: t.rawValue)
+            // Posteingang verlassen: Was dort stand, gilt beim nächsten Besuch nicht mehr als neu.
+            if old == .inbox { InboxStore.shared.visited() }
+        }
         .onChange(of: model.showDormant) { _, _ in Task { await model.refresh() } }
         .onChange(of: model.showBackground) { _, _ in Task { await model.refresh() } }
         .onChange(of: model.openChat) { _, key in
@@ -109,17 +113,5 @@ struct TabEmptyState: View {
         }
         .padding(.horizontal, 32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// Posteingang: vorerst nur der Leerzustand. Mail und Kalender liefert später das Gateway (eigenes Paket).
-struct InboxPlaceholderView: View {
-    var body: some View {
-        TabEmptyState(symbol: "envelope", title: "Kommt bald",
-                      text: "Mails und Nachrichten erscheinen hier, sobald der PC sie bereitstellt.")
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("inboxPlaceholder")
-            .relayRootTitle(AppTab.inbox.title)
-            .onAppear { UsageRecorder.shared.screen("posteingang") }
     }
 }
