@@ -71,10 +71,10 @@ class RelayTestCase: XCTestCase {
 
     /// Kennung, die der Startbildschirm setzt, sobald er verbunden ist und Sitzungen hat (HomeReadyMarker in der App).
     static let homeReadyID = "homeReady"
-    /// Sichtbarer Text des alten Startbildschirms, nur noch als Ersatz, falls die Kennung im Baum fehlt.
+    /// Sichtbarer Text der Sitzungsliste, nur noch als Ersatz, falls die Kennung im Baum fehlt.
     static let legacyHomeText = "Wartet auf dich"
 
-    /// Wartet, bis der Startbildschirm mit Daten vom Gateway steht.
+    /// Wartet, bis der Tab-Rahmen steht und Daten vom Gateway da sind.
     @discardableResult
     func waitHome(_ timeout: TimeInterval = 60) -> Bool {
         let end = Date().addingTimeInterval(timeout)
@@ -82,10 +82,15 @@ class RelayTestCase: XCTestCase {
         repeat {
             if id(Self.homeReadyID).exists { return true }
             round += 1
-            // Ersatz erst nach einigen Runden: Die Kennung kommt mit der Verbindung, der Text kann schon vorher stehen.
-            if round > 10, find(Self.legacyHomeText) != nil {
-                notes.append("Kennung \(Self.homeReadyID) fehlt, Start am Text „\(Self.legacyHomeText)“ erkannt")
-                return true
+            // Ersatz erst nach einigen Runden: Die Kennung kommt mit der Verbindung. Fehlt sie im Baum, zeigt der
+            // Abschnitt „Wartet auf dich“ im Tab „Sitzungen“, dass Daten da sind.
+            if round > 10 {
+                let sessions = app.tabBars.buttons[Self.tabSessions]
+                if sessions.exists, sessions.isHittable, !sessions.isSelected { sessions.tap(); Thread.sleep(forTimeInterval: 0.6) }
+                if find(Self.legacyHomeText) != nil {
+                    notes.append("Kennung \(Self.homeReadyID) fehlt, Start am Text „\(Self.legacyHomeText)“ erkannt")
+                    return true
+                }
             }
             Thread.sleep(forTimeInterval: 0.3)
         } while Date() < end

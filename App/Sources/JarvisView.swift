@@ -49,7 +49,7 @@ struct JarvisView: View {
                                     if t.voice { Image(systemName: "waveform").font(.caption).foregroundStyle(.secondary) }
                                     Text(t.q).padding(10).background(Color.accentColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 14))
                                 }
-                                if t.a.isEmpty && !t.done { ProgressView() } else { MarkdownText(text: t.a) }
+                                if t.a.isEmpty && !t.done { ProgressView() } else { MarkdownText(text: t.a).font(RelayFont.reply).lineSpacing(3) }
                             }.padding(.horizontal).id(t.id)
                         }
                         if voice.listening {
@@ -73,6 +73,8 @@ struct JarvisView: View {
                     .accessibilityLabel("Senden").accessibilityIdentifier("jarvisSend")
             }.padding([.horizontal, .bottom])
         }
+        .background { RelayColor.background.ignoresSafeArea() }
+        .toolbarBackground(RelayColor.background, for: .navigationBar)
         .navigationTitle("Jarvis")
         .onAppear { UsageRecorder.shared.screen("jarvis") }
         .toolbar {

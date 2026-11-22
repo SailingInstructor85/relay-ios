@@ -77,12 +77,19 @@ struct SessionsView: View {
                     Text("Zuletzt").tag(true)
                 }.pickerStyle(.segmented)
             }.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-            if model.state != .connected { connectionRow }
-            if let help = model.connectHelp, !help.isEmpty { ConnectHelpRow(help: help) { push(.settings) } }
-            if model.state != .connected || outbox.items(for: VaultChat.key).contains(where: { $0.state != .delivered }) { vaultRow }
-            listContent
+            // Zeilen auf der Kartenfläche des neuen Designs, die Seite selbst im warmen Hintergrundton
+            Group {
+                if model.state != .connected { connectionRow }
+                if let help = model.connectHelp, !help.isEmpty { ConnectHelpRow(help: help) { push(.settings) } }
+                if model.state != .connected || outbox.items(for: VaultChat.key).contains(where: { $0.state != .delivered }) { vaultRow }
+                listContent
+            }
+            .listRowBackground(RelayColor.surfaceContainerLow)
         }
         .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background { RelayColor.background.ignoresSafeArea() }
+        .toolbarBackground(RelayColor.background, for: .navigationBar)
         .searchable(text: $search, prompt: "Sitzungen, Gespräche, Jarvis")
         .onChange(of: search) { _, q in searcher.update(q, model: model) }
         .onChange(of: model.state) { _, _ in searcher.update(search, model: model) }
@@ -246,7 +253,7 @@ struct TriageStrip: View {
     let openUsage: () -> Void
     let openMemory: () -> Void
 
-    private func color(_ level: Int) -> Color { level >= 2 ? .red : (level == 1 ? .orange : .secondary) }
+    private func color(_ level: Int) -> Color { RelayColor.level(level) }
 
     var body: some View {
         let count = Triage.shortCount(Triage.counts(model.triageSessions, unread: model.unread))
@@ -261,7 +268,7 @@ struct TriageStrip: View {
                     HStack(spacing: 12) {
                         if !count.isEmpty {
                             Button(action: openNext) { Text(count).fontWeight(.semibold) }
-                                .foregroundStyle(count.contains("brauch") ? Color.red : Color.accentColor)
+                                .foregroundStyle(count.contains("brauch") ? RelayColor.error : RelayColor.primary)
                         }
                         if !staleText.isEmpty { Text(staleText).foregroundStyle(.secondary) }
                         if let r = ram {
@@ -277,7 +284,7 @@ struct TriageStrip: View {
                                     if !q.week.isEmpty { Text(q.week).foregroundStyle(color(q.weekLevel)) }
                                 }
                                 .padding(.horizontal, 8).padding(.vertical, 2)
-                                .background(Color.secondary.opacity(0.12), in: Capsule())
+                                .background(RelayColor.surfaceContainerLow, in: Capsule())
                             }
                         }
                     }
@@ -286,7 +293,7 @@ struct TriageStrip: View {
                     .padding(.horizontal)
                 }
                 .padding(.vertical, 6)
-                .background(.bar)
+                .background(RelayColor.background)
             }
         }
     }
@@ -339,7 +346,7 @@ struct SessionAvatar: View {
                 else { Text(glyph ?? Avatars.initials(s.cwd)).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white) }
             }
             .frame(width: 38, height: 38)
-            if unread { Circle().fill(.blue).frame(width: 11, height: 11).overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5)).offset(x: 2, y: -2) }
+            if unread { Circle().fill(RelayColor.primary).frame(width: 11, height: 11).overlay(Circle().stroke(RelayColor.surfaceContainerLow, lineWidth: 1.5)).offset(x: 2, y: -2) }
         }
         .accessibilityHidden(true)
     }
@@ -402,7 +409,7 @@ struct SessionRow: View {
                 HStack(spacing: 6) {
                     if pinned { Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.yellow) }
                     if muted { Image(systemName: "bell.slash.fill").font(.caption2).foregroundStyle(.secondary) }
-                    title.font(.body.weight(unread ? .semibold : .regular)).lineLimit(1)
+                    title.font(Font.system(.body, design: .serif).weight(unread ? .semibold : .regular)).lineLimit(1)
                     Spacer(minLength: 4)
                     Text(TermText.ago(s.lastActivity)).font(.caption2).foregroundStyle(.secondary)
                 }

@@ -149,13 +149,13 @@ struct StateDot: View {
                 if stale { Circle().fill(Color.gray).frame(width: 9, height: 9) }
                 else { ProgressView().controlSize(.mini).tint(.accentColor) }
             case "needs_input":
-                let c: Color = stale ? .gray : .red
+                let c: Color = stale ? .gray : RelayColor.error
                 Circle().strokeBorder(c, lineWidth: 2).frame(width: 14, height: 14)
                     .overlay(Circle().fill(c).frame(width: 6, height: 6))
             case "exited":
                 Circle().strokeBorder(Color.gray, lineWidth: 1.5).frame(width: 10, height: 10)
             default:
-                Circle().fill(stale ? Color.gray : Color.green).frame(width: 9, height: 9)
+                Circle().fill(stale ? Color.gray : RelayColor.tertiary).frame(width: 9, height: 9)
             }
         }
         .frame(width: 14, height: 14)

@@ -127,6 +127,8 @@ struct ChatView: View {
                 inputBar
             }
         }
+        .background { RelayColor.background.ignoresSafeArea() }
+        .toolbarBackground(RelayColor.background, for: .navigationBar)
         .navigationTitle(session?.name ?? "Sitzung")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarItems }
@@ -315,7 +317,9 @@ struct ChatView: View {
                     .lineLimit(1...6).focused($focused).accessibilityIdentifier("chatInput")
                     .submitLabel(returnSends ? .send : .return)
                     .onSubmit { if returnSends && canSend { Task { await sendTapped() } } }
-                    .padding(8).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(RelayColor.surfaceContainerLowest, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(RelayColor.outlineVariant, lineWidth: 1) }
                 Button { Task { await toggleDictation() } } label: {
                     Image(systemName: voice.listening ? "mic.fill" : "mic").font(.title3).foregroundStyle(voice.listening ? Color.red : Color.accentColor)
                 }.accessibilityLabel(voice.listening ? "Diktat beenden" : "Diktieren").accessibilityIdentifier("chatMic")
@@ -326,7 +330,7 @@ struct ChatView: View {
             .padding(.horizontal).padding(.bottom, 6)
         }
         .padding(.top, 6)
-        .background(.bar)
+        .background(RelayColor.background)
     }
 
     // MARK: header, working line, cards
@@ -932,8 +936,8 @@ struct MessageRow: View {
         switch m.role {
         case "user":
             HStack { Spacer(minLength: 40)
-                Text(MarkdownText.linkified(AttributedString(m.text))).padding(10)
-                    .background(Color.accentColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 14)) }
+                Text(MarkdownText.linkified(AttributedString(m.text))).padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(RelayColor.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: RelayRadius.hero, style: .continuous)) }
             .padding(.horizontal)
         case "system":
             Text(m.text).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.horizontal)
@@ -941,7 +945,8 @@ struct MessageRow: View {
             toolRow
         default:
             VStack(alignment: .leading, spacing: 6) {
-                if !m.text.isEmpty { MarkdownText(text: m.text, selectable: false) }
+                // Antworten des Agenten in Serifenschrift (Überschriften, Code und Tabellen behalten ihre eigene Schrift)
+                if !m.text.isEmpty { MarkdownText(text: m.text, selectable: false).font(RelayFont.reply).lineSpacing(3) }
                 if !m.tools.isEmpty { toolRow }
                 if !m.files.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
