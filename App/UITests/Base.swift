@@ -27,7 +27,8 @@ class RelayTestCase: XCTestCase {
 
     var env: [String: String] { ProcessInfo.processInfo.environment }
 
-    func launch(prefill: Bool = true, share: Bool = false) {
+    /// `scheme`: "dark" oder "light" erzwingt das Farbschema der App (UITestMode.colorScheme), nil lässt das des Simulators.
+    func launch(prefill: Bool = true, share: Bool = false, scheme: String? = nil) {
         app = XCUIApplication()
         app.launchArguments += ["-relayUITest", "-AppleLanguages", "(de)", "-AppleLocale", "de_DE"]
         app.launchEnvironment["RELAY_UI_HOST"] = "127.0.0.1"
@@ -36,6 +37,7 @@ class RelayTestCase: XCTestCase {
         app.launchEnvironment["RELAY_UI_SEED"] = Self.seedHex
         app.launchEnvironment["RELAY_UI_PREFILL"] = prefill ? "1" : "0"
         if share { app.launchEnvironment["RELAY_UI_SHARE"] = "1" }
+        if let scheme { app.launchEnvironment["RELAY_UI_SCHEME"] = scheme }
         app.launch()
         dismissSystemAlerts()
     }
@@ -51,11 +53,57 @@ class RelayTestCase: XCTestCase {
         }
     }
 
-    /// Startet und wartet, bis die Sitzungsliste mit Daten da ist.
-    func launchConnected() {
-        launch()
-        XCTAssertTrue(has("Wartet auf dich", 60), "Sitzungsliste nicht geladen")
+    /// Startet und wartet, bis der Startbildschirm mit Daten da ist.
+    func launchConnected(scheme: String? = nil) {
+        launch(scheme: scheme)
+        XCTAssertTrue(waitHome(60), "Startbildschirm nicht geladen")
         settle(1)
+    }
+
+    // MARK: Wege durch die App
+    //
+    // Nur die Hilfen in diesem Abschnitt wissen, wie die Navigation aufgebaut ist (heute: eine Sitzungsliste mit
+    // Hauptmenü oben links). Nach dem Umbau auf Tabs werden nur sie angepasst, die Tests selbst bleiben:
+    // `waitHome` (Tab-Rahmen setzt die Kennung), `showSessions` (Tab „Sitzungen“ wählen), `openMainMenu` und
+    // `mainMenu` (Weg zu Übersichten, Hinweisen, Routinen, Einstellungen), `openSession`.
+
+    /// Kennung, die der Startbildschirm setzt, sobald er verbunden ist und Sitzungen hat (HomeReadyMarker in der App).
+    static let homeReadyID = "homeReady"
+    /// Sichtbarer Text des alten Startbildschirms, nur noch als Ersatz, falls die Kennung im Baum fehlt.
+    static let legacyHomeText = "Wartet auf dich"
+
+    /// Wartet, bis der Startbildschirm mit Daten vom Gateway steht.
+    @discardableResult
+    func waitHome(_ timeout: TimeInterval = 60) -> Bool {
+        let end = Date().addingTimeInterval(timeout)
+        var round = 0
+        repeat {
+            if id(Self.homeReadyID).exists { return true }
+            round += 1
+            // Ersatz erst nach einigen Runden: Die Kennung kommt mit der Verbindung, der Text kann schon vorher stehen.
+            if round > 10, find(Self.legacyHomeText) != nil {
+                notes.append("Kennung \(Self.homeReadyID) fehlt, Start am Text „\(Self.legacyHomeText)“ erkannt")
+                return true
+            }
+            Thread.sleep(forTimeInterval: 0.3)
+        } while Date() < end
+        return false
+    }
+
+    /// Bringt die Sitzungsliste nach vorn. Heute ist sie der Startbildschirm, hier ist nichts zu tun; mit Tabs wählt
+    /// diese Funktion den Tab „Sitzungen“.
+    func showSessions() {}
+
+    /// Öffnet das Hauptmenü, ohne etwas zu wählen (für Bilder). Schließen mit `closeMainMenu`.
+    func openMainMenu() {
+        showSessions()
+        tapID("mainMenu")
+    }
+
+    /// Schließt das offene Hauptmenü wieder (Tipp neben das Menü).
+    func closeMainMenu() {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)).tap()
+        settle(0.6)
     }
 
     // MARK: finden
@@ -120,7 +168,7 @@ class RelayTestCase: XCTestCase {
     /// Öffnet das Hauptmenü und tippt einen Eintrag; die Übersichten (Nutzung, RAM, Was war los, Token) liegen im
     /// Untermenü „Übersichten“.
     func mainMenu(_ item: String) {
-        tapID("mainMenu")
+        openMainMenu()
         if !has(item, 1.5), has("Übersichten", 1) { tap("Übersichten", 2); settle(0.6) }
         tap(item, 4)
     }
@@ -158,7 +206,9 @@ class RelayTestCase: XCTestCase {
 
     func row(_ t: String) -> XCUIElement? { reveal(t); return find(t) }
 
+    /// Öffnet den Chat einer Sitzung über ihren Titel in der Sitzungsliste.
     func openSession(_ title: String) {
+        showSessions()
         reveal(title)
         tap(title, 8)
         Thread.sleep(forTimeInterval: 1.5)

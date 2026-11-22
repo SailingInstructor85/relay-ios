@@ -131,6 +131,8 @@ struct SessionsView: View {
             }
         }
         .safeAreaInset(edge: .bottom) { undoBar }
+        // Marke für die UI-Tests (nur im Testmodus): verbunden und Sitzungen geladen
+        .overlay(alignment: .topLeading) { HomeReadyMarker(ready: model.state == .connected && !model.sessions.isEmpty) }
         .confirmationDialog("Arbeitende Sitzung stoppen und schließen?", isPresented: $showConfirmClose, titleVisibility: .visible, presenting: confirmClose) { s in
             Button("Stoppen und schließen", role: .destructive) { model.softClose(s) }
         }

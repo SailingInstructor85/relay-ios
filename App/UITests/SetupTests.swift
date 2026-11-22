@@ -31,7 +31,7 @@ final class SetupTests: RelayTestCase {
         focus(user); user.typeText((env["RELAY_UI_USER"] ?? NSUserName()) + "\n"); settle(0.6)
         shot("einrichtung-ausgefuellt")
         tap("Verbinden", exact: true)
-        XCTAssertTrue(has("Wartet auf dich", 30), "nach dem Verbinden keine Sitzungsliste")
+        XCTAssertTrue(waitHome(30), "nach dem Verbinden keine Sitzungsliste")
         shot("liste-nach-verbinden")
         // Host-Schlüssel gepinnt?
         mainMenu("Einstellungen")
@@ -48,7 +48,7 @@ final class SetupTests: RelayTestCase {
         settle(3)
         shot("nach-kick")
         mainMenu("Neu verbinden")
-        XCTAssertTrue(has("Wartet auf dich", 20))
+        XCTAssertTrue(waitHome(20), "nach dem Neuverbinden keine Sitzungsliste")
         shot("wieder-verbunden")
     }
 }

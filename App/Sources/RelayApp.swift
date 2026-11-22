@@ -12,6 +12,7 @@ struct RelayApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
+                .preferredColorScheme(UITestMode.colorScheme) // nur im UI-Testmodus gesetzt, sonst nil (System)
                 .onOpenURL { model.receive($0) }
                 .onAppear {
                     UsageRecorder.shared.appStarted(); model.start(); Outbox.shared.start(); model.requestNotificationPermission()
