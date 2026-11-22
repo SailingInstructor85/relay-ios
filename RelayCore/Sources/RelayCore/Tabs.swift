@@ -39,6 +39,10 @@ public enum Route: Hashable, Sendable {
     case notices
     case notice(String)
     case routines, drive, vaultChat
+    /// Eine Mail aus dem Posteingang (Nummer im Index des Gateways), nur lesen.
+    case mail(String)
+    /// Wochenliste des Kalenders (Tipp auf die Kalenderkarte auf „Heute“).
+    case calendar
 
     /// Unterseiten mit eigener Eingabeleiste oder Sprachbedienung: dort verschwindet die Tab-Leiste.
     public var hidesTabBar: Bool {

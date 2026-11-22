@@ -142,29 +142,4 @@ public enum Today {
 
     /// Zeit der letzten Antwort (Unix-Sekunden), 0 ohne Verlauf.
     public static func assistantLast(_ turns: [JarvisTurn]) -> Double { turns.last?.ts ?? 0 }
-
-    // MARK: Kalender (Platzhalter)
-
-    /// Ein Termin für die Kalenderkarte auf „Heute“. Die Daten liefert später das Gateway (eigenes Paket); bis dahin
-    /// ist die Liste leer und die Karte erscheint nicht.
-    public struct AgendaItem: Sendable, Equatable, Identifiable {
-        public let id: String
-        public let title: String
-        public let start: Double
-        public let end: Double
-        public let allDay: Bool
-        public let location: String
-        public init(id: String, title: String, start: Double, end: Double = 0, allDay: Bool = false, location: String = "") {
-            self.id = id; self.title = title; self.start = start; self.end = end; self.allDay = allDay; self.location = location
-        }
-    }
-
-    /// „ganztägig“ oder die Startzeit „09:30“.
-    public static func agendaTime(_ item: AgendaItem, timeZone: TimeZone = .current) -> String {
-        if item.allDay { return "ganztägig" }
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = timeZone
-        let c = cal.dateComponents([.hour, .minute], from: Date(timeIntervalSince1970: item.start))
-        return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
-    }
 }

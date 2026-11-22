@@ -102,10 +102,4 @@ final class TodayTests: XCTestCase {
         XCTAssertEqual(Today.assistantPreview(turns), "Und sonst?")
         XCTAssertEqual(Today.assistantLast(turns), 20)
     }
-
-    func testAgendaTime() {
-        let utc = TimeZone(identifier: "UTC")!
-        XCTAssertEqual(Today.agendaTime(Today.AgendaItem(id: "1", title: "Termin", start: 9 * 3600 + 30 * 60), timeZone: utc), "09:30")
-        XCTAssertEqual(Today.agendaTime(Today.AgendaItem(id: "2", title: "Urlaub", start: 0, allDay: true), timeZone: utc), "ganztägig")
-    }
 }
