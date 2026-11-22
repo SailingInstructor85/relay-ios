@@ -7,8 +7,9 @@ import XCTest
 ///
 /// Farbschema: Die App folgt sonst dem System. Im Testmodus erzwingt die Startumgebung `RELAY_UI_SCHEME`
 /// (`launch(scheme:)`, in der App `UITestMode.colorScheme` mit `preferredColorScheme`) dunkel oder hell. Die Tests
-/// 01 bis 03 laufen dunkel, Test 04 nimmt dieselben Bildschirme hell auf. Die Tests 05 und 06 zeigen die Tabs Heute,
-/// Dein Zug, Posteingang und Mehr dunkel und hell.
+/// 01 bis 03 laufen dunkel, Test 04 nimmt dieselben Bildschirme hell auf. Die Tests 05 und 06 zeigen die Tabs Heute
+/// (mit Kalenderkarte und Wochenliste), Dein Zug, Posteingang (Liste, Aufräumvorschläge, Mailansicht) und Mehr dunkel
+/// und hell.
 final class DesignTests: RelayTestCase {
     static let session = "API Refactoring"
 
@@ -69,7 +70,17 @@ final class DesignTests: RelayTestCase {
         settle(3)
         showTab(Self.tabToday)
         settle(1.5)
+        if !id("calendarCard").waitForExistence(timeout: 8) { notes.append("Kalenderkarte fehlt auf Heute") }
         shot(prefix + "heute")
+        // Kalenderkarte in die Mitte holen, dann die Wochenliste
+        if revealInPage("Zahnarzt") {
+            shot(prefix + "heute-kalender")
+            tapID("calendarCard")
+            settle(1)
+            shot(prefix + "kalender-woche")
+            back()
+            settle(0.6)
+        }
         app.swipeUp()
         settle(0.8)
         shot(prefix + "heute-unten")
@@ -80,8 +91,24 @@ final class DesignTests: RelayTestCase {
         settle(0.8)
         shot(prefix + "deinzug-unten")
         showTab(Self.tabInbox)
+        if !has("Unterlagen für Donnerstag", 10) { notes.append("Posteingang ohne Liste") }
+        _ = id("inboxSuggestions").waitForExistence(timeout: 6)
         settle(0.8)
         shot(prefix + "posteingang")
+        if id("inboxSuggestions").exists {
+            tapID("inboxSuggestions")
+            settle(0.8)
+            shot(prefix + "posteingang-vorschlaege")
+            tapID("inboxSuggestions")
+            settle(0.5)
+        }
+        if tap("Unterlagen für Donnerstag", 4, soft: true) {
+            _ = id("mailSubject").waitForExistence(timeout: 8)
+            settle(0.8)
+            shot(prefix + "mail")
+            back()
+            settle(0.6)
+        }
         showTab(Self.tabMore)
         settle(0.8)
         shot(prefix + "mehr-tab")

@@ -62,7 +62,7 @@ final class TabTests: RelayTestCase {
         XCTAssertTrue(mockReceived("send_result", where: { $0["ok"] as? Bool == true }), "Freigabe nicht gesendet")
     }
 
-    /// Wartende Sitzung in Dein Zug öffnet den Chat; Posteingang und Mehr stehen.
+    /// Wartende Sitzung in Dein Zug öffnet den Chat; Posteingang (Liste aus dem Mock) und Mehr stehen.
     func test05_TabsUndPosteingang() {
         launchConnected()
         showTab(Self.tabYourTurn)
@@ -71,7 +71,7 @@ final class TabTests: RelayTestCase {
         tapID("turnOpenChat")
         XCTAssertTrue(id("chatInput").waitForExistence(timeout: 8), "Chat aus Dein Zug nicht geöffnet")
         showTab(Self.tabInbox)
-        expect("Kommt bald", 4)
+        expect("Unterlagen für Donnerstag", 10)
         shot("posteingang")
         showTab(Self.tabMore)
         expect("Einstellungen", 4)

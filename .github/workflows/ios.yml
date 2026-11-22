@@ -96,7 +96,7 @@ jobs:
           - { name: chat, classes: "ChatTests" }
           - { name: eingabe, classes: "ComposeTests ScreenTests" }
           # Bilder der Hauptbildschirme (dunkel und hell) für den Umbau der Oberfläche; Artefakt simulator-results-design
-          - { name: design, classes: "DesignTests TabTests" }
+          - { name: design, classes: "DesignTests TabTests InboxTests" }
     steps:
       - uses: actions/checkout@v4
       - name: Xcode version
