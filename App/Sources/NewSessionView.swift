@@ -33,6 +33,10 @@ struct NewSessionView: View {
                     HStack {
                         Image(systemName: "folder")
                         Text(cwd.isEmpty ? "Kein Ordner gewählt" : cwd).font(.callout).foregroundStyle(cwd.isEmpty ? .secondary : .primary).lineLimit(2)
+                            .accessibilityIdentifier("newSessionDir")
+                    }
+                    if NewSessionStart.isPreset(cwd, vaultSetting: model.vaultDir) {
+                        Text(NewSessionStart.presetHint).font(.footnote).foregroundStyle(.secondary)
                     }
                     TextField("Ordner suchen…", text: $query).textInputAutocapitalization(.never).autocorrectionDisabled()
                         .onSubmit { Task { await find() } }
@@ -77,6 +81,7 @@ struct NewSessionView: View {
             }
             .task {
                 if alias.isEmpty { alias = model.defaultLaunchAlias }
+                cwd = NewSessionStart.preset(current: cwd, vaultSetting: model.vaultDir)  // Vault als Voreinstellung, bleibt änderbar
                 if let r = try? await model.rpc("recent_dirs", ["limit": 30]) {
                     recent = r["dirs"].array.map { $0.str("path") }.filter { !$0.isEmpty }
                 }

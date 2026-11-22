@@ -18,7 +18,8 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Antwortkarten** für Fragen, Auswahllisten (`/model`, Berechtigungsabfragen, Plan-Freigabe) und Panels (`/usage`,
   `/status`), mit `expect_menu`, damit eine veraltete Karte keinen neuen Dialog beantwortet
 - **Live-Bildschirm** (tmux-Aufnahme) mit Tastenleiste: Esc, Enter, Pfeiltasten, Tab, Ctrl-C, Ziffern
-- **Neue Sitzung:** Konto wählen, Ordner aus den zuletzt benutzten, per Suche oder durch Blättern, erste Nachricht
+- **Neue Sitzung:** Konto wählen (Claude oder Codex), erste Nachricht. Als Startordner ist der Vault-Ordner vorgewählt
+  (Einstellungen → Ablage), ein anderer lässt sich aus den zuletzt benutzten, per Suche oder durch Blättern wählen
 - **Anhänge:** Fotos und Dateien hochladen, der Pfad landet in der Nachricht. Aus der Mediathek gehen mehrere Fotos
   und Videos auf einmal: Sie stehen erst als Vorschau über der Eingabe und gehen mit „N Fotos hochladen“ (oder Senden)
   gemeinsam hoch.

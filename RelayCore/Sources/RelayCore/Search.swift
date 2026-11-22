@@ -165,6 +165,12 @@ public enum VaultDrop {
     public static let inbox = "01 Inbox"
     public static let attachments = "07 Anhänge"
 
+    /// The vault folder from the settings; empty means the default.
+    public static func root(_ setting: String) -> String {
+        let r = setting.trimmingCharacters(in: .whitespacesAndNewlines)
+        return r.isEmpty ? defaultDir : r
+    }
+
     /// Session name: "Ablage: daniel.pdf" or "Ablage: 3 Dateien".
     public static func name(paths: [String]) -> String {
         if paths.count == 1 { return "Ablage: " + (paths[0] as NSString).lastPathComponent }
@@ -184,6 +190,23 @@ public enum VaultDrop {
                   "4. Melde am Ende knapp: welche Datei, wohin, warum."]
         return lines.joined(separator: "\n")
     }
+}
+
+/// "Neue Sitzung": the folder that is preselected when the sheet opens (Martin, 2026-11-22: the vault, for Claude and
+/// Codex alike). It is only a preset; picking another folder replaces it.
+public enum NewSessionStart {
+    /// The preset folder: the vault folder from the settings (empty setting: the default vault path).
+    public static func dir(vaultSetting: String) -> String { VaultDrop.root(vaultSetting) }
+
+    /// Applies the preset once: an already chosen folder stays.
+    public static func preset(current: String, vaultSetting: String) -> String {
+        current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? dir(vaultSetting: vaultSetting) : current
+    }
+
+    /// Whether `cwd` is the preset (the sheet then says "Vault, voreingestellt").
+    public static func isPreset(_ cwd: String, vaultSetting: String) -> Bool { !cwd.isEmpty && cwd == dir(vaultSetting: vaultSetting) }
+
+    public static let presetHint = "Vault, voreingestellt. Ein anderer Ordner lässt sich unten wählen."
 }
 
 /// "In Dokumente ablegen": real paperwork that belongs outside the vault. A new agent session (started in the vault

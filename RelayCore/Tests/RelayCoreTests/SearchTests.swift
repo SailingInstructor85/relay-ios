@@ -122,6 +122,19 @@ final class SearchTests: XCTestCase {
         XCTAssertFalse(ProfileFields.looksSensitive("Hauptstr. 5"))
     }
 
+    func testNewSessionStartsInVault() {
+        // Voreinstellung ist der Vault-Ordner aus den Einstellungen, leer heißt Standardpfad
+        XCTAssertEqual(NewSessionStart.dir(vaultSetting: ""), "~/Dokumente/zweites-gehirn/zweites Gehirn")
+        XCTAssertEqual(NewSessionStart.dir(vaultSetting: "  ~/vault \n"), "~/vault")
+        XCTAssertEqual(VaultDrop.root(""), VaultDrop.defaultDir)
+        // nur Voreinstellung: ein schon gewählter Ordner bleibt
+        XCTAssertEqual(NewSessionStart.preset(current: "", vaultSetting: ""), VaultDrop.defaultDir)
+        XCTAssertEqual(NewSessionStart.preset(current: "/home/m/projekt", vaultSetting: ""), "/home/m/projekt")
+        XCTAssertTrue(NewSessionStart.isPreset(VaultDrop.defaultDir, vaultSetting: ""))
+        XCTAssertFalse(NewSessionStart.isPreset("/home/m/projekt", vaultSetting: ""))
+        XCTAssertFalse(NewSessionStart.isPreset("", vaultSetting: ""))
+    }
+
     func testVaultDrop() {
         XCTAssertEqual(VaultDrop.name(paths: ["/u/2026/daniel.pdf"]), "Ablage: daniel.pdf")
         XCTAssertEqual(VaultDrop.name(paths: ["/a", "/b", "/c"]), "Ablage: 3 Dateien")

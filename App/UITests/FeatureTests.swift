@@ -7,6 +7,10 @@ final class NewSessionTests: RelayTestCase {
         settle(1.5)
         shot("neu-start")
         expect("Neue Sitzung")
+        // der Vault ist als Startordner vorgewählt (Martin, 2026-11-22), ein anderer bleibt wählbar
+        XCTAssertTrue(id("newSessionDir").waitForExistence(timeout: 5), "Ordnerzeile fehlt")
+        XCTAssertEqual(id("newSessionDir").label, "~/Dokumente/zweites-gehirn/zweites Gehirn")
+        expect("Vault, voreingestellt", 3, soft: true)
         expect("Konto", 3, soft: true)
         // Konto wählen
         tap("Konto", 2, soft: true)
@@ -20,6 +24,7 @@ final class NewSessionTests: RelayTestCase {
         tap("/home/dev/workspace/billing", exact: true, soft: true)
         settle(0.8)
         shot("neu-ordner-gewaehlt")
+        if id("newSessionDir").label != "/home/dev/workspace/billing" { notes.append("Ordnerwahl ersetzt die Voreinstellung nicht: \(id("newSessionDir").label)") }
     }
 
     func test02_BrowseAndMkdir() {
@@ -59,6 +64,18 @@ final class NewSessionTests: RelayTestCase {
         settle(4)
         shot("start-nach-launch")
         XCTAssertTrue(mockReceived("launch"), "launch nicht aufgerufen")
+    }
+
+    /// Ohne Ordnerwahl startet die Sitzung im Vault: „Starten“ ist sofort aktiv.
+    func test04_LaunchInVaultByDefault() {
+        launchConnected()
+        tapID("newSession")
+        settle(1.5)
+        XCTAssertTrue(id("newSessionDir").waitForExistence(timeout: 5), "Ordnerzeile fehlt")
+        tap("Starten", 3, exact: true)
+        settle(3)
+        XCTAssertTrue(mockReceived("launch", where: { ($0["cwd"] as? String) == "~/Dokumente/zweites-gehirn/zweites Gehirn" }),
+                      "launch ohne Ordnerwahl nicht im Vault")
     }
 }
 
