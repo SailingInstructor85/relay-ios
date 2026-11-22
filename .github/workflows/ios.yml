@@ -83,7 +83,7 @@ jobs:
             source.json
 
   simulator:
-    # Vier Teile mit je frischem Simulator: in einem Lauf über 55 Minuten wurde der Simulator gegen Ende träge und
+    # Fünf Teile mit je frischem Simulator: in einem Lauf über 55 Minuten wurde der Simulator gegen Ende träge und
     # einzelne Tests scheiterten zufällig (testbericht.md). Ein Teil läuft rund 15 Minuten.
     runs-on: macos-latest
     timeout-minutes: 90
@@ -95,6 +95,8 @@ jobs:
           - { name: liste, classes: "ListTests NewSessionTests SetupTests" }
           - { name: chat, classes: "ChatTests" }
           - { name: eingabe, classes: "ComposeTests ScreenTests" }
+          # Bilder der Hauptbildschirme (dunkel und hell) für den Umbau der Oberfläche; Artefakt simulator-results-design
+          - { name: design, classes: "DesignTests" }
     steps:
       - uses: actions/checkout@v4
       - name: Xcode version
