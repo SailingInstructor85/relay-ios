@@ -83,7 +83,7 @@ struct SetupView: View {
                 }
                 Section("Ablage") {
                     TextField(VaultDrop.defaultDir, text: $vaultDir).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    Text("Vault-Ordner auf dem PC für „Ins Vault einsortieren“ beim Teilen einer Datei. Ein Agent legt sie dort in „\(VaultDrop.inbox)“ ab und sortiert sie ein.")
+                    Text("Vault-Ordner auf dem PC für „Ins Vault einsortieren“ beim Teilen einer Datei. Ein Agent legt sie dort zuerst in „\(VaultDrop.inbox)“ ab, sucht den Ordner des Vorgangs (im Vault und im Dokumenten-Ordner darunter) und fragt dich im Chat, bevor er sie einsortiert.")
                         .font(.caption).foregroundStyle(.secondary)
                     TextField(DocDrop.defaultDir, text: $docsDir).textInputAutocapitalization(.never).autocorrectionDisabled()
                         .accessibilityIdentifier("docsDir")

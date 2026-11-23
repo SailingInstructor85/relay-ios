@@ -142,8 +142,25 @@ final class SearchTests: XCTestCase {
         XCTAssertTrue(p.contains("- /u/daniel.pdf"))
         XCTAssertTrue(p.contains("Hinweis von Martin: Bibel, aufheben"))
         XCTAssertTrue(p.contains("\"01 Inbox/\""))
-        XCTAssertTrue(p.contains("\"07 Anhänge/\""))
-        XCTAssertFalse(VaultDrop.prompt(paths: ["/x"], note: "  ").contains("Hinweis"))
+        // kein pauschales Ziel mehr: der Agent sucht den Ordner des Vorgangs, schlägt vor und fragt
+        XCTAssertFalse(p.contains("07 Anhänge"))
+        XCTAssertTrue(p.contains("(Absender, Datum, Vorgang)"))
+        XCTAssertTrue(p.contains("im Vault und in ~/Dokumente/privat/Dokumente (dort nur lesen)"))
+        XCTAssertTrue(p.contains("ein bis drei Zielordner"))
+        XCTAssertTrue(p.contains("frage ihn, wohin es gehört. Berücksichtige seinen Hinweis."))
+        XCTAssertTrue(p.contains("erst nach seinem Ja"))
+        XCTAssertTrue(p.contains("Keine neuen Ordner anlegen"))
+        XCTAssertTrue(p.contains("JJMMTT_Stichwort"))
+        XCTAssertTrue(p.contains("Nichts überschreiben"))
+        XCTAssertTrue(p.contains("6. Melde am Ende knapp: welche Datei, wohin, warum."))
+        // die Reihenfolge trägt: erst Inbox, dann fragen, dann verschieben
+        let order = ["1. Verschiebe jede Datei zuerst", "4. Schlage Martin im Chat", "5. Verschiebe erst nach"]
+            .compactMap { p.range(of: $0)?.lowerBound }
+        XCTAssertEqual(order.count, 3)
+        XCTAssertEqual(order, order.sorted())
+        let q = VaultDrop.prompt(paths: ["/x"], note: "  ", docs: " ~/Ablage ")
+        XCTAssertFalse(q.contains("Hinweis"))
+        XCTAssertTrue(q.contains("im Vault und in ~/Ablage (dort nur lesen)"))
     }
 
     func testDocDrop() {

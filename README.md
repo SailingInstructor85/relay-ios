@@ -87,7 +87,9 @@ iPhone 16 Pro (iOS 17 oder neuer).
   dieselbe Sitzung, solange sie läuft. Nichts geht doppelt raus.
 - **Datei an Relay teilen (seit 0.3.17 mit neuen Zielen):** Eine Datei aus einer anderen App über „Teilen“ oder
   „Öffnen in“ an Relay geben. Das Blatt zeigt die Ziele: „Neue Sitzung“ (vorausgewählt, ein neuer Agent im Vault-Ordner
-  bekommt Nachricht und Datei), „Ins Vault einsortieren“, „In Dokumente ablegen“ (der Agent schlägt Ordner unter dem
+  bekommt Nachricht und Datei), „Ins Vault einsortieren“ (seit 0.3.20: der Agent legt die Datei in die Inbox, sucht den
+  Ordner des Vorgangs im Vault und im Dokumenten-Ordner, schlägt ein bis drei Ziele mit Dateinamen vor und verschiebt
+  erst nach deiner Antwort), „In Dokumente ablegen“ (der Agent schlägt Ordner unter dem
   Dokumenten-Ordner vor und fragt im Chat, bevor er verschiebt; Ordner in Einstellungen → Ablage) oder eine bestehende
   Sitzung, die du antippst. Ohne Antippen geht nichts mehr in eine laufende Sitzung.
 - **Verpasste Antworten und wartende Nachrichten (seit 0.3.16):** Bricht die Verbindung ab, während ein Chat offen ist
