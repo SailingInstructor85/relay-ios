@@ -2,6 +2,21 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.2 (2026-11-24)
+
+**Neu**
+- Rückfrage jetzt: Sind Rückfragen offen, zeigt Relay beim Öffnen ein Blatt mit der ältesten, mit vollem Wortlaut, Kontext und Empfehlung. Darunter „Ja (Empfehlung)“, „Antworten“ und „Später“. Nach einer Antwort kommt die nächste offene. „Später“ lässt das Blatt zu, bis eine neue Rückfrage eintrifft.
+- Rückfragen: kleiner Knopf „Erledigt“ auf der Karte in Dein Zug und im Hinweis. Er schließt eine Rückfrage ohne Antwort, nach einer kurzen Nachfrage. Der Agent bekommt „(verworfen)“ als Antwort.
+
+**Geändert**
+- Rückfragen, die du woanders beantwortet hast (am PC, im Terminal, über den Assistenten, auf einem anderen Gerät), verschwinden jetzt auch in Relay: sofort, oder beim nächsten Verbinden. Der Stand am PC gilt.
+- Antwortest du auf eine Rückfrage, die schon beantwortet ist, steht dort „Schon beantwortet: …“ statt einer Fehlermeldung.
+- Ein leeres Terminal nach `/clear` am PC steht nur noch unter „Zuletzt“. Unter „Laufend“ und in Heute taucht es nicht mehr auf.
+
+**Behoben**
+- Sitzungen, in denen nur noch ein `/clear` steht, erschienen weiter unter Dein Zug, bei „Weiter“ und in den Zählern, obwohl dort nichts mehr wartet.
+- Alte, längst beantwortete Rückfragen blieben in Dein Zug und im Sprachmodus bis zu 14 Tage als offen stehen.
+
 ## 0.4.1 (2026-11-24)
 
 **Neu**

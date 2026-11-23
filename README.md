@@ -43,6 +43,10 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Sitzungsmenü, Leiste mit Pause und Stopp über der Eingabe. „Frage vorlesen“ liest nur die Frage mit Optionen und
   Empfehlung vor (Langdruck-Menü, Sitzungsmenü, Fragekarten, Rückfragen unter „Hinweise“). Codeblöcke werden
   übersprungen, Pfade beim Dateinamen genannt, Links als „Link“.
+- **Rückfragen der Agenten:** Karten im Tab „Dein Zug“ mit Antwortfeld, „Ja (Empfehlung)“, „Antworten“ und einem
+  kleinen „Erledigt“ (schließt ohne Antwort, nach Nachfrage). Sind beim Öffnen der App Rückfragen offen, zeigt ein
+  Blatt die älteste mit vollem Wortlaut („Später“ lässt es zu, bis eine neue kommt). Was am PC oder auf einem anderen
+  Gerät beantwortet wurde, verschwindet auch hier. Details: `docs/rueckfragen.md`.
 - **Sprachmodus für die Autofahrt** (Hinweise → „Sprachmodus“ oder Kurzbefehl „Sprachmodus in Relay“): liest offene
   Rückfragen vor (nur Frage und Empfehlung), du antwortest mit „ja“, „nein“ oder in eigenen Worten, hörst die Antwort
   zur Kontrolle und gibst sie mit „senden“ frei („nochmal“ oder ein neuer Satz korrigiert). Neue Rückfragen liest er

@@ -537,3 +537,45 @@ Offen für Martin:
 - Am iPhone ein Dokument an Relay teilen, „Ins Vault einsortieren“ wählen und prüfen, ob der Agent Ordner vorschlägt und fragt, bevor er verschiebt.
 
 Version: `project.yml` 0.3.19 auf 0.3.20. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 24. November 2026, 00:30 (Version 0.4.2)
+
+Drei Einträge aus dem Backlog, alle auf der App-Seite. Der Gateway-Teil lag schon vor (`~/relay`, Commit 2583026, nur gelesen).
+
+1. Sitzungen nach `/clear` nicht mehr unter „Dein Zug“ zeigen, sondern wegräumen.
+   Befund: Der Backlog nennt `extra.continued_in` als Merkmal. Das Feld ist im Gateway intern (`Session.extra`), `to_dict` schickt es nicht ans Handy. Das Gateway sorgt aber selbst dafür, dass solche Sitzungen nie `needs_input` und nie `asks` melden. Die App braucht also ein eigenes Merkmal.
+   Gebaut: `Session.cleared` (C: Models.swift). Wahr, wenn `continued_in` mitkommt (für später vorbereitet) oder wenn die letzte Nachricht nur `/clear` ist und keine Frage offen ist. Eine solche Sitzung wartet nie (`waits`, `asksYou`), fehlt in „Dein Zug“, in der Warteschlange „Weiter“ (auch als ungelesen), in den Zählern und in „Heute“, löst keine Mitteilung aus und steht nur noch unter „Zuletzt“ (A: `visibleSessions`, `onStateChange`). Tippt jemand wieder in das Terminal, ist die letzte Nachricht eine andere und die Sitzung zählt wieder normal.
+   Tests: RelayCore `YourTurnTests.testClearedSessionsNeverWait` (Transkript nur aus `/clear`, mit `continued_in`, mit offener Frage, mit weiterem Text).
+
+2. Rückfragen: kleiner Knopf zum Verwerfen oder Quittieren ohne Bearbeiten.
+   Gebaut nach dem Vorschlag „Rückfragen quittieren“ (Punkte a bis e) gegen den Vertrag in PROTOCOL.md „Rückfragen“:
+   a) Ereignis `rueckfrage_resolved`: alle offenen Hinweise mit dem Tag bekommen die Antwort, die Mitteilung verschwindet (`Rueckfrage.resolve`, `NoticeStore.resolve`).
+   b) Nach jedem `hello_ok` Abgleich über `rueckfrage_status` mit den Tags der offenen Rückfragen. `beantwortet` und `unbekannt` schließen, `offen` und unbekannte Werte bleiben. Scheitert der RPC (älteres Gateway, `rueckfragen_dir` nicht gesetzt), schließt nichts (`Rueckfrage.reconcile`, `AppModel.reconcileQuestions`).
+   c) Antwort auf eine schon geschlossene Rückfrage: nichts wird geschickt, es steht „Schon beantwortet: …“. Kommt die Schließung, während die eigene Antwort unterwegs ist, gilt die Antwort vom PC.
+   d) Knopf „Erledigt“ auf der Karte in „Dein Zug“ (Kennung `turnDismiss`, zweite kleine Zeile neben „Ganz lesen“) und im Hinweis (`questionDismiss`). Schickt „(verworfen)“ über `answerQuestion`.
+   e) Offen ist eine Rückfrage nur noch nach einer Regel (`Rueckfrage.isOpen`), die „Dein Zug“, Sprachmodus, Blatt und Abgleich gemeinsam nutzen.
+   Tests: RelayCore `NotifyTests.testResolveByTag`, `testReconcileWithDesktop`, `testClosedQuestionTexts`. Mock-Gateway: `inbox_put` einer Antwort veröffentlicht `rueckfrage_resolved`, neuer RPC `rueckfrage_status`, Auslöser `trigger_rueckfrage_pc`, Steuerdatei `rueckfrage_status_off`. UI-Tests `TabTests.test06_DeinZugRueckfrageErledigt`, `test07_RueckfrageAmPCBeantwortet`.
+
+3. Offene Rückfragen sofort sichtbar: Blatt beim Öffnen und „Später“.
+   Gebaut: `QuestionPromptSheet` (A) mit den Regeln in `QuestionPrompt` (C: Notify.swift). Beim Öffnen der App (Kaltstart oder zurück aus dem Hintergrund) zeigt das Blatt die älteste offene Rückfrage mit vollem Wortlaut, Kontext und Empfehlung, unten fest das Antwortfeld mit „Ja (Empfehlung)“, „Antworten“ und „Später“. Nach einer Antwort rückt die nächste nach, ohne offene schließt es sich. „Später“ (auch Herunterwischen) merkt den Zeitstempel der neuesten offenen Rückfrage, das Blatt bleibt zu, bis eine neuere kommt.
+   Tests: RelayCore `NotifyTests.testQuestionPromptOnOpen`. UI-Tests `TabTests.test08_RueckfrageBlattSpaeter`, `test09_RueckfrageBlattJa` (App per Home-Taste in den Hintergrund und wieder nach vorn).
+
+Entscheidungen:
+- „Erledigt“ fragt einmal nach („Rückfrage ohne Antwort schließen?“). Grund: Der Knopf ist klein und sitzt neben „Ganz lesen“, und der wartende Agent bekommt „(verworfen)“ als Martins Antwort. Ein Fehltipp wäre nicht rückholbar. Ist das zu umständlich, lässt sich die Nachfrage mit zwei Zeilen entfernen.
+- Das Blatt geht erst nach dem Verbinden und dem Abgleich auf, nicht sofort aus dem gespeicherten Stand. Sonst zeigte es Rückfragen, die am PC längst beantwortet sind. Ohne Verbindung bleibt es zu, die Karten in „Dein Zug“ stehen trotzdem da.
+- Das Blatt geht nie mitten in der Nutzung auf (neue Rückfragen kommen dann als Mitteilung), nie über der Face-ID-Sperre und nicht, wenn die App über die Mitteilung einer Rückfrage geöffnet wurde. Ein Systemdialog (Zustand „inaktiv“) zählt nicht als Öffnen, nur der echte Hintergrund.
+- `unbekannt` beim Abgleich schließt die Rückfrage mit dem Vermerk „Am PC nicht mehr offen“, wie im Vertrag vorgesehen.
+- Das leere Terminal nach `/clear` verschwindet nicht ganz, sondern steht unter „Zuletzt“. So bleibt es auffindbar, falls die Erkennung einmal danebenliegt.
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert, nicht am iPhone geprüft. Stellen für den Compiler: `QuestionPromptSheet.swift` (neu), die drei Blätter an `RootView` (Freigaben, Teilen, Rückfrage), `confirmationDialog` in der Karte und im Hinweis, die `else if`-Kette in `setForeground`.
+- Die Erkennung über die letzte Nachricht `/clear` ist eine Annahme über `last_message` des Gateways. Nachgelesen im Code (Slash-Befehle erscheinen dort als „/clear“), aber nicht an einer echten Sitzung geprüft. Verlässlicher wäre, wenn das Gateway `continued_in` mitschickt. Die App liest das Feld schon.
+- Die neuen UI-Tests 08 und 09 schicken die App per Home-Taste in den Hintergrund. Das macht bisher kein anderer Test. Schlagen sie in der CI fehl, zuerst dort nachsehen.
+- Der Abgleich braucht am PC `rueckfragen_dir` in der Gateway-Konfiguration und den neu gestarteten Gateway (Zweig `lokal-clear-beendet`). Ohne beides ändert sich bei den alten offenen Rückfragen nichts.
+
+Offen für Martin:
+- Gateway mit dem Stand 2583026 neu starten (Rückfrage relay-rueckfragen-fix R1), sonst kommen weder `rueckfrage_resolved` noch `rueckfrage_status`.
+- Am iPhone prüfen: App öffnen bei offener Rückfrage (Blatt), „Später“, „Erledigt“ auf einer Karte, und ob die alten Rückfragen nach dem Verbinden verschwinden.
+- Entscheiden, ob das Gateway `continued_in` in der Sitzungsliste mitschicken soll (eine Zeile in `to_dict`).
+
+Version: `project.yml` 0.4.1 auf 0.4.2. Nicht gepusht, kein Tag. Das übernimmt das Skript.
