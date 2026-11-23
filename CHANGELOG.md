@@ -2,6 +2,14 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.1 (2026-11-24)
+
+**Neu**
+- Jarvis: deutlicher Knopf „Vorlesen stoppen“, solange Jarvis vorliest. Nach dem Stopp kommt keine Restsprache mehr.
+
+**Geändert**
+- Updates kommen nur noch über die normale App Relay. Die Testapp „Relay Beta“ bekommt keine neuen Fassungen mehr und kann gelöscht werden.
+
 ## 0.4.0 (2026-11-23)
 
 **Neu**
