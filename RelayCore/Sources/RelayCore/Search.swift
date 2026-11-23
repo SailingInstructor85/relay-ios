@@ -158,12 +158,12 @@ public enum ShareLogic {
 }
 
 /// "Ins Vault einsortieren": a share target without a session. The files go to the Desktop as uploads; a new agent
-/// session in the vault folder moves them to the inbox folder first and then files them by content (the vault's own
-/// AGENTS.md says how).
+/// session in the vault folder moves them to the inbox folder first, finds the folder where the rest of the matter
+/// lives (vault or paperwork outside it), proposes targets in the chat and moves only after Martin's answer
+/// (Martin, 2026-11-23: a court summons belongs to the folder of the case, not to "07 Anhänge").
 public enum VaultDrop {
     public static let defaultDir = "~/Dokumente/zweites-gehirn/zweites Gehirn"
     public static let inbox = "01 Inbox"
-    public static let attachments = "07 Anhänge"
 
     /// The vault folder from the settings; empty means the default.
     public static func root(_ setting: String) -> String {
@@ -177,17 +177,26 @@ public enum VaultDrop {
         return "Ablage: \(paths.count) Dateien"
     }
 
-    /// The first message of the filing agent.
-    public static func prompt(paths: [String], note: String) -> String {
-        var lines = ["Neue Dokumente vom iPhone zum Einsortieren ins Vault.", "", "Dateien (Uploads des Gateways):"]
+    /// The first message of the filing agent. `docs` is the paperwork root outside the vault (setting "Ablage",
+    /// empty means the default); the agent searches it read-only for the folder of the matter.
+    public static func prompt(paths: [String], note: String, docs: String = "") -> String {
+        let dir = DocDrop.root(docs)
+        var lines = ["Neue Dokumente vom iPhone zum Einsortieren.", "", "Dateien (Uploads des Gateways):"]
         lines += paths.map { "- \($0)" }
         let n = note.trimmingCharacters(in: .whitespacesAndNewlines)
         if !n.isEmpty { lines += ["", "Hinweis von Martin: \(n)"] }
         lines += ["", "Vorgehen:",
                   "1. Verschiebe jede Datei zuerst nach \"\(inbox)/\" in diesem Vault (verschieben, nicht kopieren).",
-                  "2. Lies sie und erkenne, worum es geht.",
-                  "3. Sortiere sie ein: die Datei nach \"\(attachments)/\", dazu eine kurze Notiz oder ein Link im passenden Bereich. Halte dich an die AGENTS.md des Vaults.",
-                  "4. Melde am Ende knapp: welche Datei, wohin, warum."]
+                  "2. Lies sie und erkenne, worum es geht (Absender, Datum, Vorgang).",
+                  "3. Suche den Ordner, in dem die übrigen Unterlagen dieses Vorgangs liegen, im Vault und in \(dir) (dort nur lesen). Ein Schreiben zu einem laufenden Vorgang gehört zu dessen Unterlagen, nicht in einen Sammelordner.",
+                  "4. Schlage Martin im Chat ein bis drei Zielordner mit dem vorgesehenen Dateinamen vor, dazu eine passende Vault-Notiz, in der ein Vermerk oder Link sinnvoll wäre, und frage ihn, wohin es gehört. Berücksichtige seinen Hinweis.",
+                  "5. Verschiebe erst nach seinem Ja oder seiner anderen Angabe (verschieben, nicht kopieren). Bis dahin bleibt die Datei in \"\(inbox)/\".",
+                  "6. Melde am Ende knapp: welche Datei, wohin, warum.",
+                  "", "Regeln:",
+                  "- Keine neuen Ordner anlegen und keine bestehenden Ordner umbenennen oder verschieben ohne Martins ausdrückliches Ja. Passt kein Ordner, frag nach.",
+                  "- Dateiname nach dem Muster JJMMTT_Stichwort (Endung der Datei beibehalten). Das Datum kommt nur aus dem Dokument selbst, nie aus Dateidatum oder Upload-Zeit. Steht keins darin, frag nach.",
+                  "- Nichts überschreiben. Gibt es den Namen im Zielordner schon, frag nach.",
+                  "- Halte dich an die AGENTS.md des Vaults."]
         return lines.joined(separator: "\n")
     }
 }

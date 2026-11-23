@@ -53,7 +53,7 @@ struct ShareView: View {
                 }
                 Section("Ablegen") {
                     targetRow(.vault, id: "shareVault", icon: "archivebox", title: "Ins Vault einsortieren",
-                              note: "Ein Agent legt die Datei in „\(VaultDrop.inbox)“ ab und sortiert sie ein")
+                              note: "Ein Agent sucht den Ordner des Vorgangs, schlägt Ziele vor und fragt dich, wohin")
                     targetRow(.documents, id: "shareDocs", icon: "folder", title: "In Dokumente ablegen",
                               note: "Ein Agent schlägt Ordner in deinen Dokumenten vor und fragt dich, wohin")
                 }
@@ -150,7 +150,7 @@ struct ShareView: View {
             let start: (prompt: String, name: String)?
             switch target {
             case .newSession: start = (ShareLogic.body(message: message, paths: paths, text: nil), ShareLogic.sessionName(paths: paths))
-            case .vault: start = (VaultDrop.prompt(paths: paths, note: message), VaultDrop.name(paths: paths))
+            case .vault: start = (VaultDrop.prompt(paths: paths, note: message, docs: model.docsDir), VaultDrop.name(paths: paths))
             case .documents: start = (DocDrop.prompt(paths: paths, note: message, root: model.docsDir), DocDrop.name(paths: paths))
             case .session: start = nil
             }
