@@ -34,7 +34,26 @@ Verhalten in der App (`C: Notify.swift` `Rueckfrage`, `A: NoticeView.swift`, `A:
 Seit 0.3.9 lassen sich offene Rückfragen auch im Sprachmodus beantworten (vorlesen, per Sprache antworten,
 Kontrolle, „senden“). Die Antwort geht auf demselben Weg (`inbox_put`) zum PC. Details: `docs/sprachmodus.md`.
 
-## Vorschlag für `~/.agents/bin/rueckfrage` (nicht umgesetzt)
+## Schließen auf allen Geräten und „Erledigt“ (ab 0.4.2)
+
+Wahr ist der Stand am PC (die Dateien des Skripts `rueckfrage`), die App spiegelt ihn nur. Vertrag: PROTOCOL.md des
+Gateways, Abschnitt „Rückfragen“ (Gateway ab 2026-11-24).
+
+- Ereignis `rueckfrage_resolved {tag, answer, source, at}`: kommt nach jeder Antwort, von jedem Gerät und vom PC, und
+  wird beim Verbinden nachgespielt. Die App setzt die Antwort an jedem offenen Hinweis mit diesem Tag und entfernt die
+  Mitteilung. Die Karte in „Dein Zug“ und der Eintrag im Sprachmodus verschwinden damit (`C: Notify.swift`
+  `Rueckfrage.resolve`).
+- Abgleich nach jedem `hello_ok`: Die App schickt die Tags ihrer offenen Rückfragen an `rueckfrage_status`. Was dort
+  `beantwortet` oder `unbekannt` ist, geht zu (`Rueckfrage.reconcile`). Kennt das Gateway den RPC nicht oder scheitert
+  er, bleibt alles offen.
+- „Erledigt“ (klein, auf der Karte in „Dein Zug“ und im Hinweis): schließt eine Rückfrage ohne Bearbeiten. Vorher
+  fragt die App nach, weil der Agent am PC „(verworfen)“ als Antwort bekommt. Der Weg ist derselbe wie bei jeder
+  Antwort (`inbox_put`).
+- Antwort auf eine Rückfrage, die schon zu ist: Die App schickt nichts und zeigt „Schon beantwortet: …“. Kommt die
+  Schließung, während die eigene Antwort unterwegs ist, gilt die Antwort vom PC.
+- `notices.json` bleibt je Installation. Ob eine Rückfrage offen ist, entscheidet aber nie mehr nur der lokale Stand.
+
+## Vorschlag für `~/.agents/bin/rueckfrage` (Stand 06.11.2026, inzwischen am PC umgesetzt)
 
 1. `cmd_neu` und `cmd_meldung`: nach dem Schreiben der Datei, wenn Martin weg ist (`anwesenheit status` Exit 1),
    den Push anstoßen. Fehler dabei nur melden, nie abbrechen (die Datei im Vault bleibt der Hauptweg):
@@ -97,6 +116,9 @@ Kontrolle, „senden“). Die Antwort geht auf demselben Weg (`inbox_put`) zum P
 
 - RelayCore: `NotifyTests.testAgentQuestion` (Tag, Zerlegung in Frage, Kontext, Empfehlung, Antwort-Element, Antwort
   überlebt Replay und Speichern).
+- RelayCore: `NotifyTests.testResolveByTag`, `testReconcileWithDesktop`, `testClosedQuestionTexts`.
+- Simulator: `TabTests.test06_DeinZugRueckfrageErledigt`, `test07_RueckfrageAmPCBeantwortet` (Mock-Auslöser
+  `trigger_rueckfrage_pc`, RPC `rueckfrage_status` im Mock).
 - Simulator: `InfoTests.test20_AgentQuestion` (Mock-Auslöser `trigger_rueckfrage`, Antwort im Hinweis, `inbox_put`
   beim Mock angekommen).
 - Von Hand am PC, sobald das Skript den Push kann: `~/relay/gateway/.venv/bin/notifyd phone notify --title

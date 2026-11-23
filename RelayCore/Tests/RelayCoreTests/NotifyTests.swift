@@ -193,4 +193,73 @@ final class NotifyTests: XCTestCase {
         XCTAssertEqual(NoticeLogic.decode(NoticeLogic.encode(kept)).first?.answer, "ja")
         XCTAssertNil(NoticeLogic.decode(NoticeLogic.encode([n])).first?.answer)
     }
+
+    // MARK: Rückfragen auf allen Geräten schließen (rueckfrage_resolved, rueckfrage_status)
+
+    private func rq(_ ref: String, _ tag: String?, ts: Double = 1, answer: String? = nil) -> Notice {
+        Notice(ref: ref, ts: ts, title: "", text: "Soll ich?\nEmpfehlung: ja", source: "a", tag: tag, answer: answer)
+    }
+
+    /// a) Das Ereignis schließt jede offene Rückfrage mit dem Tag, auch mehrere Hinweise; Beantwortetes bleibt.
+    func testResolveByTag() {
+        let list = [rq("s1", "rueckfrage:a:R1"), rq("s2", "rueckfrage:a:R1"), rq("s3", "rueckfrage:a:R2"),
+                    rq("s4", "rueckfrage:a:R1", answer: "nein"), rq("s5", "meldung:a:M1"), rq("s6", "backup")]
+        let r = Rueckfrage.resolve(list, tag: "rueckfrage:a:R1", answer: " ja \n")
+        XCTAssertEqual(r.changed, ["s1", "s2"])
+        XCTAssertEqual(r.list.map(\.answer), ["ja", "ja", nil, "nein", nil, nil])
+        // schon zu: nichts ändert sich
+        XCTAssertEqual(Rueckfrage.resolve(r.list, tag: "rueckfrage:a:R1", answer: "doch").changed, [])
+        // ohne Antworttext gilt sie als verworfen
+        XCTAssertEqual(Rueckfrage.resolve(list, tag: "rueckfrage:a:R2", answer: "").list[2].answer, Rueckfrage.dismissed)
+        // Schreibweise der Nummer egal, Meldungen und fremde Tags schließt nichts
+        XCTAssertEqual(Rueckfrage.resolve([rq("s1", "rueckfrage:a:r1")], tag: "rueckfrage:a:R1", answer: "ja").changed, ["s1"])
+        XCTAssertEqual(Rueckfrage.resolve(list, tag: "meldung:a:M1", answer: "x").changed, [])
+        XCTAssertEqual(Rueckfrage.resolve(list, tag: "backup", answer: "x").changed, [])
+        XCTAssertEqual(Rueckfrage.resolve(list, tag: "", answer: "x").changed, [])
+        // danach sind sie weder in „Dein Zug“ noch im Sprachmodus
+        XCTAssertEqual(YourTurn.items(sessions: [], notices: r.list, requests: [], confirms: [], cloud: [], now: 5).map(\.id), ["question:s3"])
+        XCTAssertEqual(DriveQueue.open(r.list).map(\.ref), ["s3"])
+    }
+
+    /// b) Der Abgleich nach dem Verbinden: `beantwortet` und `unbekannt` schließen, `offen` bleibt; ohne brauchbare
+    /// Antwort des Gateways (alte Fassung) schließt nichts.
+    func testReconcileWithDesktop() {
+        let list = [rq("s1", "rueckfrage:a:R1"), rq("s2", "rueckfrage:a:R2"), rq("s3", "rueckfrage:b:R7"), rq("s4", "rueckfrage:a:r1"),
+                    rq("s5", "rueckfrage:a:R9", answer: "ja"), rq("s6", "meldung:a:M1")]
+        XCTAssertEqual(Rueckfrage.openTags(list), ["rueckfrage:a:R1", "rueckfrage:a:R2", "rueckfrage:b:R7"])
+        let status = JSON.object(["items": [
+            ["tag": "rueckfrage:a:R1", "status": "beantwortet", "answer": "nein, behalten"],
+            ["tag": "rueckfrage:a:R2", "status": "offen"],
+            ["tag": "rueckfrage:b:R7", "status": "unbekannt"],
+            ["tag": "rueckfrage:a:R9", "status": "beantwortet", "answer": "anders"],
+            ["tag": "rueckfrage:c:R1", "status": "neuer-wert"], ["status": "beantwortet"]]])
+        let r = Rueckfrage.reconcile(list, status: status)
+        XCTAssertEqual(r.changed, ["s1", "s4", "s3"])
+        XCTAssertEqual(r.list.map(\.answer), ["nein, behalten", nil, Rueckfrage.gone, "nein, behalten", "ja", nil])
+        XCTAssertEqual(Rueckfrage.openTags(r.list), ["rueckfrage:a:R2"])
+        // beantwortet ohne Text
+        let bare = Rueckfrage.reconcile(list, status: ["items": [["tag": "rueckfrage:a:R2", "status": "beantwortet"]]])
+        XCTAssertEqual(bare.list[1].answer, "(am PC beantwortet)")
+        // Gateway ohne den RPC oder mit anderer Antwort: nichts schließen
+        XCTAssertEqual(Rueckfrage.reconcile(list, status: .null).changed, [])
+        XCTAssertEqual(Rueckfrage.reconcile(list, status: ["ok": true]).changed, [])
+        XCTAssertEqual(Rueckfrage.reconcile(list, status: ["items": "kaputt"]).changed, [])
+        XCTAssertEqual(Rueckfrage.openTags((0..<600).map { rq("s\($0)", "rueckfrage:a:R\($0 + 1)") }).count, 500)
+    }
+
+    /// c) und d) Texte: was an einer geschlossenen Rückfrage steht und was eine zu späte Antwort meldet.
+    func testClosedQuestionTexts() {
+        XCTAssertEqual(Rueckfrage.dismissed, "(verworfen)")
+        XCTAssertEqual(Rueckfrage.answeredLabel("ja"), "Beantwortet: ja")
+        XCTAssertEqual(Rueckfrage.answeredLabel(Rueckfrage.dismissed), "Verworfen (ohne Antwort geschlossen)")
+        XCTAssertEqual(Rueckfrage.answeredLabel(Rueckfrage.gone), "Am PC nicht mehr offen")
+        XCTAssertEqual(Rueckfrage.alreadyAnswered("nein"), "Schon beantwortet: nein")
+        XCTAssertTrue(Rueckfrage.alreadyAnswered(Rueckfrage.dismissed).hasPrefix("Schon erledigt"))
+        XCTAssertTrue(Rueckfrage.dismissNote(agent: "relay-ios").contains("relay-ios bekommt „(verworfen)“"))
+        XCTAssertTrue(Rueckfrage.isOpen(rq("s1", "rueckfrage:a:R1")))
+        XCTAssertFalse(Rueckfrage.isOpen(rq("s1", "rueckfrage:a:R1", answer: "ja")))
+        XCTAssertFalse(Rueckfrage.isOpen(rq("s1", "meldung:a:M1")))
+        XCTAssertNil(Rueckfrage.canonical(tag: "meldung:a:M1"))
+        XCTAssertEqual(Rueckfrage.canonical(tag: " rueckfrage:a:r3 "), "rueckfrage:a:R3")
+    }
 }

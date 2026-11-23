@@ -473,6 +473,7 @@ final class AppModel: ObservableObject {
             Approvals.shared.flushReplay()
             AppLog.shared.flushSaved()
             Task { await Approvals.shared.reconcile() }
+            Task { await reconcileQuestions() }  // Rückfragen, die woanders beantwortet wurden, schließen
             Task { await PhoneAccessStore.shared.reconcile() }  // Telefonzugriff: Schalter melden, offene Befehle holen
         case "session_started":
             if let s = Session.from(ev["session"]) { replacePlaceholder(for: s); sessions[s.key] = s.keepingPC(from: sessions[s.key]) }
@@ -530,6 +531,8 @@ final class AppModel: ObservableObject {
                 Notifier.post(id: NoticeLogic.slot(tag: n.tag, seq: seq), title: n.title.isEmpty ? (q.map(Rueckfrage.title) ?? "Relay") : n.title,
                               body: q?.question ?? n.text, userInfo: ["notice": n.ref], category: q.flatMap(Rueckfrage.category))
             }
+        case "rueckfrage_resolved":  // am PC oder auf einem anderen Gerät beantwortet: überall schließen (2026-11-24)
+            NoticeStore.shared.resolve(tag: ev.str("tag"), answer: ev.str("answer"))
         case "send_request", "send_resolved", "needs_confirmation", "confirmation_resolved":
             Approvals.shared.onEvent(ev, replay: replay)
         case "location_request":

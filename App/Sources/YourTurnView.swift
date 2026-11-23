@@ -177,7 +177,8 @@ struct SessionTurnCard: View {
     }
 }
 
-/// Rückfrage eines Agenten: Frage, Kontext, Empfehlung, Antwortfeld. „Ja (Empfehlung)“ nimmt die Empfehlung an.
+/// Rückfrage eines Agenten: Frage, Kontext, Empfehlung, Antwortfeld. „Ja (Empfehlung)“ nimmt die Empfehlung an,
+/// „Erledigt“ schließt sie ohne Bearbeiten (Antwort „(verworfen)“, nach Nachfrage).
 /// Die Antwort geht über dieselbe Stelle wie in den Hinweisen (`AppModel.answerQuestion`).
 struct QuestionTurnCard: View {
     let item: YourTurn.Item
@@ -188,6 +189,7 @@ struct QuestionTurnCard: View {
     @State private var answer = ""
     @State private var sending = false
     @State private var error: String?
+    @State private var confirmDismiss = false
     @FocusState private var focused: Bool
 
     private var trimmed: String { answer.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -215,17 +217,28 @@ struct QuestionTurnCard: View {
                         .accessibilityIdentifier("turnSend")
                 }
                 if sending { ProgressView().controlSize(.small) }
-                Spacer(minLength: 4)
-                Button("Ganz lesen", action: openFull).font(RelayFont.labelLarge).foregroundStyle(RelayColor.primary).buttonStyle(.plain)
             }
             .disabled(sending)
+            // zweite, kleine Zeile: ganz lesen, und die Rückfrage ohne Antwort schließen (nach Nachfrage)
+            HStack(spacing: 8) {
+                Button("Ganz lesen", action: openFull).font(RelayFont.labelLarge).foregroundStyle(RelayColor.primary).buttonStyle(.plain)
+                Spacer(minLength: 4)
+                Button(Rueckfrage.dismissLabel) { confirmDismiss = true }
+                    .font(RelayFont.labelLarge).foregroundStyle(RelayColor.onSurfaceVariant).buttonStyle(.plain)
+                    .accessibilityIdentifier("turnDismiss")
+            }
+            .disabled(sending)
+            .confirmationDialog(Rueckfrage.dismissTitle, isPresented: $confirmDismiss, titleVisibility: .visible) {
+                Button(Rueckfrage.dismissConfirm, role: .destructive) { send(Rueckfrage.dismissed, dismiss: true) }
+                Button("Abbrechen", role: .cancel) {}
+            } message: { Text(Rueckfrage.dismissNote(agent: agent)) }
             if let error { Text(error).font(RelayFont.bodySmall).foregroundStyle(RelayColor.error) }
         }
     }
 
-    private func send(_ text: String) {
+    private func send(_ text: String, dismiss: Bool = false) {
         sending = true
-        UsageRecorder.shared.record("deinzug", "rückfrage beantwortet", kind: "text", length: text.count)
+        UsageRecorder.shared.record("deinzug", dismiss ? "rückfrage verworfen" : "rückfrage beantwortet", kind: "text", length: text.count)
         Task { @MainActor in
             let e = await AppModel.shared.answerQuestion(ref: ref, text: text)
             sending = false

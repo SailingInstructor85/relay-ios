@@ -72,8 +72,8 @@ public enum YourTurn {
                             target: .confirm(id: c.id)))
         }
 
-        for n in notices where n.answer == nil {
-            guard let q = Rueckfrage.question(n), q.wantsAnswer else { continue }
+        for n in notices where Rueckfrage.isOpen(n) {
+            guard let q = Rueckfrage.question(n) else { continue }
             out.append(Item(id: "question:" + n.ref, kind: .question, since: n.ts, title: Rueckfrage.title(q), text: q.question,
                             context: q.context, recommendation: q.recommendation,
                             target: .question(ref: n.ref, agent: q.agent, quick: Rueckfrage.quickAnswer(q))))

@@ -9,7 +9,8 @@ Environment:
 Control files in $MOCK_DIR/control (the UI tests or the CI script create them):
   offline        new connections end at once with an error; running ones are cut
   kick           running connections end (the file is removed by the first one)
-  trigger_<n>    emit a live event once: finish_busy, new_input, notice, rueckfrage, send_request, pc_detach, pc_attach,
+  trigger_<n>    emit a live event once: finish_busy, new_input, notice, rueckfrage, rueckfrage_pc (R1 answered at the
+                 PC: rueckfrage_resolved), send_request, pc_detach, pc_attach,
                  cloud, desktop_sleep, location, end_session, routine_run,
                  phone_command, phone_command_2, late_reply (an answer in "API Refactoring"; left in the control
                  directory while offline, the next connection emits it), desk_to_tmux ("Skript ohne tmux" now runs in tmux)
@@ -912,7 +913,26 @@ def rpc_phone_command_result(p):
 
 
 def rpc_inbox_put(p):
+    # an answer to an agent's question closes it on every phone (PROTOCOL.md "Rückfragen"): event rueckfrage_resolved
+    if p.get("kind") == "notification":
+        for it in p.get("items", []):
+            parts = str(it.get("title") or "").split(" ")
+            if it.get("app") == "rueckfrage" and len(parts) == 2:
+                tag = f"rueckfrage:{parts[0]}:{parts[1]}"
+                answer = str(it.get("text") or "")
+                mutate(lambda st: st.setdefault("rueckfragen", {}).__setitem__(tag, answer))
+                add_event("rueckfrage_resolved", {"tag": tag, "answer": answer, "source": "phone", "at": time.time()})
     return {"stored": len(p.get("items", [])), "duplicates": 0}
+
+
+def rpc_rueckfrage_status(p):
+    """Which of the phone's open questions still wait: answered ones (here: by inbox_put or trigger_rueckfrage_pc) are
+    `beantwortet`, every other one `offen`. Control file rueckfrage_status_off: a gateway without the RPC."""
+    if os.path.exists(os.path.join(CTL, "rueckfrage_status_off")):
+        raise RpcError("unknown rpc 'rueckfrage_status'")
+    done = load_state().get("rueckfragen", {})
+    return {"items": [{"tag": t, "status": "beantwortet", "answer": done[t]} if t in done else {"tag": t, "status": "offen"}
+                      for t in (p.get("tags") or [])[:500]]}
 
 
 # ---------------------------------------------------------------- Posteingang und Kalender (nur lesend)
@@ -1278,6 +1298,9 @@ def trigger(name):
         add_event("notice", {"title": "Rückfrage R1 · relay-ios",
                              "text": "Soll ich die alte Route löschen?\nKontext: Die Route wird seit 2024 nicht mehr genutzt.\nEmpfehlung: ja",
                              "source": "relay-ios", "tag": "rueckfrage:relay-ios:R1"})
+    elif name == "rueckfrage_pc":  # the question R1 answered at the PC (`rueckfrage antworten` -> notifyd phone resolve)
+        mutate(lambda st: st.setdefault("rueckfragen", {}).__setitem__("rueckfrage:relay-ios:R1", "nein, behalten"))
+        add_event("rueckfrage_resolved", {"tag": "rueckfrage:relay-ios:R1", "answer": "nein, behalten", "source": "desktop", "at": time.time()})
     elif name == "send_request":
         add_event("send_request", {"request_id": "req-1", "kind": "mail", "executor": "desktop", "text": "Hallo Frau Muster,\n\nanbei die Rechnung.", "summary": "E-Mail an frau@example.com senden", "requested_by": "Jarvis", "expires_at": time.time() + 3600})
     elif name in ("phone_command", "phone_command_2"):  # Telefonzugriff: ein Agent fragt Geräteinfos

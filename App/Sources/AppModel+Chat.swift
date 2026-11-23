@@ -94,14 +94,31 @@ extension AppModel {
         }
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return "Die Antwort ist leer." }
+        // schon woanders beantwortet (Ereignis rueckfrage_resolved oder Abgleich): nichts mehr schicken
+        if let a = n.answer { return Rueckfrage.alreadyAnswered(a) }
         if background && state != .connected { _ = await connectOnce() }
         guard state == .connected else { return "Nicht verbunden: die Antwort konnte nicht zum PC." }
         let item = Rueckfrage.answerItem(agent: q.agent, id: q.id, answer: t, now: Date().timeIntervalSince1970)
+        var failure: String?
         do { _ = try await rpc("inbox_put", ["kind": .string("notification"), "items": .array([item])], timeout: 30) }
-        catch { return "Antwort nicht angekommen: \(error.localizedDescription)" }
+        catch { failure = "Antwort nicht angekommen: \(error.localizedDescription)" }
+        // Die Schließung kam, während die Antwort unterwegs war: Es gilt, was am PC steht. Die eigene Antwort kommt
+        // als rueckfrage_resolved zurück und ist dann kein Widerspruch.
+        if let a = NoticeStore.shared.get(ref)?.answer { return a == t ? nil : Rueckfrage.alreadyAnswered(a) }
+        if let failure { return failure }
         NoticeStore.shared.setAnswer(ref: ref, t)
         Notifier.remove([NoticeLogic.slot(tag: n.tag, seq: 0)])
         return nil
+    }
+
+    /// Nach jedem `hello_ok`: die noch offenen Rückfragen mit dem Stand am PC abgleichen (RPC `rueckfrage_status`).
+    /// Was dort beantwortet ist oder nicht mehr existiert, geht hier zu. Kennt das Gateway den RPC nicht oder
+    /// scheitert er, bleibt alles offen.
+    func reconcileQuestions() async {
+        let tags = Rueckfrage.openTags(NoticeStore.shared.items)
+        guard !tags.isEmpty else { return }
+        guard let r = try? await rpc("rueckfrage_status", ["tags": .array(tags.map { .string($0) })], timeout: 20) else { return }
+        NoticeStore.shared.reconcile(status: r)
     }
 
     /// "Antworten" or "Ja" on the question's notification (the background link is closed again afterwards). A failure

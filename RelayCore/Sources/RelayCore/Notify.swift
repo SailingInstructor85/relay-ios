@@ -287,6 +287,111 @@ public enum Rueckfrage {
                  "app": .string(app), "app_label": .string("Rückfrage"), "title": .string("\(agent) \(id)"),
                  "text": .string(answer), "conversation": .string(agent), "has_reply": .bool(false)])
     }
+
+    // MARK: Schließen auf allen Geräten (PROTOCOL.md des Gateways, „Rückfragen“, 2026-11-24)
+    //
+    // Wahr ist der Stand am PC (die Dateien des Skripts `rueckfrage`). Die App spiegelt ihn: das Ereignis
+    // `rueckfrage_resolved {tag, answer}` schließt eine Rückfrage sofort, der Abgleich `rueckfrage_status` nach jedem
+    // Verbinden alles, was ein Ereignis verpasst hat.
+
+    /// Die Antwort, mit der eine Rückfrage ohne Bearbeiten geschlossen wird (Knopf „Erledigt“). Sie geht denselben Weg
+    /// wie jede Antwort, der Agent am PC bekommt sie als Antwort.
+    public static let dismissed = "(verworfen)"
+    /// Vermerk an einer Rückfrage, die der PC nicht mehr kennt (Abgleich: `unbekannt`), dort wartet niemand mehr.
+    public static let gone = "(nicht mehr offen)"
+
+    /// Der Tag einer Frage in der Schreibweise des Gateways (`rueckfrage:<agent>:R<n>`, Nummer groß), nil für Meldungen
+    /// und alles andere. Tags werden nur in dieser Form verglichen und verschickt.
+    public static func canonical(tag: String?) -> String? {
+        guard let p = parse(tag: tag?.trimmingCharacters(in: .whitespacesAndNewlines)), p.id.hasPrefix("R") else { return nil }
+        return "rueckfrage:\(p.agent):\(p.id)"
+    }
+
+    /// Eine offene Rückfrage: ein Hinweis mit dem Tag einer Frage (R…) und noch ohne Antwort.
+    public static func isOpen(_ n: Notice) -> Bool {
+        n.answer == nil && (parse(tag: n.tag)?.id.hasPrefix("R") ?? false)
+    }
+
+    /// Setzt die Antwort an jeder offenen Rückfrage mit diesem Tag (mehrere Hinweise können denselben Tag tragen).
+    /// Eine schon gesetzte Antwort bleibt. Ohne Antworttext gilt die Rückfrage als verworfen. `changed`: die Kennungen
+    /// der Hinweise, die dadurch zugingen.
+    public static func resolve(_ list: [Notice], tag: String, answer: String) -> (list: [Notice], changed: [String]) {
+        guard let tag = canonical(tag: tag) else { return (list, []) }
+        let text = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        var out = list
+        var changed: [String] = []
+        for i in out.indices where isOpen(out[i]) && canonical(tag: out[i].tag) == tag {
+            out[i].answer = text.isEmpty ? dismissed : text
+            changed.append(out[i].ref)
+        }
+        return (out, changed)
+    }
+
+    /// Die Tags der offenen Rückfragen für `rueckfrage_status`, jeder einmal, höchstens 500 (Grenze des Gateways).
+    public static func openTags(_ list: [Notice]) -> [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        for n in list where isOpen(n) {
+            guard let t = canonical(tag: n.tag), seen.insert(t).inserted else { continue }
+            out.append(t)
+        }
+        return Array(out.prefix(500))
+    }
+
+    /// Was der Abgleich schließt: aus der Antwort von `rueckfrage_status` alles mit `beantwortet` (mit der Antwort vom
+    /// PC) oder `unbekannt`. `offen` und unbekannte Werte bleiben offen. Eine Antwort ohne `items` (älteres Gateway,
+    /// Fehler) schließt nichts.
+    public static func closures(status r: JSON) -> [(tag: String, answer: String)] {
+        r["items"].array.compactMap { it -> (tag: String, answer: String)? in
+            let tag = it.str("tag")
+            guard !tag.isEmpty else { return nil }
+            switch it.str("status") {
+            case "beantwortet":
+                let a = it.str("answer").trimmingCharacters(in: .whitespacesAndNewlines)
+                return (tag, a.isEmpty ? "(am PC beantwortet)" : a)
+            case "unbekannt": return (tag, gone)
+            default: return nil
+            }
+        }
+    }
+
+    /// Der ganze Abgleich auf die Liste angewandt.
+    public static func reconcile(_ list: [Notice], status r: JSON) -> (list: [Notice], changed: [String]) {
+        var out = list
+        var changed: [String] = []
+        for c in closures(status: r) {
+            let step = resolve(out, tag: c.tag, answer: c.answer)
+            out = step.list
+            changed += step.changed
+        }
+        return (out, changed)
+    }
+
+    /// Zeile an einer geschlossenen Rückfrage: „Beantwortet: ja“, „Verworfen (ohne Antwort geschlossen)“.
+    public static func answeredLabel(_ answer: String) -> String {
+        switch answer {
+        case dismissed: return "Verworfen (ohne Antwort geschlossen)"
+        case gone: return "Am PC nicht mehr offen"
+        default: return "Beantwortet: \(answer)"
+        }
+    }
+
+    /// Hinweis, wenn eine Antwort auf eine schon geschlossene Rückfrage geschickt werden soll: keine Fehlermeldung,
+    /// sondern was schon gilt.
+    public static func alreadyAnswered(_ answer: String) -> String {
+        switch answer {
+        case dismissed: return "Schon erledigt: Die Rückfrage wurde ohne Antwort geschlossen."
+        case gone: return "Schon erledigt: Am PC ist die Rückfrage nicht mehr offen."
+        default: return "Schon beantwortet: \(answer)"
+        }
+    }
+
+    public static let dismissLabel = "Erledigt"
+    public static let dismissTitle = "Rückfrage ohne Antwort schließen?"
+    public static let dismissConfirm = "Ohne Antwort schließen"
+    public static func dismissNote(agent: String) -> String {
+        "Sie verschwindet auf allen Geräten. \(agent) bekommt „\(dismissed)“ als Antwort."
+    }
 }
 
 /// A `send_request` event: the Desktop asks for an approval (mail, invite, post, order, payment).

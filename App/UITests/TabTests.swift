@@ -80,4 +80,52 @@ final class TabTests: RelayTestCase {
         showSessions()
         expect("Laufend", 4)
     }
+
+    /// Wartet, bis ein Text nicht mehr zu sehen ist.
+    private func gone(_ s: String, _ timeout: TimeInterval = 8) -> Bool {
+        let end = Date().addingTimeInterval(timeout)
+        repeat {
+            if find(s) == nil { return true }
+            Thread.sleep(forTimeInterval: 0.4)
+        } while Date() < end
+        return false
+    }
+
+    /// Dein Zug: „Erledigt“ schließt eine Rückfrage ohne Antwort (nach Nachfrage). Der PC bekommt „(verworfen)“.
+    func test06_DeinZugRueckfrageErledigt() {
+        launchConnected()
+        ctl("trigger_rueckfrage")
+        settle(3)
+        showTab(Self.tabYourTurn)
+        settle(1)
+        expect("Soll ich die alte Route", 6)
+        tapID("turnDismiss")
+        settle(0.8)
+        shot("deinzug-rueckfrage-erledigt")
+        tap("Ohne Antwort schließen", 4, exact: true)
+        XCTAssertTrue(mockReceived("inbox_put", where: { p in
+            ((p["items"] as? [[String: Any]])?.first?["app"] as? String) == "rueckfrage" && ((p["items"] as? [[String: Any]])?.first?["text"] as? String) == "(verworfen)"
+        }), "„(verworfen)“ nicht per inbox_put gesendet")
+        XCTAssertTrue(gone("Soll ich die alte Route"), "verworfene Rückfrage steht noch in Dein Zug")
+    }
+
+    /// Eine am PC beantwortete Rückfrage (Ereignis rueckfrage_resolved) verschwindet aus Dein Zug und zeigt in den
+    /// Hinweisen die Antwort vom PC.
+    func test07_RueckfrageAmPCBeantwortet() {
+        launchConnected()
+        ctl("trigger_rueckfrage")
+        settle(3)
+        showTab(Self.tabYourTurn)
+        settle(1)
+        expect("Soll ich die alte Route", 6)
+        ctl("trigger_rueckfrage_pc")
+        XCTAssertTrue(gone("Soll ich die alte Route", 10), "am PC beantwortete Rückfrage steht noch in Dein Zug")
+        shot("deinzug-am-pc-beantwortet")
+        mainMenu("Hinweise")
+        settle(1.5)
+        tap("Rückfrage R1", soft: true)
+        settle(1.5)
+        expect("Beantwortet: nein, behalten", 4, soft: true)
+        shot("rueckfrage-am-pc-beantwortet")
+    }
 }

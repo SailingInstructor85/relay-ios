@@ -295,7 +295,7 @@ public enum DriveQueue {
     /// Die offenen Rückfragen aus den Hinweisen, älteste zuerst: nur echte Fragen (R…), noch ohne Antwort.
     public static func open(_ notices: [Notice]) -> [DriveItem] {
         notices.compactMap { n -> (Double, DriveItem)? in
-            guard n.answer == nil, let q = Rueckfrage.question(n), q.wantsAnswer else { return nil }
+            guard Rueckfrage.isOpen(n), let q = Rueckfrage.question(n) else { return nil }
             return (n.ts, DriveItem(ref: n.ref, question: q))
         }
         .sorted { $0.0 < $1.0 }

@@ -23,6 +23,26 @@ final class NoticeStore: ObservableObject {
 
     func get(_ ref: String) -> Notice? { items.first { $0.ref == ref } }
 
+    /// `rueckfrage_resolved` oder der Abgleich nach dem Verbinden: die Rückfrage ist am PC oder auf einem anderen Gerät
+    /// beantwortet. Alle Hinweise mit diesem Tag gehen zu, die Mitteilung dazu verschwindet.
+    func resolve(tag: String, answer: String) {
+        apply(Rueckfrage.resolve(items, tag: tag, answer: answer), tags: [tag])
+    }
+
+    /// Abgleich mit dem Stand am PC (Antwort von `rueckfrage_status`).
+    func reconcile(status: JSON) {
+        apply(Rueckfrage.reconcile(items, status: status), tags: Rueckfrage.closures(status: status).map(\.tag))
+    }
+
+    private func apply(_ r: (list: [Notice], changed: [String]), tags: [String]) {
+        guard !r.changed.isEmpty else { return }
+        items = r.list
+        if let u = Self.url, let d = NoticeLogic.encode(items).data(using: .utf8) { try? d.write(to: u, options: .atomic) }
+        // die Mitteilung hängt am Tag, wie ihn der Hinweis trägt
+        let slots = r.list.filter { r.changed.contains($0.ref) }.map { NoticeLogic.slot(tag: $0.tag, seq: 0) }
+        Notifier.remove(Array(Set(slots + tags.map { NoticeLogic.slot(tag: $0, seq: 0) })))
+    }
+
     /// The answer that reached the Desktop, kept with the notice.
     func setAnswer(ref: String, _ answer: String) {
         guard let i = items.firstIndex(where: { $0.ref == ref }) else { return }
@@ -43,6 +63,7 @@ struct NoticeView: View {
     @State private var answer = ""
     @State private var answering = false
     @State private var answerError: String?
+    @State private var confirmDismiss = false
     @ObservedObject private var reader = SpeechOut.shared
 
     private func when(_ ts: Double) -> String {
@@ -142,7 +163,9 @@ struct NoticeView: View {
     @ViewBuilder private func answerSection(_ n: Notice, _ q: AgentQuestion) -> some View {
         Section("Antwort") {
             if let a = n.answer {
-                Label("Beantwortet: \(a)", systemImage: "checkmark.circle").foregroundStyle(.secondary)
+                Label(Rueckfrage.answeredLabel(a), systemImage: "checkmark.circle").foregroundStyle(.secondary)
+                // die eigene Antwort kam zu spät: kein Fehler, sondern was schon gilt
+                if let e = answerError { Text(e).font(.footnote).foregroundStyle(.secondary) }
             } else {
                 TextField("Antwort an \(q.agent)", text: $answer, axis: .vertical).lineLimit(1...4)
                     .accessibilityIdentifier("questionAnswer")
@@ -153,7 +176,15 @@ struct NoticeView: View {
                     Button("Antworten") { Task { await send(n.ref, answer) } }.buttonStyle(.bordered)
                         .disabled(answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     if answering { ProgressView().controlSize(.small) }
+                    Spacer(minLength: 4)
+                    // schließt die Rückfrage ohne Antwort (nach Nachfrage); bewusst klein und abgesetzt
+                    Button(Rueckfrage.dismissLabel) { confirmDismiss = true }.buttonStyle(.borderless).font(.footnote)
+                        .accessibilityIdentifier("questionDismiss")
                 }.disabled(answering)
+                .confirmationDialog(Rueckfrage.dismissTitle, isPresented: $confirmDismiss, titleVisibility: .visible) {
+                    Button(Rueckfrage.dismissConfirm, role: .destructive) { Task { await send(n.ref, Rueckfrage.dismissed) } }
+                    Button("Abbrechen", role: .cancel) {}
+                } message: { Text(Rueckfrage.dismissNote(agent: q.agent)) }
                 if let e = answerError { Text(e).font(.footnote).foregroundStyle(.red) }
                 Button(action: onDrive) { Label("Im Sprachmodus beantworten", systemImage: "car") }
                     .buttonStyle(.borderless).accessibilityIdentifier("answerByVoice")

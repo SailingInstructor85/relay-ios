@@ -64,7 +64,7 @@ struct RootTabs: View {
     /// Eine Rückfrage, die noch auf Antwort wartet, öffnet sich in „Dein Zug“, jeder andere Hinweis in „Mehr“.
     private func openNotice(_ ref: String) {
         let n = notices.get(ref)
-        let open = n.map { $0.answer == nil && (Rueckfrage.question($0)?.wantsAnswer ?? false) } ?? false
+        let open = n.map(Rueckfrage.isOpen) ?? false
         router.jump(.notice(ref: ref, openQuestion: open))
         model.openNotice = nil
     }
