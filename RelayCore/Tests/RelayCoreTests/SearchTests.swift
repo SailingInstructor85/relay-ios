@@ -147,7 +147,7 @@ final class SearchTests: XCTestCase {
         XCTAssertTrue(p.contains("(Absender, Datum, Vorgang)"))
         XCTAssertTrue(p.contains("im Vault und in ~/Dokumente/privat/Dokumente (dort nur lesen)"))
         XCTAssertTrue(p.contains("ein bis drei Zielordner"))
-        XCTAssertTrue(p.contains("frage ihn, wohin es gehört"))
+        XCTAssertTrue(p.contains("frage ihn, wohin es gehört. Berücksichtige seinen Hinweis."))
         XCTAssertTrue(p.contains("erst nach seinem Ja"))
         XCTAssertTrue(p.contains("Keine neuen Ordner anlegen"))
         XCTAssertTrue(p.contains("JJMMTT_Stichwort"))

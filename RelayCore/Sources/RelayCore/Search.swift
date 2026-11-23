@@ -189,7 +189,7 @@ public enum VaultDrop {
                   "1. Verschiebe jede Datei zuerst nach \"\(inbox)/\" in diesem Vault (verschieben, nicht kopieren).",
                   "2. Lies sie und erkenne, worum es geht (Absender, Datum, Vorgang).",
                   "3. Suche den Ordner, in dem die übrigen Unterlagen dieses Vorgangs liegen, im Vault und in \(dir) (dort nur lesen). Ein Schreiben zu einem laufenden Vorgang gehört zu dessen Unterlagen, nicht in einen Sammelordner.",
-                  "4. Schlage Martin im Chat ein bis drei Zielordner mit dem vorgesehenen Dateinamen vor, dazu eine passende Vault-Notiz, in der ein Vermerk oder Link sinnvoll wäre, und frage ihn, wohin es gehört. Berücksichtige seinen Hinweis.",
+                  "4. Schlage Martin im Chat ein bis drei Zielordner mit dem vorgesehenen Dateinamen vor, dazu eine passende Vault-Notiz, in der ein Vermerk oder Link sinnvoll wäre, und frage ihn, wohin es gehört.\(n.isEmpty ? "" : " Berücksichtige seinen Hinweis.")",
                   "5. Verschiebe erst nach seinem Ja oder seiner anderen Angabe (verschieben, nicht kopieren). Bis dahin bleibt die Datei in \"\(inbox)/\".",
                   "6. Melde am Ende knapp: welche Datei, wohin, warum.",
                   "", "Regeln:",
