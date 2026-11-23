@@ -11,10 +11,9 @@ Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Ve
 **Geändert**
 - Rückfragen, die du woanders beantwortet hast (am PC, im Terminal, über den Assistenten, auf einem anderen Gerät), verschwinden jetzt auch in Relay: sofort, oder beim nächsten Verbinden. Der Stand am PC gilt.
 - Antwortest du auf eine Rückfrage, die schon beantwortet ist, steht dort „Schon beantwortet: …“ statt einer Fehlermeldung.
-- Ein leeres Terminal nach `/clear` am PC steht nur noch unter „Zuletzt“. Unter „Laufend“ und in Heute taucht es nicht mehr auf.
+- Vorbereitet: Ein leeres Terminal nach `/clear` am PC zählt in Relay nicht mehr als wartend und steht nur noch unter „Zuletzt“, sobald der PC es als solches meldet. Dafür fehlt am PC noch eine kleine Ergänzung.
 
 **Behoben**
-- Sitzungen, in denen nur noch ein `/clear` steht, erschienen weiter unter Dein Zug, bei „Weiter“ und in den Zählern, obwohl dort nichts mehr wartet.
 - Alte, längst beantwortete Rückfragen blieben in Dein Zug und im Sprachmodus bis zu 14 Tage als offen stehen.
 
 ## 0.4.1 (2026-11-24)

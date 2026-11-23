@@ -79,20 +79,19 @@ public struct Session: Sendable, Hashable, Identifiable {
     /// PC-App) oder die Codex nur geladen hält. Text vom Handy reiht Codex selbst in dieselbe Unterhaltung ein
     /// (`codex queue`); Slash-Befehle, Tasten und Live-Bildschirm brauchen tmux.
     public let queueInput: Bool
-    /// `continued_in`, falls das Gateway es mitschickt: die Sitzung, in der die Unterhaltung nach einem `/clear` am PC
-    /// weiterläuft. Leer, wenn nicht gemeldet (Stand 24.11.2026 behält das Gateway das Feld für sich, siehe `cleared`).
+    /// `continued_in`: die Sitzung, in der die Unterhaltung nach einem `/clear` am PC weiterläuft. Leer, wenn nicht
+    /// gemeldet. Stand 24.11.2026 (Gateway 2583026) kennt das Gateway den Wert nur intern (`extra.continued_in`) und
+    /// schickt ihn nicht mit; bis dahin ist `cleared` nie wahr.
     public let continuedIn: String
 
     public var name: String { title.isEmpty ? String(sid.prefix(8)) : title }
     /// Leeres Terminal nach `/clear` am PC (2026-11-24): Claude Code führt die Unterhaltung in einer neuen Sitzung weiter,
-    /// die alte bleibt als laufend gemeldet, in ihr passiert aber nichts mehr. Erkannt an `continued_in` oder daran, dass
-    /// ihre letzte Nachricht nur das `/clear` ist und keine Frage offen ist. Eine solche Sitzung wartet auf nichts, zählt
-    /// nirgends mit und steht nur noch unter „Zuletzt“. Tippt jemand wieder hinein, ist die letzte Nachricht eine andere
-    /// und die Sitzung zählt wieder normal.
-    public var cleared: Bool {
-        if !continuedIn.isEmpty { return true }
-        return question == nil && lastMessage.trimmingCharacters(in: .whitespacesAndNewlines) == "/clear"
-    }
+    /// die alte bleibt als laufend gemeldet, in ihr passiert aber nichts mehr. Erkannt allein an `continued_in`: Aus den
+    /// übrigen Feldern lässt es sich nicht ablesen (die letzte Nachricht ist leer wie bei einer frisch gestarteten
+    /// Sitzung, das getippte `/clear` steht nicht darin). Eine solche Sitzung wartet auf nichts, zählt nirgends mit und
+    /// steht nur noch unter „Zuletzt“. Tippt jemand wieder hinein, meldet das Gateway `continued_in` nicht mehr und die
+    /// Sitzung zählt wieder normal.
+    public var cleared: Bool { !continuedIn.isEmpty }
     public var asksYou: Bool { asks && state == "idle" && !cleared }
     public var waits: Bool { !cleared && (state == "needs_input" || asksYou) }
     public var shownState: String {
