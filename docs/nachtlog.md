@@ -515,3 +515,25 @@ Offen für Martin:
 - "Neue Sitzung" öffnen: Der Vault-Ordner muss schon dastehen, einmal mit Claude-Konto und einmal mit Codex-Konto starten.
 
 Version: `project.yml` 0.3.18 auf 0.3.19. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 23. November 2026, 01:30 (Version 0.3.20)
+
+Ein Eintrag aus dem Backlog.
+
+1. Teilen an Relay „Ins Vault einsortieren“: Agent schlägt das Ziel vor, statt pauschal nach „07 Anhänge“.
+   Befund: `VaultDrop.prompt` (C: Search.swift) schrieb in Schritt 3 fest „die Datei nach 07 Anhänge“. Eine Ladung in einem Gerichtsverfahren gehört aber in den Ordner des Verfahrens in der Dokumentenablage.
+   Gebaut: Neuer Auftragstext in sechs Schritten. 1. Datei nach „01 Inbox/“ (wie bisher). 2. Lesen (Absender, Datum, Vorgang). 3. Ordner des Vorgangs suchen, im Vault und im Dokumenten-Ordner (dort nur lesen). 4. Ein bis drei Zielordner mit Dateinamen und eine passende Vault-Notiz vorschlagen und fragen. 5. Erst nach Martins Ja oder seiner anderen Angabe verschieben, bis dahin bleibt die Datei in der Inbox. 6. Knapp melden. Dazu Regeln wie bei „In Dokumente ablegen“: keine neuen Ordner ohne Ja, Dateiname JJMMTT_Stichwort mit Datum nur aus dem Dokument, nichts überschreiben, AGENTS.md des Vaults. `VaultDrop.attachments` entfällt. `prompt` hat einen neuen Parameter `docs` (Standard leer, heißt `~/Dokumente/privat/Dokumente`), ShareView übergibt die Einstellung „Dokumenten-Ordner“. Unterzeile im Teilen-Blatt und Hinweistext in Einstellungen → Ablage angepasst.
+   Tests: RelayCore `testVaultDrop` prüft die neuen Schritte, ihre Reihenfolge, den Dokumenten-Ordner (Standard und eigener Wert) und dass „07 Anhänge“ nicht mehr vorkommt. UI-Tests nennen weder die Unterzeile noch den Auftragstext, dort war nichts anzupassen.
+
+Entscheidungen:
+- Der Dokumenten-Ordner kommt aus der vorhandenen Einstellung (Einstellungen → Ablage), nicht fest aus dem Text. Standard ist der Pfad aus dem Backlog-Eintrag.
+- Die Regeln stehen wortgleich zu „In Dokumente ablegen“, damit beide Ziele sich gleich verhalten. Unterschied: „Ins Vault einsortieren“ sichert die Datei zuerst in der Inbox und sucht in Vault und Dokumenten.
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert, nicht am iPhone geprüft. Stelle für den Compiler: der Aufruf `VaultDrop.prompt(paths:note:docs:)` in ShareView.
+- Es ist ein Auftragstext. Ob der Agent am PC sich daran hält, zeigt erst ein echter Durchlauf.
+
+Offen für Martin:
+- Am iPhone ein Dokument an Relay teilen, „Ins Vault einsortieren“ wählen und prüfen, ob der Agent Ordner vorschlägt und fragt, bevor er verschiebt.
+
+Version: `project.yml` 0.3.19 auf 0.3.20. Nicht gepusht, kein Tag. Das übernimmt das Skript.

@@ -2,6 +2,16 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.3.20 (2026-11-23)
+
+**Geändert**
+- Teilen an Relay, Ziel „Ins Vault einsortieren“: Der Agent legt die Datei nicht mehr pauschal im Anhänge-Ordner ab. Er legt sie zuerst in die Inbox, liest sie und sucht den Ordner, in dem die übrigen Unterlagen des Vorgangs liegen, im Vault und in deinem Dokumenten-Ordner. Dann schlägt er dir im Chat ein bis drei Zielordner mit Dateinamen und eine passende Notiz vor und fragt, wohin es gehört. Verschoben wird erst nach deiner Antwort.
+- Dabei gilt: keine neuen Ordner ohne dein Ja, nichts wird überschrieben, und das Datum im Dateinamen stammt nur aus dem Dokument selbst.
+- Die Beschreibungen im Teilen-Blatt und in Einstellungen → Ablage nennen das neue Vorgehen.
+
+**Behoben**
+- Ein Schreiben zu einem laufenden Vorgang (zum Beispiel eine Ladung in einem Gerichtsverfahren) landete im Sammelordner für Anhänge statt bei den Unterlagen des Vorgangs.
+
 ## 0.3.19 (2026-11-22)
 
 **Neu**
