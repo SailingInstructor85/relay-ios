@@ -53,6 +53,31 @@ final class YourTurnTests: XCTestCase {
         XCTAssertEqual(items[0].cwd, "/home/m/relay-ios")
     }
 
+    /// Ein leeres Terminal nach `/clear` am PC wartet auf nichts, egal was das Gateway als Zustand meldet.
+    func testClearedSessionsNeverWait() {
+        let cleared = sess("claude:c1:a", state: "needs_input", act: 1, last: "/clear")
+        let clearedAsks = sess("claude:c1:b", state: "idle", act: 2, asks: true, asksText: "Soll ich?", last: " /clear\n")
+        let moved = Session.from(["key": "claude:c1:c", "state": "needs_input", "last_message": "X finished",
+                                  "continued_in": "8b9c162f"])!
+        let asking = sess("claude:c1:d", state: "needs_input", act: 4, last: "/clear", question: "Wirklich?")
+        let typedOn = sess("claude:c1:e", state: "needs_input", act: 5, last: "Darf ich /clear ausführen?")
+        XCTAssertTrue(cleared.cleared && clearedAsks.cleared && moved.cleared)
+        XCTAssertFalse(cleared.waits || clearedAsks.waits || moved.waits || clearedAsks.asksYou)
+        XCTAssertEqual(cleared.shownState, "idle")
+        XCTAssertFalse(asking.cleared || typedOn.cleared)
+        XCTAssertFalse(sess("claude:c1:f", state: "needs_input", last: "").cleared)
+        let items = YourTurn.items(sessions: [cleared, clearedAsks, moved, asking, typedOn], notices: [], requests: [],
+                                   confirms: [], cloud: [], now: 10)
+        XCTAssertEqual(items.map(\.id), ["session:claude:c1:d", "session:claude:c1:e"])
+
+        // „Weiter“ und die Zähler lassen sie aus, auch wenn sie ungelesen sind
+        let unread: Set<String> = ["claude:c1:a", "claude:c1:b"]
+        XCTAssertEqual(Triage.queue([cleared, clearedAsks, moved, typedOn], unread: unread).map(\.key), ["claude:c1:e"])
+        XCTAssertEqual(Triage.counts([cleared, clearedAsks, moved, typedOn], unread: unread), Triage.Counts(need: 1, unread: 0))
+        // „Heute“ zeigt sie nicht mehr
+        XCTAssertEqual(Today.rows([cleared, clearedAsks, moved, typedOn]).map(\.key), ["claude:c1:e"])
+    }
+
     func testSessionText() {
         XCTAssertEqual(YourTurn.sessionText(sess("claude:c1:a", state: "needs_input", last: "zuletzt", question: "Frage?")), "Frage?")
         XCTAssertEqual(YourTurn.sessionText(sess("claude:c1:a", state: "idle", asks: true, asksText: "Schluss?", last: "zuletzt")), "Schluss?")

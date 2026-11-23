@@ -570,6 +570,8 @@ final class AppModel: ObservableObject {
     }
 
     private func onStateChange(_ s: Session, prev: String?, ev: JSON, replay: Bool) {
+        // leeres Terminal nach /clear am PC: nichts wartet dort, keine Mitteilung und kein „ungelesen“
+        if s.cleared { clearNotifications(for: s.key); dropMissed(s.key); return }
         let now = s.state
         let ready = prev == "busy" && now == "idle"
         let needs = now == "needs_input" && prev != "needs_input"
@@ -902,7 +904,8 @@ final class AppModel: ObservableObject {
     var visibleSessions: [Session] {
         sessions.values.filter { s in
             if hidden.contains(s.key) || (s.background && !showBackground) { return false }
-            let dormant = s.exited || s.closed || s.hibernated
+            // ein leeres Terminal nach /clear am PC ist weggeräumt: nur noch unter „Zuletzt“
+            let dormant = s.exited || s.closed || s.hibernated || s.cleared
             return showDormant ? dormant : !dormant
         }
     }

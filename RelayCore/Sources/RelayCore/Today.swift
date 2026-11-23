@@ -35,13 +35,13 @@ public enum Today {
         public let pinned: Bool
     }
 
-    /// Die laufenden Sitzungen für „Heute“: ohne beendete, geschlossene, ruhende, ohne Hintergrundläufe und ohne die,
-    /// die gerade geschlossen werden (`hidden`). Reihenfolge: wartet, dann arbeitet, dann der Rest; darin angeheftete
+    /// Die laufenden Sitzungen für „Heute“: ohne beendete, geschlossene, ruhende, ohne Hintergrundläufe, ohne leere
+    /// Terminals nach `/clear` (`Session.cleared`) und ohne die, die gerade geschlossen werden (`hidden`). Reihenfolge: wartet, dann arbeitet, dann der Rest; darin angeheftete
     /// zuerst, dann zuletzt aktiv. Unabhängig vom Umschalter „Laufend/Zuletzt“ der Sitzungsliste.
     public static func rows(_ sessions: [Session], unread: Set<String> = [], pinned: Set<String> = [], hidden: Set<String> = [],
                             limit: Int? = nil) -> [Row] {
         let live = sessions.filter { s in
-            !hidden.contains(s.key) && !s.background && !s.exited && !s.closed && !s.hibernated
+            !hidden.contains(s.key) && !s.background && !s.exited && !s.closed && !s.hibernated && !s.cleared
         }
         let rows = live.map { s in row(s, unread: unread.contains(s.key), pinned: pinned.contains(s.key)) }
             .sorted { a, b in

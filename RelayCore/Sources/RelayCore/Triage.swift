@@ -21,9 +21,10 @@ public struct MemoryInfo: Sendable, Hashable {
 /// What waits for the user across sessions: the overview's status strip and "Weiter" in a chat. Port of Triage.kt.
 public enum Triage {
     /// Sessions that want the user, in the order to visit them: questions first (the longest wait first), then unread
-    /// ones (newest first). Never `current`; ended sessions only when unread.
+    /// ones (newest first). Never `current`; ended sessions only when unread. Leere Terminals nach `/clear`
+    /// (`Session.cleared`) kommen nie vor, auch nicht als ungelesen.
     public static func queue(_ live: [Session], unread: Set<String>, current: String? = nil) -> [Session] {
-        let open = live.filter { s in current.map { !s.matches($0) } ?? true }
+        let open = live.filter { s in !s.cleared && (current.map { !s.matches($0) } ?? true) }
         let waiting = open.filter { $0.waits }.sorted { $0.lastActivity < $1.lastActivity }
         let rest = open.filter { !$0.waits && unread.contains($0.key) }.sorted { $0.lastActivity > $1.lastActivity }
         return waiting + rest
@@ -36,7 +37,8 @@ public enum Triage {
     public struct Counts: Sendable, Equatable { public let need: Int, unread: Int }
 
     public static func counts(_ live: [Session], unread: Set<String>) -> Counts {
-        Counts(need: live.filter { $0.waits }.count, unread: live.filter { !$0.waits && unread.contains($0.key) }.count)
+        Counts(need: live.filter { $0.waits }.count,
+               unread: live.filter { !$0.waits && !$0.cleared && unread.contains($0.key) }.count)
     }
 
     /// "2 brauchen dich" or, when nobody waits, "3 ungelesen"; "" when there is nothing to say.

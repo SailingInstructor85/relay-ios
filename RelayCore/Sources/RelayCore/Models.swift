@@ -79,11 +79,26 @@ public struct Session: Sendable, Hashable, Identifiable {
     /// PC-App) oder die Codex nur geladen hält. Text vom Handy reiht Codex selbst in dieselbe Unterhaltung ein
     /// (`codex queue`); Slash-Befehle, Tasten und Live-Bildschirm brauchen tmux.
     public let queueInput: Bool
+    /// `continued_in`, falls das Gateway es mitschickt: die Sitzung, in der die Unterhaltung nach einem `/clear` am PC
+    /// weiterläuft. Leer, wenn nicht gemeldet (Stand 24.11.2026 behält das Gateway das Feld für sich, siehe `cleared`).
+    public let continuedIn: String
 
     public var name: String { title.isEmpty ? String(sid.prefix(8)) : title }
-    public var asksYou: Bool { asks && state == "idle" }
-    public var waits: Bool { state == "needs_input" || asksYou }
-    public var shownState: String { asksYou ? "needs_input" : state }
+    /// Leeres Terminal nach `/clear` am PC (2026-11-24): Claude Code führt die Unterhaltung in einer neuen Sitzung weiter,
+    /// die alte bleibt als laufend gemeldet, in ihr passiert aber nichts mehr. Erkannt an `continued_in` oder daran, dass
+    /// ihre letzte Nachricht nur das `/clear` ist und keine Frage offen ist. Eine solche Sitzung wartet auf nichts, zählt
+    /// nirgends mit und steht nur noch unter „Zuletzt“. Tippt jemand wieder hinein, ist die letzte Nachricht eine andere
+    /// und die Sitzung zählt wieder normal.
+    public var cleared: Bool {
+        if !continuedIn.isEmpty { return true }
+        return question == nil && lastMessage.trimmingCharacters(in: .whitespacesAndNewlines) == "/clear"
+    }
+    public var asksYou: Bool { asks && state == "idle" && !cleared }
+    public var waits: Bool { !cleared && (state == "needs_input" || asksYou) }
+    public var shownState: String {
+        if cleared && state == "needs_input" { return "idle" }
+        return asksYou ? "needs_input" : state
+    }
     public var folder: String {
         let t = cwd.hasSuffix("/") ? String(cwd.dropLast()) : cwd
         return t.split(separator: "/").last.map(String.init) ?? cwd
@@ -116,7 +131,8 @@ public struct Session: Sendable, Hashable, Identifiable {
             question: Question.from(o["question"]), hibernated: o.flag("hibernated"), closed: o.flag("closed"), closedReason: o.str("closed_reason"),
             seenAt: o.num("seen_at"), context: SessionContext.from(o["context"]),
             asks: o.flag("asks"), asksText: o.str("asks_text"), pcAttached: o["pc_attached"].bool,
-            queueInput: o.flag("queue_input"))
+            queueInput: o.flag("queue_input"),
+            continuedIn: o["continued_in"].string ?? (o.flag("continued_in") ? "1" : ""))
     }
 
     /// Ereignisse des Monitors (`session_state`, `session_started`) tragen kein `pc_attached`: die Anzeige „am PC offen“
