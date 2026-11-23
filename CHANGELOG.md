@@ -2,6 +2,19 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.0 (2026-11-23)
+
+**Neu**
+- Neues Design mit fünf Tabs unten: Heute, Dein Zug, Posteingang, Sitzungen und Mehr. Das bisherige Hauptmenü steckt jetzt im Tab Mehr.
+- Tab Heute: Kopfzeile mit Kennzahlen, „Braucht dich“, Karte für den Assistenten, deine Sitzungen als Karten und eine Kalenderkarte mit den Terminen des Tages und einer Wochenliste.
+- Tab Dein Zug: Rückfragen, Freigaben, Bestätigungen, wartende Sitzungen und Cloud-Sitzungen gesammelt als Karten.
+- Tab Posteingang: Mails nach Tag sortiert, mit Suche, Mailansicht und Vorschlägen zum Aufräumen (nur zur Ansicht).
+
+**Geändert**
+- Warmer Hintergrund, Karten und Serifenschrift für Titel und Antworten, in hell und dunkel. Das gilt auch für Sitzungsliste, Chat und Jarvis.
+- Chat-Eingabe: Die festen Reihen mit Schnellantworten und Slash-Befehlen sind weg. Befehle gibt es über ein Menü an der Eingabeleiste.
+- Enthält alles aus 0.3.20 („Ins Vault einsortieren“ fragt nach dem Zielordner).
+
 ## 0.3.20 (2026-11-23)
 
 **Geändert**
