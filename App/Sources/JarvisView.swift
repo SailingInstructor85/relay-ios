@@ -115,8 +115,14 @@ struct JarvisView: View {
 
     private var micBar: some View {
         HStack(spacing: 16) {
+            // nur solange vorgelesen wird: bricht sofort ab, auch der Rest einer noch eintreffenden Antwort bleibt stumm
             if voice.speaking {
-                Button { voice.stopSpeaking() } label: { Label("Stopp", systemImage: "speaker.slash.fill") }.buttonStyle(.bordered)
+                Button { stopReading() } label: {
+                    Label("Vorlesen stoppen", systemImage: "stop.fill").font(.headline)
+                }
+                .buttonStyle(.borderedProminent).tint(.red).controlSize(.large)
+                .accessibilityIdentifier("jarvisStopSpeaking")
+                .transition(.opacity)
             }
             Button { micTapped() } label: {
                 Image(systemName: voice.listening ? "stop.circle.fill" : "mic.circle.fill")
@@ -129,6 +135,14 @@ struct JarvisView: View {
             .accessibilityIdentifier("jarvisMic")
         }
         .padding(.vertical, 6)
+        .animation(.easeInOut(duration: 0.15), value: voice.speaking)
+    }
+
+    /// „Vorlesen stoppen“: nur die Sprachausgabe endet. Im Gesprächsmodus hört Jarvis danach wie gewohnt zu, so kann man
+    /// gleich die nächste Frage stellen; der große Knopf beendet das Gespräch.
+    private func stopReading() {
+        UsageRecorder.shared.record("jarvis", "vorlesen gestoppt", kind: "vorlesen")
+        voice.stopSpeaking()
     }
 
     // MARK: voice
@@ -238,6 +252,7 @@ struct JarvisView: View {
         turns.append(Turn(q: q, a: "", done: false, voice: byVoice))
         let idx = turns.count - 1
         let speak = byVoice && speakAnswers
+        if speak { voice.beginReply() }
         let streamed = Flag()
         let stamp = Stamp()
         let sent = Date()
@@ -253,12 +268,12 @@ struct JarvisView: View {
             let final = r.str("text", turns[idx].a)
             if speak {
                 await Task.yield()
-                if streamed.value { voice.flush() } else { voice.speak(final) }
+                if streamed.value { voice.flush() } else { voice.speakUnlessStopped(final) }
             }
             turns[idx].a = final
         } catch {
             turns[idx].a = "Fehler: \(error.localizedDescription)"
-            if speak { voice.speak("Das hat nicht geklappt.") }
+            if speak { voice.speakUnlessStopped("Das hat nicht geklappt.") }
         }
         turns[idx].done = true
         JarvisStore.save(turns.map { JarvisTurn(id: $0.id, q: $0.q, a: $0.a, voice: $0.voice, ts: $0.ts) })

@@ -33,7 +33,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private var fake = false
 
     private let synth = AVSpeechSynthesizer()
-    private var pendingUtterances = 0
+    private var queue = SpeechQueue<ObjectIdentifier>()
     private var splitter = SentenceSplitter()
     private var speakWaiters: [CheckedContinuation<Void, Never>] = []
 
@@ -235,27 +235,47 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     // MARK: speaking
 
     /// Feeds streamed answer text; complete sentences are spoken at once, the rest waits for more text or `flush()`.
+    /// Nach `stopSpeaking()` bleibt alles stumm, bis `beginReply()` oder `speak()` ein neues Vorlesen startet.
     func feed(_ delta: String) {
+        guard !queue.stopped else { return }
         for sentence in splitter.add(delta) { say(sentence) }
     }
 
+    /// The reply is complete: speaks the rest and ends the reading once the last sentence is done.
     func flush() {
-        if let rest = splitter.end() { say(rest) }
+        if !queue.stopped, let rest = splitter.end() { say(rest) }
+        splitter.reset()
+        queue.finish()
+        update()
     }
 
-    func speak(_ text: String) { splitter.reset(); feed(text); flush() }
+    /// Eine gestreamte Antwort soll vorgelesen werden: hebt einen früheren Stopp auf. `feed` für die Teile, `flush` am Ende.
+    func beginReply() {
+        splitter.reset()
+        queue.begin()
+    }
 
+    func speak(_ text: String) { beginReply(); feed(text); flush() }
+
+    /// Wie `speak`, aber nicht, wenn der Nutzer das Vorlesen dieser Antwort gestoppt hat (Fehlermeldung, Antwort ohne Stream).
+    func speakUnlessStopped(_ text: String) {
+        guard !queue.stopped else { return }
+        speak(text)
+    }
+
+    /// Stops at once: the current sentence breaks off, queued sentences are dropped, and text still streaming in for this
+    /// reply is not spoken any more.
     func stopSpeaking() {
         splitter.reset()
-        if synth.isSpeaking { synth.stopSpeaking(at: .immediate) }
-        pendingUtterances = 0
-        speaking = false
-        resumeSpeakWaiters()
+        queue.stop()
+        // auch ohne isSpeaking (zwischen zwei Sätzen, pausiert): die Warteschlange des Synthesizers leeren
+        synth.stopSpeaking(at: .immediate)
+        update()
     }
 
     /// Returns once everything queued has been spoken (or speaking was stopped).
     func waitUntilSpoken() async {
-        if pendingUtterances == 0 && splitter.isEmpty { return }
+        if !queue.active && splitter.isEmpty { return }
         await withCheckedContinuation { c in speakWaiters.append(c) }
     }
 
@@ -263,26 +283,34 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         let text = Self.speakable(raw)
         guard text.rangeOfCharacter(from: .alphanumerics) != nil else { return }
         let u = Self.utterance(text)
-        pendingUtterances += 1
-        speaking = true
+        guard queue.enqueue(ObjectIdentifier(u)) else { return }
         try? AudioFocus.takeForRecording(holder)
         synth.speak(u)
+        update()
     }
 
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) {
-        Task { @MainActor in self.utteranceEnded() }
+        // den Satz bis zur Verarbeitung festhalten: so kann ein neuer Satz nicht dieselbe Kennung (Adresse) bekommen
+        nonisolated(unsafe) let utt = u
+        Task { @MainActor in self.utteranceEnded(ObjectIdentifier(utt)) }
     }
 
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) {
-        Task { @MainActor in self.utteranceEnded() }
+        // den Satz bis zur Verarbeitung festhalten: so kann ein neuer Satz nicht dieselbe Kennung (Adresse) bekommen
+        nonisolated(unsafe) let utt = u
+        Task { @MainActor in self.utteranceEnded(ObjectIdentifier(utt)) }
     }
 
-    private func utteranceEnded() {
-        pendingUtterances = max(0, pendingUtterances - 1)
-        if pendingUtterances == 0 {
-            speaking = false
-            if splitter.isEmpty { resumeSpeakWaiters() }
-        }
+    private func utteranceEnded(_ id: ObjectIdentifier) {
+        queue.ended(id)
+        update()
+    }
+
+    /// `speaking` folgt der Warteschlange; ist nichts mehr zu sprechen, kommen die Wartenden frei.
+    private func update() {
+        let active = queue.active
+        if speaking != active { speaking = active }
+        if !active && splitter.isEmpty { resumeSpeakWaiters() }
     }
 
     private func resumeSpeakWaiters() {

@@ -238,4 +238,40 @@ final class JarvisDictationTests: XCTestCase {
         XCTAssertTrue(JarvisDictation.intro.contains("kein Agent von Christopher"))
         XCTAssertFalse((JarvisDictation.intro + JarvisDictation.howTo).contains("—"))
     }
+    func testSpeechQueueStopSilencesRest() {
+        var q = SpeechQueue<Int>()
+        q.begin()
+        XCTAssertFalse(q.active)                 // Jarvis denkt noch, nichts wird vorgelesen
+        XCTAssertTrue(q.enqueue(1))
+        XCTAssertTrue(q.active)
+        q.ended(1)
+        XCTAssertTrue(q.active)                  // Pause zwischen zwei gestreamten Sätzen: Knopf bleibt
+        XCTAssertTrue(q.enqueue(2))
+        q.stop()
+        XCTAssertFalse(q.active)
+        XCTAssertFalse(q.enqueue(3))             // nachgestreamter Satz nach dem Stopp: stumm
+        q.finish()
+        XCTAssertFalse(q.enqueue(4))             // auch der Rest beim Abschluss der Antwort
+        XCTAssertFalse(q.active)
+    }
+
+    func testSpeechQueueLateCallbackAfterStop() {
+        var q = SpeechQueue<Int>()
+        q.begin(); _ = q.enqueue(1)
+        q.stop()
+        q.begin(); _ = q.enqueue(2)
+        q.ended(1)                               // verspätete Abbruchmeldung des alten Satzes
+        XCTAssertTrue(q.active)                  // das neue Vorlesen läuft weiter
+        q.finish(); q.ended(2)
+        XCTAssertFalse(q.active)
+    }
+
+    func testSpeechQueueFinishedReply() {
+        var q = SpeechQueue<Int>()
+        q.begin(); _ = q.enqueue(1); q.finish()
+        XCTAssertTrue(q.active)
+        q.ended(1)
+        XCTAssertFalse(q.active)
+        XCTAssertFalse(q.stopped)
+    }
 }

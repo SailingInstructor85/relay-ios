@@ -532,3 +532,42 @@ public enum JarvisDictation {
     /// Was der UI-Test „hört“ (kein Mikrofon im Simulator).
     public static let uiTestPhrase = "Welche Sitzung braucht mich gerade?"
 }
+
+/// Buchführung der Sprachausgabe (VoiceIO): welche Sätze noch laufen, ob eine gestreamte Antwort noch Sätze nachliefert
+/// und ob der Nutzer das Vorlesen gestoppt hat. Nach `stop()` wird nichts mehr angenommen, bis ein neues Vorlesen
+/// beginnt (`begin()`): Sätze, die aus einer noch laufenden Antwort nachkommen, bleiben stumm. Rückmeldungen des
+/// Synthesizers zu Sätzen von vor dem Stopp (`ended`) zählen nicht mehr, sie können also ein neues Vorlesen nicht
+/// fälschlich als beendet melden.
+public struct SpeechQueue<ID: Hashable> {
+    private var live: Set<ID> = []
+    private var open = false
+    private var spoke = false
+    /// Gestoppt: weitere Sätze werden verworfen, bis `begin()` ein neues Vorlesen startet.
+    public private(set) var stopped = false
+
+    public init() {}
+
+    /// Ein neues Vorlesen beginnt (eine Antwort, die noch gestreamt wird, oder ein fertiger Text).
+    public mutating func begin() { stopped = false; open = true; spoke = false }
+
+    /// Die Antwort ist vollständig, es kommen keine Sätze mehr nach.
+    public mutating func finish() { open = false }
+
+    /// Ein Satz soll gesprochen werden. false: verworfen, weil gestoppt.
+    public mutating func enqueue(_ id: ID) -> Bool {
+        guard !stopped else { return false }
+        live.insert(id)
+        spoke = true
+        return true
+    }
+
+    /// Der Synthesizer meldet einen Satz als fertig oder abgebrochen.
+    public mutating func ended(_ id: ID) { live.remove(id) }
+
+    /// Der Nutzer stoppt: alles Laufende ist weg, Nachkommendes bleibt stumm.
+    public mutating func stop() { live = []; open = false; stopped = true }
+
+    /// Es wird vorgelesen: ein Satz läuft, oder eine Antwort hat zu sprechen begonnen und liefert noch Sätze nach
+    /// (die Pause zwischen zwei gestreamten Sätzen zählt mit, damit der Stopp-Knopf nicht flackert).
+    public var active: Bool { !live.isEmpty || (open && spoke) }
+}
