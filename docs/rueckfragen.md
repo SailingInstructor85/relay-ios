@@ -53,6 +53,20 @@ Gateways, Abschnitt „Rückfragen“ (Gateway ab 2026-11-24).
   Schließung, während die eigene Antwort unterwegs ist, gilt die Antwort vom PC.
 - `notices.json` bleibt je Installation. Ob eine Rückfrage offen ist, entscheidet aber nie mehr nur der lokale Stand.
 
+## Blatt „Rückfrage jetzt“ beim Öffnen der App (ab 0.4.2)
+
+Sind Rückfragen offen, geht beim Öffnen der App ein Blatt mit der ältesten auf: voller Wortlaut, Kontext und
+Empfehlung, darunter das Antwortfeld mit „Ja (Empfehlung)“, „Antworten“ und „Später“ (`A: QuestionPromptSheet.swift`,
+Regeln in `C: Notify.swift` `QuestionPrompt`).
+
+- „Öffnen“ heißt: Kaltstart oder zurück aus dem Hintergrund. Das Blatt kommt erst nach dem Verbinden und dem Abgleich
+  mit dem PC, damit es nichts zeigt, was woanders schon beantwortet ist. Ohne Verbindung bleibt es zu.
+- Es geht nie mitten in der Nutzung auf (eine neue Rückfrage kommt dann als Mitteilung und steht in „Dein Zug“), nie
+  über der Face-ID-Sperre (dann nach dem Entsperren) und nicht, wenn die App über die Mitteilung geöffnet wurde.
+- Nach einer Antwort rückt die nächste offene Rückfrage nach. Ist keine mehr offen, schließt sich das Blatt.
+- „Später“ (auch Herunterwischen) merkt den Zeitstempel der neuesten offenen Rückfrage. Das Blatt bleibt zu, bis
+  eine neuere dazukommt. Die Karten in „Dein Zug“ und die Zahl am Tab bleiben unverändert.
+
 ## Vorschlag für `~/.agents/bin/rueckfrage` (Stand 06.11.2026, inzwischen am PC umgesetzt)
 
 1. `cmd_neu` und `cmd_meldung`: nach dem Schreiben der Datei, wenn Martin weg ist (`anwesenheit status` Exit 1),
@@ -117,6 +131,8 @@ Gateways, Abschnitt „Rückfragen“ (Gateway ab 2026-11-24).
 - RelayCore: `NotifyTests.testAgentQuestion` (Tag, Zerlegung in Frage, Kontext, Empfehlung, Antwort-Element, Antwort
   überlebt Replay und Speichern).
 - RelayCore: `NotifyTests.testResolveByTag`, `testReconcileWithDesktop`, `testClosedQuestionTexts`.
+- RelayCore: `NotifyTests.testQuestionPromptOnOpen`. Simulator: `TabTests.test08_RueckfrageBlattSpaeter`,
+  `test09_RueckfrageBlattJa` (App in den Hintergrund und wieder nach vorn).
 - Simulator: `TabTests.test06_DeinZugRueckfrageErledigt`, `test07_RueckfrageAmPCBeantwortet` (Mock-Auslöser
   `trigger_rueckfrage_pc`, RPC `rueckfrage_status` im Mock).
 - Simulator: `InfoTests.test20_AgentQuestion` (Mock-Auslöser `trigger_rueckfrage`, Antwort im Hinweis, `inbox_put`

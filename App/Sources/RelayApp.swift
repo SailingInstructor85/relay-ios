@@ -22,6 +22,7 @@ struct RelayApp: App {
                     model.setForeground(p == .active)
                     UsageRecorder.shared.phase(p)
                     if p == .background {
+                        model.questionPromptDue = true  // beim nächsten Öffnen das Blatt „Rückfrage jetzt“ prüfen
                         BackgroundRefresh.schedule()
                         if model.lockEnabled { model.locked = true }
                     }
@@ -66,7 +67,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                 let text = r.actionIdentifier == "yes" ? "ja" : typed
                 await BackgroundRefresh.withBackgroundTime { await AppModel.shared.answerFromNotification(ref: ref, text: text) }
             } else if tapped {
-                await MainActor.run { AppModel.shared.openNotice = ref }
+                // die Mitteilung führt schon zur Rückfrage: kein Blatt zusätzlich
+                await MainActor.run { AppModel.shared.questionPromptDue = false; AppModel.shared.openNotice = ref }
             }
             return
         }
@@ -106,6 +108,12 @@ struct RootView: View {
         }
         .tint(RelayColor.primary)
         .sheet(isPresented: $approvals.showSheet) { ApprovalSheet() }
+        // beim Öffnen der App: die älteste offene Rückfrage (Herunterwischen zählt wie „Später“)
+        .sheet(isPresented: Binding(get: { model.showQuestionPrompt && !model.locked && model.configured },
+                                    set: { if !$0 { model.questionPromptLater() } })) {
+            QuestionPromptSheet().environmentObject(model)
+        }
+        .onChange(of: model.locked) { _, locked in if !locked { model.offerQuestionPrompt() } }
         .sheet(isPresented: Binding(get: { !model.incomingFiles.isEmpty && !model.locked && model.configured },
                                     set: { if !$0 { model.dropIncoming() } })) {
             ShareView(files: model.incomingFiles) { model.dropIncoming() }.environmentObject(model)

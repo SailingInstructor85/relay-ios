@@ -394,6 +394,39 @@ public enum Rueckfrage {
     }
 }
 
+/// Das Blatt „Rückfrage jetzt“ beim Öffnen der App (2026-11-24): Sind Rückfragen offen, zeigt es die älteste mit vollem
+/// Wortlaut, Kontext und Empfehlung. „Später“ blendet es aus, bis eine neuere Rückfrage dazukommt. Die Karten in
+/// „Dein Zug“ bleiben davon unberührt.
+public enum QuestionPrompt {
+    /// Einstellungsschlüssel: Zeitstempel der neuesten Rückfrage, die beim letzten „Später“ offen war.
+    public static let laterKey = "questionPromptLaterUpTo"
+    public static let title = "Rückfrage jetzt"
+    public static let laterLabel = "Später"
+
+    /// Die offenen Rückfragen, älteste zuerst.
+    public static func open(_ notices: [Notice]) -> [Notice] {
+        notices.filter(Rueckfrage.isOpen).sorted { ($0.ts, $0.ref) < ($1.ts, $1.ref) }
+    }
+
+    /// Was das Blatt beim Öffnen zeigt: die älteste offene Rückfrage, wenn seit dem letzten „Später“ (`laterUpTo`)
+    /// eine neuere dazugekommen ist oder nie „Später“ getippt wurde. Sonst nil, das Blatt bleibt zu.
+    public static func offer(_ notices: [Notice], laterUpTo: Double) -> Notice? {
+        let list = open(notices)
+        guard list.contains(where: { $0.ts > laterUpTo }) else { return nil }
+        return list.first
+    }
+
+    /// Der Wert, den „Später“ merkt: der Zeitstempel der neuesten offenen Rückfrage (nie kleiner als der bisherige).
+    public static func later(_ notices: [Notice], previous: Double) -> Double {
+        max(previous, open(notices).map(\.ts).max() ?? 0)
+    }
+
+    /// „1 offene Rückfrage“, „3 offene Rückfragen, die älteste zuerst“.
+    public static func countLabel(_ n: Int) -> String {
+        n == 1 ? "1 offene Rückfrage" : "\(n) offene Rückfragen, die älteste zuerst"
+    }
+}
+
 /// A `send_request` event: the Desktop asks for an approval (mail, invite, post, order, payment).
 public struct SendReq: Sendable, Equatable, Identifiable {
     public var id: String

@@ -262,4 +262,28 @@ final class NotifyTests: XCTestCase {
         XCTAssertNil(Rueckfrage.canonical(tag: "meldung:a:M1"))
         XCTAssertEqual(Rueckfrage.canonical(tag: " rueckfrage:a:r3 "), "rueckfrage:a:R3")
     }
+
+    /// Das Blatt beim Öffnen: älteste offene Rückfrage, „Später“ gilt bis zur nächsten neuen.
+    func testQuestionPromptOnOpen() {
+        let list = [rq("s3", "rueckfrage:a:R3", ts: 300), rq("s1", "rueckfrage:a:R1", ts: 100), rq("s2", "rueckfrage:a:R2", ts: 200, answer: "ja"),
+                    rq("s4", "meldung:a:M1", ts: 50), rq("s5", "backup", ts: 10)]
+        XCTAssertEqual(QuestionPrompt.open(list).map(\.ref), ["s1", "s3"])
+        XCTAssertEqual(QuestionPrompt.offer(list, laterUpTo: 0)?.ref, "s1")
+        // „Später“ merkt die neueste offene; solange nichts Neueres kommt, bleibt das Blatt zu
+        let later = QuestionPrompt.later(list, previous: 0)
+        XCTAssertEqual(later, 300)
+        XCTAssertNil(QuestionPrompt.offer(list, laterUpTo: later))
+        // eine neue Rückfrage öffnet es wieder, gezeigt wird weiter die älteste
+        let more = list + [rq("s6", "rueckfrage:b:R1", ts: 400)]
+        XCTAssertEqual(QuestionPrompt.offer(more, laterUpTo: later)?.ref, "s1")
+        // die älteste beantwortet: die nächste rückt nach; alles beantwortet: nichts
+        XCTAssertEqual(QuestionPrompt.offer(Rueckfrage.resolve(more, tag: "rueckfrage:a:R1", answer: "ja").list, laterUpTo: later)?.ref, "s3")
+        XCTAssertNil(QuestionPrompt.offer([rq("s2", "rueckfrage:a:R2", answer: "ja")], laterUpTo: 0))
+        XCTAssertNil(QuestionPrompt.offer([], laterUpTo: 0))
+        // der gemerkte Wert fällt nie zurück
+        XCTAssertEqual(QuestionPrompt.later([], previous: 300), 300)
+        XCTAssertEqual(QuestionPrompt.later(more, previous: 300), 400)
+        XCTAssertEqual(QuestionPrompt.countLabel(1), "1 offene Rückfrage")
+        XCTAssertEqual(QuestionPrompt.countLabel(3), "3 offene Rückfragen, die älteste zuerst")
+    }
 }

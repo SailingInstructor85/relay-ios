@@ -121,6 +121,29 @@ extension AppModel {
         NoticeStore.shared.reconcile(status: r)
     }
 
+    /// Beim Öffnen der App (nach `hello_ok` und dem Abgleich, oder zurück im Vordergrund bei stehender Verbindung):
+    /// Sind Rückfragen offen und ist seit dem letzten „Später“ eine neue dazugekommen, geht das Blatt mit der ältesten
+    /// auf. Nie mitten in der Nutzung, nie über der Sperre (dann nach dem Entsperren) und nicht, wenn die App über
+    /// eine Mitteilung geöffnet wurde, die schon zu einem Hinweis führt. Ohne Verbindung bleibt es zu: der Abgleich
+    /// fehlt dann, und eine Antwort käme nicht an.
+    func offerQuestionPrompt() {
+        guard questionPromptDue, isForeground, configured, state == .connected, !locked else { return }
+        questionPromptDue = false
+        guard !showQuestionPrompt, openNotice == nil, incomingFiles.isEmpty, !Approvals.shared.showSheet else { return }
+        let later = UserDefaults.standard.double(forKey: QuestionPrompt.laterKey)
+        guard QuestionPrompt.offer(NoticeStore.shared.items, laterUpTo: later) != nil else { return }
+        UsageRecorder.shared.record("rückfrageblatt", "geöffnet")
+        showQuestionPrompt = true
+    }
+
+    /// „Später“ (auch Herunterwischen): Das Blatt bleibt zu, bis eine neuere Rückfrage kommt.
+    func questionPromptLater() {
+        let d = UserDefaults.standard
+        d.set(QuestionPrompt.later(NoticeStore.shared.items, previous: d.double(forKey: QuestionPrompt.laterKey)), forKey: QuestionPrompt.laterKey)
+        if showQuestionPrompt { UsageRecorder.shared.record("rückfrageblatt", "später") }
+        showQuestionPrompt = false
+    }
+
     /// "Antworten" or "Ja" on the question's notification (the background link is closed again afterwards). A failure
     /// comes back as a notification, so the answer is never lost in silence.
     func answerFromNotification(ref: String, text: String) async {

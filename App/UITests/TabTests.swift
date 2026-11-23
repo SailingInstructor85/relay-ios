@@ -128,4 +128,51 @@ final class TabTests: RelayTestCase {
         expect("Beantwortet: nein, behalten", 4, soft: true)
         shot("rueckfrage-am-pc-beantwortet")
     }
+
+    /// App in den Hintergrund und wieder nach vorn (wie „App öffnen“).
+    private func reopenApp() {
+        XCUIDevice.shared.press(.home)
+        settle(2)
+        app.activate()
+        settle(1)
+    }
+
+    /// Beim Öffnen der App geht das Blatt „Rückfrage jetzt“ mit der ältesten offenen Rückfrage auf (voller Wortlaut,
+    /// Kontext, Empfehlung). „Später“ schließt es, beim nächsten Öffnen bleibt es zu, die Karte in Dein Zug bleibt.
+    func test08_RueckfrageBlattSpaeter() {
+        launchConnected()
+        ctl("trigger_rueckfrage")
+        settle(3)
+        XCTAssertFalse(id("promptLater").exists, "Blatt darf nicht mitten in der Nutzung aufgehen")
+        reopenApp()
+        XCTAssertTrue(id("promptLater").waitForExistence(timeout: 25), "Blatt mit der offenen Rückfrage fehlt nach dem Öffnen")
+        expect("Soll ich die alte Route", 4)
+        expect("seit 2024 nicht mehr genutzt", 3, soft: true)
+        expect("1 offene Rückfrage", 3, soft: true)
+        shot("rueckfrage-blatt")
+        tapID("promptLater")
+        settle(1.5)
+        XCTAssertFalse(id("promptLater").exists, "Blatt nach „Später“ noch offen")
+        reopenApp()
+        settle(6)
+        XCTAssertFalse(id("promptLater").exists, "Blatt kommt nach „Später“ ohne neue Rückfrage wieder")
+        showTab(Self.tabYourTurn)
+        expect("Soll ich die alte Route", 6)
+    }
+
+    /// Im Blatt nimmt „Ja (Empfehlung)“ die Empfehlung an: Antwort „ja“ geht zum PC, das Blatt schließt sich.
+    func test09_RueckfrageBlattJa() {
+        launchConnected()
+        ctl("trigger_rueckfrage")
+        settle(3)
+        reopenApp()
+        XCTAssertTrue(id("promptYes").waitForExistence(timeout: 25), "Blatt mit der offenen Rückfrage fehlt nach dem Öffnen")
+        tapID("promptYes")
+        XCTAssertTrue(mockReceived("inbox_put", where: { p in
+            ((p["items"] as? [[String: Any]])?.first?["app"] as? String) == "rueckfrage" && ((p["items"] as? [[String: Any]])?.first?["text"] as? String) == "ja"
+        }), "Antwort „ja“ nicht per inbox_put gesendet")
+        settle(2)
+        XCTAssertFalse(id("promptYes").exists, "Blatt nach der Antwort noch offen")
+        shot("rueckfrage-blatt-beantwortet")
+    }
 }

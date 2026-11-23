@@ -109,6 +109,11 @@ final class AppModel: ObservableObject {
     var lastJarvisWarm = Date.distantPast
     var jarvisWarmUnsupported = false
     @Published var locked = false      // Face ID lock shown
+    /// Blatt „Rückfrage jetzt“ (älteste offene Rückfrage) ist offen. Es geht nur beim Öffnen der App auf, siehe
+    /// `offerQuestionPrompt`.
+    @Published var showQuestionPrompt = false
+    /// Die App wurde geöffnet (Kaltstart oder zurück aus dem Hintergrund) und hat das Blatt noch nicht geprüft.
+    var questionPromptDue = true
     @Published var incomingFiles: [URL] = []  // "In Relay öffnen": files waiting for a target session
     @Published var openNotice: String? // a notice ref to open (notification tap)
     @Published private(set) var desktopSleepAt: Date?  // `desktop_sleep`: the PC suspends, retry every 5 min
@@ -248,6 +253,8 @@ final class AppModel: ObservableObject {
             PhoneAccessStore.shared.foregroundCame()
             if oneShot != nil { link?.close() } // a background check's link: the main loop takes over
             else if link?.isOpen != true && state != .connecting { reconnect() }
+            // die Verbindung stand noch (kurz weg): gleich abgleichen und das Blatt prüfen, sonst macht es hello_ok
+            else if questionPromptDue && state == .connected { Task { await reconcileQuestions(); offerQuestionPrompt() } }
         }
     }
 
@@ -473,7 +480,8 @@ final class AppModel: ObservableObject {
             Approvals.shared.flushReplay()
             AppLog.shared.flushSaved()
             Task { await Approvals.shared.reconcile() }
-            Task { await reconcileQuestions() }  // Rückfragen, die woanders beantwortet wurden, schließen
+            // Rückfragen, die woanders beantwortet wurden, schließen; danach das Blatt mit der ältesten offenen
+            Task { await reconcileQuestions(); offerQuestionPrompt() }
             Task { await PhoneAccessStore.shared.reconcile() }  // Telefonzugriff: Schalter melden, offene Befehle holen
         case "session_started":
             if let s = Session.from(ev["session"]) { replacePlaceholder(for: s); sessions[s.key] = s.keepingPC(from: sessions[s.key]) }
