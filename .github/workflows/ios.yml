@@ -2,7 +2,7 @@ name: iOS build
 
 on:
   push:
-    branches: [main]
+    branches: [main, redesign/tabs]
     tags: ["v*"]
     paths-ignore: ["docs/**", "*.md"]
   workflow_dispatch:
@@ -31,6 +31,8 @@ jobs:
         run: |
           V=$(grep MARKETING_VERSION project.yml | head -1 | sed -E 's/.*"(.*)".*/\1/')
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF#refs/tags/v}"; fi
+          # Neuer Zweig: eigene App „Relay Beta“ neben der normalen App (eigene Bundle-ID, eigene SideStore-Quelle)
+          if [[ "$GITHUB_REF" == refs/heads/redesign/tabs ]]; then V="0.4.0"; echo "BETA=1" >> "$GITHUB_ENV"; fi
           echo "VERSION=$V" >> "$GITHUB_ENV"
           echo "BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
           echo "Relay $V (${{ github.run_number }})"
@@ -41,10 +43,19 @@ jobs:
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
+            ${BETA:+PRODUCT_BUNDLE_IDENTIFIER=dev.relay.ios.beta} \
             build > build.log 2>&1 && rc=0 || rc=$?
           grep -E "error:|BUILD (SUCCEEDED|FAILED)" build.log | sort -u || true
           test "$rc" -eq 0
           test -d build/Build/Products/Release-iphoneos/Relay.app
+      - name: Beta-Kennzeichnung (redesign/tabs)
+        if: env.BETA == '1'
+        run: |
+          P=build/Build/Products/Release-iphoneos/Relay.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Relay Beta'" "$P"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLName dev.relay.ios.beta" "$P"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 relaybeta" "$P"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" -c "Print :CFBundleDisplayName" "$P"
       - name: Package IPA
         run: |
           mkdir -p Payload
@@ -80,6 +91,37 @@ jobs:
           files: |
             Relay.ipa
             Relay-unsigned.ipa
+            source.json
+
+      - name: SideStore source (Beta)
+        # Feste Quelle: https://github.com/<repo>/releases/download/beta/source.json, Vorabversion, nie „latest“
+        if: env.BETA == '1'
+        run: |
+          cp Relay-unsigned.ipa Relay-Beta.ipa
+          python3 scripts/make_source.py Relay-Beta.ipa "$VERSION" "$BUILD" "${{ github.repository }}" beta source.json CHANGELOG.md
+          B="https://github.com/${{ github.repository }}/releases/download/beta"
+          jq --arg b "$B" '.name="Relay Beta (neuer Zweig)" | .identifier="dev.relay.ios.beta.source" | .sourceURL="\($b)/source.json"
+            | .apps[0].name="Relay Beta" | .apps[0].bundleIdentifier="dev.relay.ios.beta"
+            | .apps[0].subtitle="Testfassung der Neugestaltung (Zweig redesign/tabs)"
+            | .apps[0].versions[0].downloadURL="\($b)/Relay-Beta.ipa"
+            | .apps[0].versions[0].localizedDescription="Testfassung aus redesign/tabs, Stand ${{ github.sha }}"
+            | .news[0].title="Relay Beta \(.apps[0].versions[0].version) (\(.apps[0].versions[0].buildVersion))"
+            | .news[0].identifier="relay-beta-${{ github.run_number }}" | .news[0].appID="dev.relay.ios.beta"
+            | .news[0].caption="Neue Testfassung der Neugestaltung"' source.json > source-beta.json
+          mv source-beta.json source.json
+          cat source.json
+      - name: Release (Beta)
+        if: env.BETA == '1'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: beta
+          name: Relay Beta (redesign/tabs)
+          prerelease: true
+          make_latest: "false"
+          target_commitish: ${{ github.sha }}
+          body: "Testfassung der Neugestaltung. Eigene App „Relay Beta“ neben Relay. SideStore-Quelle: https://github.com/${{ github.repository }}/releases/download/beta/source.json"
+          files: |
+            Relay-Beta.ipa
             source.json
 
   simulator:
