@@ -114,6 +114,7 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl list devices | grep "$UDID"
       - name: sshd und Mock-Gateway
+        timeout-minutes: 5
         run: testing/ci_sshd.sh
       - name: Build for testing
         timeout-minutes: 40

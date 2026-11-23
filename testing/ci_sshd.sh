@@ -29,8 +29,15 @@ sudo /usr/sbin/sshd -f "$D/sshd_config" -E "$D/sshd.log"
 sleep 1
 echo "sshd laeuft:"; pgrep -fl "sshd -f $D" || { sudo cat "$D/sshd.log"; exit 1; }
 # Prüfung mit gewöhnlichem ssh: hello -> hello_ok
-OUT=$(printf '{"type":"hello","since_seq":0,"client":"ci"}\n{"type":"rpc","id":"1","method":"ping","params":{}}\n' \
-  | ssh -o ConnectTimeout=10 -i "$D/verify_key" -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes "$(whoami)@127.0.0.1" serve | head -c 3000 || true)
+# Jeder Versuch hat 30 s (perl alarm, macOS hat kein timeout). Lauf 45080455801 hing hier
+# einmal 88 Minuten bis zum Job-Limit, die übrigen Teile kamen in 3 s durch.
+OUT=""
+for VERSUCH in 1 2 3; do
+  OUT=$(printf '{"type":"hello","since_seq":0,"client":"ci"}\n{"type":"rpc","id":"1","method":"ping","params":{}}\n' \
+    | perl -e 'alarm 30; exec @ARGV' ssh -o ConnectTimeout=10 -i "$D/verify_key" -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes "$(whoami)@127.0.0.1" serve | head -c 3000 || true)
+  echo "$OUT" | grep -q hello_ok && break
+  echo "Versuch $VERSUCH ohne hello_ok"
+done
 echo "$OUT" | cut -c1-300
 echo "$OUT" | grep -q hello_ok || { echo "FEHLER: kein hello_ok ueber ssh"; sudo tail -30 "$D/sshd.log"; exit 1; }
 echo "ssh-Pruefung ok"
