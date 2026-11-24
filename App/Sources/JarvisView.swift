@@ -3,13 +3,19 @@ import UIKit
 import UniformTypeIdentifiers
 import RelayCore
 
-/// Ein Dokument, das im Jarvis-Chat angehängt ist und mit der nächsten Nachricht hochgeladen wird: eine Datei aus der
-/// Dateien-App oder ein Kamerafoto (Bytes) oder ein Foto oder Video aus der Mediathek (`StagedMedia`).
+/// Ein Foto oder Dokument, das im Jarvis-Chat angehängt ist und mit der nächsten Nachricht hochgeladen wird: eine Datei
+/// aus der Dateien-App, ein Kamerafoto oder ein Bild aus der Zwischenablage (Bytes) oder ein Foto, Screenshot oder Video
+/// aus der Mediathek (`StagedMedia`).
 struct JarvisDoc: Identifiable {
     let id = UUID()
     let name: String
     let data: Data?
     let media: StagedMedia?
+    /// Vorschaubild für Bilder, die als Bytes kommen (Kamera, Zwischenablage, Bilddatei).
+    var preview: UIImage? = nil
+
+    /// Das Vorschaubild der Marke über der Eingabe; nil bei Dokumenten ohne Bild.
+    var thumb: UIImage? { preview ?? media?.thumb }
 
     func bytes() -> Data? { data ?? media?.bytes() }
     func discard() { media?.discard() }
@@ -105,15 +111,17 @@ struct JarvisView: View {
             if !uploading.isEmpty { Text(uploading).font(.caption).foregroundStyle(.secondary).padding(.bottom, 4) }
             if !docs.isEmpty { docStrip }
             HStack {
-                // Dokumente in den Chat geben: Jarvis bekommt sie mit der nächsten Nachricht und gibt sie weiter
+                // Fotos und Dokumente in den Chat geben: Jarvis bekommt sie mit der nächsten Nachricht und gibt sie weiter.
+                // Reihenfolge wie im Sitzungs-Chat, Fotos (mit Screenshots aus der Mediathek) zuerst.
                 Menu {
-                    Button { importing = true } label: { Label("Datei", systemImage: "doc") }
                     // A picker inside a Menu does not open on iOS; a moment later the menu has closed (as in the chat).
-                    Button { Task { try? await Task.sleep(nanoseconds: 350_000_000); pickingPhoto = true } } label: { Label("Fotos oder Videos", systemImage: "photo.on.rectangle") }
+                    Button { Task { try? await Task.sleep(nanoseconds: 350_000_000); pickingPhoto = true } } label: { Label("Fotos, Screenshots oder Videos", systemImage: "photo.on.rectangle") }
                     if CameraPicker.available { Button { camera = true } label: { Label("Kamera", systemImage: "camera") } }
+                    if UIPasteboard.general.hasImages { Button { Task { await addClipboard() } } label: { Label("Bild aus Zwischenablage", systemImage: "doc.on.clipboard") } }
+                    Button { importing = true } label: { Label("Datei", systemImage: "doc") }
                 } label: { Image(systemName: "paperclip").font(.title3) }
                     .disabled(asking)
-                    .accessibilityLabel("Dokument anhängen").accessibilityIdentifier("jarvisAttach")
+                    .accessibilityLabel("Fotos oder Dokumente anhängen").accessibilityIdentifier("jarvisAttach")
                 TextField(docs.isEmpty ? "Jarvis schreiben…" : "Was soll Jarvis damit tun?", text: $input, axis: .vertical).lineLimit(1...4)
                     .focused($inputFocused).accessibilityIdentifier("jarvisInput")
                     .padding(8).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
@@ -221,13 +229,18 @@ struct JarvisView: View {
 
     // MARK: Dokumente
 
-    /// Die angehängten Dokumente über der Eingabe, jedes mit einem Knopf zum Herausnehmen.
+    /// Die angehängten Fotos und Dokumente über der Eingabe, Bilder mit Vorschau, jedes mit einem Knopf zum Herausnehmen.
     private var docStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(docs) { d in
                     HStack(spacing: 4) {
-                        Image(systemName: "doc")
+                        if let t = d.thumb {
+                            Image(uiImage: t).resizable().scaledToFill().frame(width: 36, height: 36)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                        } else {
+                            Image(systemName: JarvisDocs.symbol(d.name))
+                        }
                         Text(d.name).lineLimit(1).truncationMode(.middle).frame(maxWidth: 180)
                         Button { removeDoc(d.id) } label: { Image(systemName: "xmark.circle.fill") }
                             .buttonStyle(.plain).disabled(asking)
@@ -264,7 +277,8 @@ struct JarvisView: View {
             let name = url.lastPathComponent
             guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { problems.append(JarvisDocs.unreadable(name)); continue }
             guard data.count <= JarvisDocs.maxBytes else { problems.append(JarvisDocs.tooBig(name)); continue }
-            new.append(JarvisDoc(name: name, data: data, media: nil))
+            // Bilddateien (zum Beispiel ein gesicherter Screenshot) zeigen wie Fotos eine Vorschau
+            new.append(JarvisDoc(name: name, data: data, media: nil, preview: JarvisDocs.isPicture(name) ? AttachPrep.thumbnail(data) : nil))
         }
         attached(new, kind: "datei")
         if !problems.isEmpty { error = problems.joined(separator: ", ") }
@@ -285,8 +299,23 @@ struct JarvisView: View {
 
     private func addCamera(_ jpeg: Data) async {
         let raw = "kamera-\(Int(Date().timeIntervalSince1970)).jpg"
-        let p = await Task.detached(priority: .userInitiated) { AttachPrep.prepared(name: raw, data: jpeg) }.value
-        attached([JarvisDoc(name: p.name, data: p.data, media: nil)], kind: "foto")
+        await addImage(name: raw, data: jpeg, mime: "image/jpeg", kind: "foto")
+    }
+
+    /// Ein Bild aus der Zwischenablage, zum Beispiel ein eben kopierter Screenshot.
+    private func addClipboard() async {
+        guard let img = UIPasteboard.general.image, let d = img.pngData() else { error = "Kein Bild in der Zwischenablage"; return }
+        await addImage(name: JarvisDocs.clipboardName(stamp: Int(Date().timeIntervalSince1970)), data: d, mime: "image/png", kind: "zwischenablage")
+    }
+
+    /// Ein Bild als Bytes (Kamera, Zwischenablage): wie Fotos aus der Mediathek auf 2048 px verkleinert, mit Vorschau.
+    private func addImage(name: String, data: Data, mime: String, kind: String) async {
+        let p: (name: String, data: Data, thumb: UIImage?) = await Task.detached(priority: .userInitiated) { () -> (name: String, data: Data, thumb: UIImage?) in
+            let prep = AttachPrep.prepared(name: name, data: data, mime: mime)
+            return (prep.name, prep.data, AttachPrep.thumbnail(prep.data))
+        }.value
+        guard p.data.count <= JarvisDocs.maxBytes else { error = JarvisDocs.tooBig(p.name); return }
+        attached([JarvisDoc(name: p.name, data: p.data, media: nil, preview: p.thumb)], kind: kind)
     }
 
     /// Senden: ohne Dokumente die Frage wie bisher. Mit Dokumenten gehen sie zuerst an den PC, dann bekommt Jarvis die

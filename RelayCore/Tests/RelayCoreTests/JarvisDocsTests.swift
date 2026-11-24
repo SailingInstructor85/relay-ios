@@ -9,11 +9,37 @@ final class JarvisDocsTests: XCTestCase {
         XCTAssertTrue(p.contains("Sein Auftrag dazu: Bitte zur Steuer legen"))
         XCTAssertTrue(p.contains("im Ordner ~/vault"))
         XCTAssertFalse(p.contains("Er hat nichts dazu geschrieben"))
+        // ein Dokument ist kein Bild: kein Hinweis zum Ansehen und Einbinden
+        XCTAssertFalse(p.contains("Ein Bild kann die Sitzung ansehen"))
+    }
+
+    func testPromptForPictures() {
+        let one = JarvisDocs.prompt(message: "Zur Bewerbung bei Muster legen", paths: ["/u/foto-1700000000.png"])
+        XCTAssertTrue(one.hasPrefix("Martin gibt dir ein Bild vom iPhone (Foto oder Screenshot). Es liegt als Upload am PC:"))
+        XCTAssertTrue(one.contains("Sein Auftrag dazu: Zur Bewerbung bei Muster legen"))
+        XCTAssertTrue(one.contains("Ein Bild kann die Sitzung ansehen."))
+        XCTAssertTrue(one.contains("bindet es in die Notiz ein"))
+        let many = JarvisDocs.prompt(message: "", paths: ["/u/foto-1-1.jpg", "/u/foto-1-2.HEIC", "/u/zwischenablage-1.png"])
+        XCTAssertTrue(many.hasPrefix("Martin gibt dir 3 Bilder vom iPhone (Fotos oder Screenshots). Sie liegen als Uploads am PC:"))
+        XCTAssertTrue(many.contains("frage ihn, bevor du es weitergibst"))
+    }
+
+    func testHeadAndKinds() {
+        XCTAssertEqual(JarvisDocs.head(count: 1, images: 0), "Martin gibt dir ein Dokument vom iPhone. Es liegt als Upload am PC:")
+        XCTAssertEqual(JarvisDocs.head(count: 3, images: 0), "Martin gibt dir 3 Dokumente vom iPhone. Sie liegen als Uploads am PC:")
+        XCTAssertTrue(JarvisDocs.isPicture("/u/zwischenablage-1700000000.png"))
+        XCTAssertFalse(JarvisDocs.isPicture("/u/video-1700000000.mov"))
+        XCTAssertFalse(JarvisDocs.isPicture("/u/brief.pdf"))
+        XCTAssertEqual(JarvisDocs.clipboardName(stamp: 1700000000), "zwischenablage-1700000000.png")
+        XCTAssertTrue(Attach.isImage(JarvisDocs.clipboardName(stamp: 1)))
+        XCTAssertEqual(JarvisDocs.symbol("foto-1.jpg"), "photo")
+        XCTAssertEqual(JarvisDocs.symbol("video-1.MOV"), "video")
+        XCTAssertEqual(JarvisDocs.symbol("brief.pdf"), "doc")
     }
 
     func testPromptWithoutMessageAsksFirst() {
         let p = JarvisDocs.prompt(message: "  ", paths: ["/u/a.pdf", "/u/b.jpg"])
-        XCTAssertTrue(p.hasPrefix("Martin gibt dir 2 Dokumente vom iPhone."))
+        XCTAssertTrue(p.hasPrefix("Martin gibt dir 2 Anhänge vom iPhone (Bilder und Dokumente). Sie liegen als Uploads am PC:"))
         XCTAssertTrue(p.contains("- /u/a.pdf\n- /u/b.jpg"))
         XCTAssertTrue(p.contains("frage ihn, bevor du es weitergibst"))
         XCTAssertFalse(p.contains("Sein Auftrag dazu"))

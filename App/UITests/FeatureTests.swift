@@ -283,8 +283,8 @@ final class InfoTests: RelayTestCase {
         mainMenu("Jarvis fragen")
         settle(1.5)
         shot("jarvis-leer")
-        // die Büroklammer links am Eingabefeld gibt Dokumente in den Chat
-        if !id("jarvisAttach").exists { notes.append("Jarvis: Knopf „Dokument anhängen“ fehlt") }
+        // die Büroklammer links am Eingabefeld gibt Fotos (auch Screenshots) und Dokumente in den Chat
+        if !id("jarvisAttach").exists { notes.append("Jarvis: Knopf „Fotos oder Dokumente anhängen“ fehlt") }
         typeInto("jarvisInput", "Was läuft gerade?")
         tapID("jarvisSend")
         settle(0.8)
@@ -305,6 +305,17 @@ final class InfoTests: RelayTestCase {
             notes.append("Jarvis: Antwort nicht als Textfeld im Baum")
         }
         XCTAssertTrue(mockReceived("ask"))
+        // Menü der Büroklammer: Fotos (mit Screenshots) stehen oben, Dateien darunter. Nur Hinweise, am Schluss des
+        // Tests, damit ein offenes Menü nichts anderes stört.
+        let clip = id("jarvisAttach")
+        if clip.exists, clip.isHittable {
+            clip.tap(); settle(0.8); shot("jarvis-anhang-menue")
+            expect("Fotos, Screenshots oder Videos", 2, soft: true)
+            expect("Datei", 2, soft: true)
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        } else {
+            notes.append("Jarvis: Büroklammer nach der Antwort nicht antippbar")
+        }
     }
 
     func test25_JarvisDictationToSend() {

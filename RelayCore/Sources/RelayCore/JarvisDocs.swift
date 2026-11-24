@@ -1,7 +1,7 @@
 import Foundation
 
-/// Dokumente an Jarvis geben (2026-11-24): über die Büroklammer im Jarvis-Chat oder über „Teilen“ aus einer anderen
-/// App. Die Dateien gehen als Uploads an den PC, Jarvis bekommt die Pfade mit dem Auftrag. Jarvis hat am PC keine
+/// Fotos und Dokumente an Jarvis geben (2026-11-24): über die Büroklammer im Jarvis-Chat (Mediathek mit Screenshots,
+/// Kamera, Bild aus der Zwischenablage, Dateien-App) oder über „Teilen“ aus einer anderen App. Die Dateien gehen als Uploads an den PC, Jarvis bekommt die Pfade mit dem Auftrag. Jarvis hat am PC keine
 /// Dateiwerkzeuge: Er kann eine Datei nicht lesen, aber mit dem Pfad an eine laufende Sitzung geben (`dispatch`) oder
 /// eine neue Sitzung damit starten (`new_session`). Das sagt ihm der Auftrag, weil sein Prompt am PC liegt.
 public enum JarvisDocs {
@@ -12,8 +12,8 @@ public enum JarvisDocs {
     public static func prompt(message: String, paths: [String], vault: String = "") -> String {
         let m = message.trimmingCharacters(in: .whitespacesAndNewlines)
         let dir = VaultDrop.root(vault)
-        var lines = [paths.count == 1 ? "Martin gibt dir ein Dokument vom iPhone. Es liegt als Upload am PC:"
-                                      : "Martin gibt dir \(paths.count) Dokumente vom iPhone. Sie liegen als Uploads am PC:"]
+        let images = paths.filter { isPicture($0) }.count
+        var lines = [head(count: paths.count, images: images)]
         lines += paths.map { "- \($0)" }
         lines.append("")
         if m.isEmpty {
@@ -23,7 +23,35 @@ public enum JarvisDocs {
         }
         lines += ["",
                   "Du kannst Dateien nicht selbst lesen. Gib sie mit dem vollen Pfad weiter: an eine laufende Sitzung, die zum Thema passt, oder an eine neue Sitzung im Ordner \(dir), die das Dokument liest und erledigt, was Martin will (zum Beispiel einsortieren). Ist nicht klar, wohin, frag kurz nach. Sag am Ende in einem Satz, wohin es gegangen ist."]
+        if images > 0 {
+            lines.append("Ein Bild kann die Sitzung ansehen. Gehört es zu einer Notiz im Vault (zum Beispiel der Screenshot einer Nachricht zu einer Bewerbung), legt die Sitzung es nach den Regeln des Vaults beim Vorgang ab und bindet es in die Notiz ein.")
+        }
         return lines.joined(separator: "\n")
+    }
+
+    /// Fotos und Screenshots (auch aus der Zwischenablage) sind Bilder, Videos zählen hier als Dokument.
+    public static func isPicture(_ nameOrPath: String) -> Bool { Attach.isImage(nameOrPath) }
+
+    /// Erste Zeile des Auftrags: sagt Jarvis, ob Bilder, Dokumente oder beides kommen.
+    public static func head(count: Int, images: Int) -> String {
+        let place = count == 1 ? "Es liegt als Upload am PC:" : "Sie liegen als Uploads am PC:"
+        if images == count, count > 0 {
+            return count == 1 ? "Martin gibt dir ein Bild vom iPhone (Foto oder Screenshot). \(place)"
+                              : "Martin gibt dir \(count) Bilder vom iPhone (Fotos oder Screenshots). \(place)"
+        }
+        if images > 0 { return "Martin gibt dir \(count) Anhänge vom iPhone (Bilder und Dokumente). \(place)" }
+        return count == 1 ? "Martin gibt dir ein Dokument vom iPhone. \(place)"
+                          : "Martin gibt dir \(count) Dokumente vom iPhone. \(place)"
+    }
+
+    /// Name für ein Bild aus der Zwischenablage (zum Beispiel ein kopierter Screenshot).
+    public static func clipboardName(stamp: Int) -> String { "zwischenablage-\(stamp).png" }
+
+    /// Symbol einer Marke ohne Vorschaubild.
+    public static func symbol(_ name: String) -> String {
+        if Attach.isImage(name) { return "photo" }
+        if Attach.isVideo(name) { return "video" }
+        return "doc"
     }
 
     /// Was im Jarvis-Chat als eigene Nachricht steht: der Text und darunter die Dateinamen, nicht der ganze Auftrag.
