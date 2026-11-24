@@ -582,3 +582,38 @@ Offen für Martin:
 - Gateway: `continued_in` in der Sitzungsliste mitschicken (eine Zeile in `_base_dict`, siehe Eintrag 1). Erst dann räumt die App leere Terminals nach `/clear` weg.
 
 Version: `project.yml` 0.4.1 auf 0.4.2. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 24. November 2026, 01:37 (Version 0.4.3)
+
+Drei Einträge aus dem Backlog, alle im Chat und bei Jarvis, nur App-Seite.
+
+1. Chat-Kopf: Zurück-Knopf überdeckt den Sitzungstitel.
+   Ursache wie im Backlog: Der Titel hatte fest 190 pt, rechts standen Zustand, „Weiter“, Menü, Terminal und Lesemodus. Unter iOS 26 blieb daneben zu wenig Platz, der Titel wich nach links unter den Zurück-Knopf aus.
+   Gebaut: Der Terminal-Knopf im Kopf ist weg („Live-Bildschirm“ stand schon im Sitzungsmenü), der Lesemodus ist ein Eintrag oben im Sitzungsmenü (zweite Stelle, Kennung `readingOn`). Rechts bleiben Zustand, „Weiter“ und das Menü. Die Breite des Titels kommt aus `ChatHeader.titleMaxWidth(screenWidth:hasNext:)` (C: Compose.swift): Bildschirmbreite minus Zurück-Knopf (68 pt) minus Knopfgruppe (148 pt, mit „Weiter“ 196 pt), mindestens 96, höchstens 260. Auf 393 pt Breite sind das 177 pt, mit „Weiter“ 129 pt.
+   Tests: RelayCore `ComposeTests.testTitleMaxWidth`. UI-Test `ChatTests.test17_AgentInHeader` prüft jetzt hart, dass die Agentenmarke rechts vom Zurück-Knopf liegt (Claude- und Codex-Sitzung), und notiert, falls sie unter das Sitzungsmenü reicht. `test14_ReadingMode` geht über das Sitzungsmenü.
+
+2. Chat: Knopf „Tastatur ausblenden“ wieder direkt sichtbar.
+   Gebaut: runder Knopf (Tastatur-ab-Symbol, 36 pt sichtbar, 44 pt Tippfläche, Material-Hintergrund mit feinem Rand) als Überlagerung rechts unten über dem Verlauf, also direkt über dem Eingabefeld. Er erscheint nur bei offener Tastatur (`KeyboardBar.showsHideButton`, C), braucht keine eigene Zeile und verschiebt nichts. Kennung `hideKeyboard` wie früher.
+   Tests: RelayCore `KeyboardBarTests.testHideButtonOnlyWithKeyboard`. UI-Test `ChatTests.test12_HideKeyboard` prüft wie in 0.3.20 Lage über dem Eingabefeld, keine Überdeckung von Senden und Mikrofon, Tippfläche, Schließen mit einem Tipp, Text bleibt. `DesignTests` schließt die Tastatur über den Knopf.
+
+3. Jarvis-Chat: Text per langem Drücken markieren.
+   Befund: Die Antworten liefen über SwiftUI-`Text` mit `textSelection(.enabled)`. Das kann auf dem iPhone nur den ganzen Text kopieren (das Kopieren-Pop-up), keine Teilauswahl.
+   Gebaut: `SelectableBlocks` (A: MarkdownView.swift), ein nicht editierbares `UITextView` ohne eigenes Scrollen. `MarkdownText(marking: true)` (nur im Jarvis-Chat) fasst aufeinanderfolgende Absätze, Überschriften, Listenpunkte und Zitate zu einem Textstück zusammen (`MdBlocks.runs`, C: Markdown.swift), darin lässt sich über Absätze hinweg markieren. Codeblöcke, Tabellen und Trennlinien bleiben eigene Blöcke wie bisher. Fett, kursiv, Code im Text, durchgestrichen und Links werden übernommen, Schrift Serif im Textstil callout wie `RelayFont.reply`. Die Frageblase hat jetzt das einfache Kopieren.
+   Tests: RelayCore `LinksTests.testMarkdownRuns`, `testListMarker`. UI-Tests `FeatureTests.test10_Jarvis` und `test25_JarvisDictationToSend` lesen die Antwort aus dem Wert des Textfelds (`hasSelectableText` in Base.swift); test10 drückt lang auf die Antwort und nimmt das Bild `jarvis-text-markiert` auf.
+
+Entscheidungen:
+- Lesemodus ins Menü statt Titel nach links: Ein Titel als linkes Leistenelement bekäme unter iOS 26 eine eigene Glasfläche neben dem Zurück-Knopf. Der Lesemodus kostet jetzt zwei Tipps statt einem. Soll er wieder ein eigener Knopf sein, müsste dafür der Zustand („bereit“, „arbeitet“) aus dem Kopf.
+- Der Eintrag „Tastatur ausblenden“ im Befehlsmenü ist entfallen (laut Backlog durfte er bleiben). Grund: Knopf und Eintrag erscheinen beide nur bei offener Tastatur, der Eintrag wäre doppelt, und zwei Elemente mit derselben Beschriftung machen die UI-Tests mehrdeutig.
+- Der Tastatur-Knopf schwebt über dem Verlauf statt in einer eigenen Zeile. So springt der Verlauf beim Öffnen der Tastatur nicht um eine Zeile, und die Schnellantwort-Zeile bleibt weg (Entscheidung 22.11.2026).
+- Markieren nur im Jarvis-Chat. Im Sitzungs-Chat öffnet langes Drücken weiter das Nachrichtenmenü („Text auswählen“ steht dort), beides zugleich verträgt sich nicht.
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert, nicht am iPhone geprüft. Stellen für den Compiler: `SelectableBlocks` (neu, `sizeThatFits`, Aufbau des Textes aus `AttributedString`-Läufen), `GeometryReader` im Hintergrund von `ChatView`.
+- Die Maße in `titleMaxWidth` sind Schätzwerte der Leiste unter iOS 26. Liegt der Titel noch unter dem Zurück-Knopf, schlägt `test17_AgentInHeader` fehl und nennt beide Rahmen; dann die Werte 68, 148 und 196 anpassen. Auf dem Designbild `chat` (hell und dunkel) nachsehen.
+- Jarvis: Zitate haben im markierbaren Text keinen Strich mehr links, nur Einzug und graue Schrift. Abstände zwischen Absätzen können leicht von der bisherigen Darstellung abweichen. Ändert sich die Systemschriftgröße bei offenem Chat, passt sich der Text erst mit der nächsten Antwort oder beim erneuten Öffnen an.
+- Während eine Antwort einläuft, setzt jeder neue Textteil eine laufende Markierung zurück. Markieren also nach dem Ende der Antwort.
+
+Offen für Martin:
+- Am iPhone prüfen: Chat-Kopf (Titel neben dem Zurück-Knopf, hell und dunkel), Tastatur-Knopf über dem Eingabefeld, langes Drücken in einer Jarvis-Antwort.
+
+Version: `project.yml` 0.4.2 auf 0.4.3. Nicht gepusht, kein Tag. Das übernimmt das Skript.

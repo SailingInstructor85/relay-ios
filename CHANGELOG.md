@@ -2,6 +2,18 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.3 (2026-11-24)
+
+**Neu**
+- Jarvis: In den Antworten lässt sich jetzt per langem Drücken Text markieren. Mit den Griffen wählst du genau den Teil, den du kopieren willst, auch über mehrere Absätze. Bisher gab es nur „Kopieren“ für den ganzen Absatz.
+
+**Geändert**
+- Chat: Der Knopf „Tastatur ausblenden“ ist wieder direkt sichtbar. Sobald die Tastatur offen ist, steht er als runder Knopf rechts über dem Eingabefeld, ein Tipp genügt. Der Eintrag im Befehlsmenü („/“) ist dafür entfallen.
+- Chat: Lesemodus und Live-Bildschirm stehen jetzt oben im Sitzungsmenü (die drei Punkte oben rechts). Die beiden eigenen Knöpfe im Kopf sind weg, damit der Titel Platz hat.
+
+**Behoben**
+- Chat: Der Name der Sitzung und die Angabe „Claude“ oder „Codex“ rutschten im Kopf unter den Zurück-Knopf.
+
 ## 0.4.2 (2026-11-24)
 
 **Neu**
