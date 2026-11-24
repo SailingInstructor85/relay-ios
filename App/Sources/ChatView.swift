@@ -137,8 +137,8 @@ struct ChatView: View {
         .background {
             GeometryReader { g in
                 Color.clear
-                    .onAppear { chatWidth = g.size.width }
-                    .onChange(of: g.size.width) { _, w in chatWidth = w }
+                    .onAppear { chatWidth = Double(g.size.width) }
+                    .onChange(of: g.size.width) { _, w in chatWidth = Double(w) }
             }
         }
         .toolbarBackground(RelayColor.background, for: .navigationBar)
@@ -412,7 +412,7 @@ struct ChatView: View {
         }
         // Der Titel bekommt nur den Platz zwischen Zurück-Knopf und Knopfgruppe. Mit fester Breite (190) rutschte er
         // unter iOS 26 unter den Zurück-Knopf, weil rechts mehr stand, als daneben passte.
-        .frame(maxWidth: ChatHeader.titleMaxWidth(screenWidth: chatWidth, hasNext: hasNext))
+        .frame(maxWidth: CGFloat(ChatHeader.titleMaxWidth(screenWidth: chatWidth, hasNext: hasNext)))
         if session?.tool == "claude" {
             Menu {
                 let idle = session?.state != "busy"
