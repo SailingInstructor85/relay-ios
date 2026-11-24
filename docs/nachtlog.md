@@ -697,3 +697,49 @@ Offen für Martin:
 - Zum Jarvis-Knopf entscheiden (`docs/jarvis-kontext.md`), oder den Eintrag aus „Offen“ nehmen, bis das Gateway die RPCs hat.
 
 Version: `project.yml` 0.4.4 auf 0.4.5. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 24. November 2026, 12:24 (Version 0.4.6)
+
+Drei Einträge aus dem Backlog. Eintrag 3 ist abgeschlossen. Eintrag 1 ist am iPhone gebaut, der PC-Teil fehlt. Eintrag 2 ist in der App gebaut, der Aufruf im Gateway fehlt. Am Gateway (`~/relay`) wurde nichts geändert, nur gelesen.
+
+1. Jarvis spricht mit Supertonic 3, Stimme M2. iPhone gebaut, PC offen.
+   Martin hat die Rückfrage R4 um 12:28 mit „ja“ beantwortet (iOS 18 und speech-swift erlaubt). Gebaut ist es anders und kleiner: Das Modul `SupertonicTTS` aus speech-swift (v0.0.29, Apache 2.0) besteht aus fünf Dateien und braucht vom Rest des Pakets nur den Download. Diese fünf Dateien liegen jetzt in `App/Sources/Supertonic` (Kopfzeile und NOTICE nennen die Herkunft), den Download macht die App selbst. Damit entfallen das Paket mit seinen Abhängigkeiten (mlx-swift, WhisperKit, hummingbird, xgrammar und andere) und das Anheben auf iOS 18.
+   - `VoiceModel` (C: VoiceModel.swift, Tests `VoiceModelTests`): Ablage, gebrauchte Dateien (vier Modellteile, zwei Tabellen, nur Stimme M2), Lesen der Dateiliste, Pfadprüfung, Obergrenze, Tempo.
+   - `SupertonicStore` (A): Modell laden (Dateiliste über die Hugging-Face-Schnittstelle, Datei für Datei mit Fortschritt, schon Geladenes wird übersprungen, Größe wird geprüft, vom iCloud-Backup ausgenommen), löschen, in den Speicher holen, Satz in Ton wandeln (außerhalb des Hauptthreads, ein Satz zur Zeit), Freigabe bei Speicherwarnung.
+   - `PCMPlayer` (A): spielt den Ton über `AVAudioEngine`, meldet das Ende, mit Sicherung, falls die Ausgabe das Ende nicht meldet.
+   - `VoiceIO` (A: Voice.swift): Ist Supertonic gewählt und geladen, laufen die Sätze durch eine Kette, einer nach dem anderen. Deutsche gehen mit Zahlen als Wörtern (`SpokenNumbers`) an Supertonic, englische an die Apple-Stimme. Der nächste Satz wird vorausberechnet. Stopp bricht Ton, Kette und Vorausberechnung ab. Ohne Supertonic läuft alles wie bisher über den alten Weg.
+   - Einstellungen (A: VoicePickerView.swift): Eintrag „Supertonic 3 (M2) · auf dem Gerät“ unter „Stimme Deutsch“, darunter die Zeile mit „Modell laden“, Fortschritt, „Abbrechen“, „Modell löschen“. „Testen“ spricht den Probesatz mit Supertonic.
+   PC („Hey Jarvis“): unverändert offen, liegt im Gateway. Was dort zu tun ist, steht in `docs/jarvis-stimme.md`.
+
+2. Smart Home im Tab „Mehr“. App gebaut, Gateway offen.
+   Seite „Smart Home“ mit dem Abschnitt „Fernseher“ und vier Zeilen (A: SmartHomeView.swift, Zeile in MoreView.swift nach „Routinen“, Ziel `smartHome`). Die App schickt `smart_home {device: "tv", action: on|off|hdmi2|tv}` und zeigt `text` aus der Antwort oben auf der Seite, während des Laufs eine Zeile mit dem Hinweis auf bis zu 3 Minuten (Zeitgrenze 200 s). Aktionen, Parameter und Fehlertexte in RelayCore (`SmartHome`, Tests `SmartHomeTests`). Das Test-Gateway kennt den Aufruf, UI-Test `TabTests.test10_SmartHomeFernseher`.
+   Im echten Gateway gibt es `smart_home` nicht (Suche in `gateway/src` und PROTOCOL.md). Bis dahin zeigt jede Aktion „Das Gateway auf dem PC kann den Fernseher noch nicht schalten.“ Der Vertrag für das Gateway steht in `docs/smart-home.md`. Offen dort auch: Für „einschalten“ gibt es am PC kein eigenes Skript, nur das Eingangs-Skript, das vorher einschaltet.
+
+3. Posteingang: Links in Mails antippbar, Text markierbar. Erledigt.
+   - `MailLinks` (C: MailLinks.swift, Tests `MailLinksTests`): findet Webadressen (http, https, www.) und Mailadressen im reinen Text, mit Stelle, Ziel und Rechnername. Nur http, https und mailto gelten als Ziel. Eine Warnung entsteht, wenn der Text über das Ziel täuschen kann: Anmeldeteil vor dem @, Zahlenadresse, Punycode oder Sonderzeichen im Namen, oder ein anderer Rechnername direkt vor einem eingeklammerten Link („bank.example <https://anders.example>“, auch in der Markdown-Form).
+   - `MailBodyText` (A: MailBodyView.swift): der Mailtext als ein nicht editierbares `UITextView` wie im Jarvis-Chat, Links in Akzentfarbe und unterstrichen. iOS darf an einem Link nichts selbst tun (kein Öffnen, keine Seitenvorschau), Tippen und langes Drücken gehen an `MailView`.
+   - `MailView`: Tippen öffnet (`UIApplication.open`), bei einer Warnung kommt zuerst ein Dialog mit Warnung und Ziel. Langes Drücken zeigt denselben Dialog mit „In Safari öffnen“ und „Adresse kopieren“. Unter dem Text steht ein Hinweis, sobald die Mail Links hat.
+   - Test-Gateway: Die erste Mail hat jetzt einen Link. `InboxTests.test01_ListeUndMail` sucht den Text im Textfeld; der Tipp auf den Link ist weich geprüft (im Test öffnet die App nichts, sie zeigt „Geöffnet: …“).
+
+Entscheidungen:
+- Supertonic ohne das Paket und ohne iOS 18. Martins Ja hätte beides gedeckt. Der kleinere Weg hat weniger, was in der CI brechen kann, und die App bleibt für iOS 17 baubar. Ob das Modell selbst iOS 18 braucht, weiß ich nicht. Wenn ja, lädt es auf iOS 17 nicht und die Apple-Stimme spricht.
+- Apple-Stimme bleibt voreingestellt, wie in R4 angekündigt. Supertonic gilt erst nach Auswahl und Download.
+- Solange das Modell noch nicht im Speicher ist, spricht die Apple-Stimme den Satz, statt Jarvis sekundenlang stumm zu lassen. Der Wechsel der Stimme mitten in der ersten Antwort ist dabei in Kauf genommen. Die App lädt das Modell schon beim Start der Aufnahme vor.
+- „Vorlesen auf Knopfdruck“ (mit Pause und Fortsetzen an der Wortgrenze) bleibt bei der Apple-Stimme. Supertonic liefert fertigen Ton ohne Wortgrenzen.
+- Mail-Links: Ein Tipp öffnet sofort, wie gewünscht. Nur bei einer Warnung fragt die App vorher.
+- Der Stand der Hugging-Face-Ablage ist nicht auf eine Fassung festgelegt (dafür hätte ich die Ablage abfragen müssen, der Abruf war in diesem Lauf nicht erlaubt). Die App lädt, was im Zweig `main` liegt, und prüft Pfade und Größen.
+- Smart Home sichtbar eingebaut, obwohl das Gateway fehlt: Martin hat den Punkt bestellt, und die Seite sagt ehrlich, woran es liegt. Eintrag bleibt offen.
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert, nichts auf dem Gerät gehört oder angetippt. Stellen für den Compiler: `SupertonicStore.fetch` (Übertragung mit Fortschritt und Abbruch), `PCMPlayer.play`, die Kette in `VoiceIO` (`while let me = self`), `VoiceTester.test`, der `confirmationDialog` mit `presenting` in `MailView`.
+- Die Dateiliste von Hugging Face ist nach dem Quelltext von speech-swift nachgebaut (`/api/models/<Ablage>/tree/main?recursive=true`, Felder `type`, `path`, `size`), nicht gegen den Server geprüft. Weicht das Format ab, meldet die Zeile „Die Dateiliste des Modells ist nicht lesbar.“ oder nennt, was fehlt.
+- Erster Start von Supertonic nach dem Download: iOS übersetzt vier Modellteile, das kann deutlich länger als ein paar Sekunden dauern. Speicherbedarf des geladenen Modells unbekannt.
+- Tonausgabe über eine eigene `AVAudioEngine` neben der Aufnahme-Engine. Wechsel des Audiowegs (Bluetooth, CarPlay) mitten im Satz ist nicht erprobt, die Sicherung lässt die Kette nach Satzlänge plus 2 s weiterlaufen.
+- Mail: Die Rückfrage von iOS an einem Link läuft über die ältere Delegate-Methode (`shouldInteractWith`, seit iOS 17 als veraltet markiert, weiter aufgerufen). Ob langes Drücken sie auf jedem iOS zuverlässig auslöst, zeigt erst das Gerät. Der UI-Test prüft den Tipp nur weich.
+- Mail: HTML-Mails kommen vom Gateway als reiner Text. Ein Link, dessen Adresse dabei verloren geht, ist für die App nicht sichtbar.
+
+Offen für Martin:
+- Supertonic am iPhone einschalten und anhören (Einstellungen → „Sprache und Stimme“). Gefällt der Klang nicht oder hakt es, bitte ins Backlog.
+- Den PC-Teil der Stimme und den Aufruf `smart_home` im Gateway beauftragen (eigene Sitzung in `~/relay`, Vorgaben in `docs/jarvis-stimme.md` und `docs/smart-home.md`). Bis dahin ziehen die Läufe Eintrag 1 und 2 wieder, ohne dass die App-Seite etwas tun kann.
+
+Version: `project.yml` 0.4.5 auf 0.4.6. Nicht gepusht, kein Tag. Das übernimmt das Skript.

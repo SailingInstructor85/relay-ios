@@ -1,57 +1,64 @@
 # Jarvis' Stimme: Supertonic 3, Stimme M2
 
-Stand: 2026-11-24, Version 0.4.5. Entschieden von Martin am 24.11.2026 nach den Hörproben: Supertonic 3 mit der Stimme
-M2 wird Jarvis' Stimme, auf dem Gerät, ohne Cloud. Diese Notiz hält fest, was davon gebaut ist und was fehlt.
+Stand: 2026-11-24, Version 0.4.6. Entschieden von Martin am 24.11.2026 nach den Hörproben: Supertonic 3 mit der Stimme
+M2 wird Jarvis' Stimme, auf dem Gerät, ohne Cloud. Am iPhone ist das seit 0.4.6 gebaut, am PC („Hey Jarvis“) fehlt es
+noch. Auf dem iPhone gehört ist die Stimme noch nicht: Swift läuft am Bau-PC nicht, geprüft hat nur die CI.
 
-## Was gebaut ist (App, 0.4.5)
+## iPhone: so schaltest du die Stimme ein
 
-- **Zahlen als Wörter** (`SpokenNumbers` in RelayCore, mit Tests). Die Hörproben lasen „1081“ falsch, deshalb bekommt
-  eine Stimme wie Supertonic den Text mit ausgeschriebenen Zahlen:
-  - Zahlen: „1081“ und „1.081“ werden „eintausendeinundachtzig“, „1.000.000“ wird „eine Million“
-  - Datum: „am 24.11.2026“ wird „am vierundzwanzigsten November zweitausendsechsundzwanzig“
-  - Uhrzeit: „14:30 Uhr“ wird „vierzehn Uhr dreißig“
-  - Ordnungszahl nach Artikel: „der 1. Platz“ wird „der erste Platz“
-  - Versionen und Adressen: „0.4.4“ wird „null Punkt vier Punkt vier“
-  - Geld und Prozent: „12,50 €“ wird „zwölf Euro fünfzig“, „50 %“ wird „fünfzig Prozent“
-  - Kennungen bleiben: Ziffern an Buchstaben („R1“, „M2“) stehen, Nummern mit führender Null oder mehr als neun
-    Stellen werden Ziffer für Ziffer gesagt
-- Noch **nicht angeschlossen**: Die Apple-Stimme liest Zahlen, Daten und Uhrzeiten selbst richtig, für sie bleibt der
-  Text, wie er ist. Die Regeln gelten nur für deutsche Sätze und greifen, sobald Supertonic spricht.
+1. Einstellungen → „Sprache und Stimme“ → „Stimme Deutsch“ → „Supertonic 3 (M2) · auf dem Gerät“ wählen.
+2. Darunter erscheint eine Zeile mit „Modell laden“. Das Modell hat rund 400 MB und kommt einmalig von Hugging Face.
+   Die Zeile zeigt den Fortschritt, „Abbrechen“ hält an, ein neuer Versuch lädt nur, was noch fehlt.
+3. „Testen“ spricht den Probesatz. Beim ersten Mal übersetzt iOS das Modell für den Chip, das dauert spürbar länger.
+4. „Modell löschen“ gibt den Platz wieder frei, Jarvis spricht dann wieder mit der Apple-Stimme.
 
-## Was fehlt: iPhone
+Die Apple-Stimme bleibt voreingestellt („Beste vorhandene“), bis du Supertonic wählst.
 
-Supertonic läuft auf dem iPhone über das Swift-Paket speech-swift (soniqo, Apache 2.0), Modul `SupertonicTTS`. Gelesen
-am 24.11.2026 (Paketdatei, Quelltext und Doku im Repo):
+## iPhone: wie es arbeitet
 
-- **Das Paket verlangt iOS 18.** Die App baut bisher für iOS 17 (`project.yml`, `deploymentTarget`). Ohne Anheben auf
-  iOS 18 lässt sich das Paket nicht einbinden. Das ist Martins Entscheidung (Rückfrage R4 vom 24.11.2026).
-- Aufruf laut Quelltext: `SupertonicTTSModel.fromPretrained(cacheDir:progressHandler:)`, dann
-  `synthesize(text:voice:language:options:)` mit `voice: "M2"`, `language: "de"`. Ergebnis ist Ton als Zahlenreihe
-  (mono, 44,1 kHz), kein Streaming. Die App muss ihn selbst abspielen (heute spricht `AVSpeechSynthesizer` direkt).
-- Das Modell (rund 400 MB) lädt das Paket beim ersten Benutzen von Hugging Face, Ablage
-  `aufklarer/Supertonic-3-CoreML`. Das ist eine für Apple-Geräte umgewandelte Fassung, nicht von Supertone selbst
-  veröffentlicht. Die Gewichte stehen unter OpenRAIL-M (Nutzungsauflagen). Danach läuft alles auf dem Gerät.
-- Das Paket bringt viele weitere Abhängigkeiten mit (mlx-swift, WhisperKit, hummingbird und andere). Gebraucht wird
-  nur `SupertonicTTS` mit `AudioCommon`. Ob die übrigen Bauzeit oder App-Größe erhöhen, zeigt erst ein Build.
-- Laut Paket Echtzeitfaktor 0,15 auf dem iPhone 16 Pro. Die deutsche Klangqualität der umgewandelten Fassung ist
-  nicht geprüft (die Hörproben entstanden am PC mit der ONNX-Fassung).
+- Deutsche Sätze spricht Supertonic, englische die Apple-Stimme (Einstellung „Stimme Englisch“). Die Sätze laufen
+  der Reihe nach, damit die Reihenfolge stimmt, obwohl Supertonic den Ton erst berechnen muss. Den nächsten Satz
+  berechnet die App schon, während der laufende spielt.
+- Vor der Ausgabe werden Zahlen, Daten und Uhrzeiten in Wörter gewandelt (`SpokenNumbers`: „1081“ wird
+  „eintausendeinundachtzig“, „14:30 Uhr“ wird „vierzehn Uhr dreißig“). Markdown, Code und Links fallen wie bisher weg.
+- Das Modell liegt nicht in der App. Es wird erst auf deinen Knopfdruck geladen und erst in den Speicher geholt, wenn
+  Jarvis sprechen soll (beim Start der Aufnahme und beim Beginn einer Antwort). Bis es bereit ist, spricht die
+  Apple-Stimme, ebenso wenn Supertonic bei einem Satz scheitert. Nach zwei Fehlern in Folge ruht Supertonic bis zum
+  nächsten Start der App oder bis zu „Erneut laden“. Bei einer Speicherwarnung von iOS gibt die App das Modell frei.
+- „Tempo“ gilt auch für Supertonic.
+- Es gilt für Jarvis, den Sprachmodus und überall, wo die App Antworten satzweise vorliest. „Vorlesen auf
+  Knopfdruck“ (Lautsprecher unter einer Nachricht, mit Pause) bleibt bei der Apple-Stimme.
+- Im Protokoll der App (am PC `notifyd phone log`) stehen für die ersten Sätze nach dem Start Länge, Rechenzeit und
+  Echtzeitfaktor, dazu die Ladezeit des Modells. Sätze selbst stehen dort nicht.
 
-Vorschlag für den Bau, sobald iOS 18 freigegeben ist:
+## iPhone: was dahinter steckt
 
-1. `project.yml`: `deploymentTarget` iOS 18, Paket speech-swift (fester Stand, zuletzt v0.0.29), Produkt
-   `SupertonicTTS` am Ziel Relay.
-2. `Voice.swift`: Die Ausgabe in `VoiceIO.say` bekommt eine zweite Maschine neben `AVSpeechSynthesizer`. Deutsche Sätze
-   gehen durch `SpokenNumbers.german`, dann an Supertonic, der Ton über `AVAudioPlayerNode`. Die Buchführung
-   (`SpeechQueue`, Stopp, `waitUntilSpoken`) bleibt, nur die Kennung des Satzes ändert sich. Scheitert Laden oder
-   Sprechen, spricht den Satz die Apple-Stimme. Englische Sätze bleiben bei der Apple-Stimme.
-3. `VoicePickerView.swift`: unter „Stimme Deutsch“ der Eintrag „Supertonic 3 (M2)“ mit Hinweis auf den Download und
-   einem Knopf zum Laden und Löschen. Die Apple-Stimmen bleiben wählbar. Geladen wird nur, wenn sie gewählt ist.
-4. Ein späterer Wechsel des Modells tauscht nur diese zweite Maschine.
+- Die Rechenschritte stammen aus dem Swift-Paket speech-swift (soniqo, Apache 2.0), Modul `SupertonicTTS`, Stand
+  v0.0.29. Übernommen sind nur dessen fünf Quelldateien (`App/Sources/Supertonic`), nicht das Paket. Das Paket hätte
+  iOS 18 und viele weitere Abhängigkeiten verlangt (mlx-swift, WhisperKit, hummingbird und andere). So bleibt die App
+  bei iOS 17 und wird nicht größer. Martin hatte iOS 18 und das Paket am 24.11.2026 freigegeben (Rückfrage R4), nötig
+  war beides nicht. Ob das Modell auf iOS 17 läuft, ist nicht geprüft. Läuft es nicht, spricht die Apple-Stimme.
+- Das Modell kommt aus der Hugging-Face-Ablage `aufklarer/Supertonic-3-CoreML`. Das ist eine für Apple-Geräte
+  umgewandelte Fassung, nicht von Supertone selbst veröffentlicht. Die Gewichte stehen unter OpenRAIL-M. Geladen
+  werden nur die vier Modellteile, zwei Tabellen und die Stimme M2. Die Dateiliste des Servers gilt als fremd: nur
+  erwartete Pfade, nichts außerhalb des Modellordners, Obergrenze 1,5 GB, Größe jeder Datei wird nach dem Laden
+  geprüft (`VoiceModel` in RelayCore, mit Tests). Der Stand der Ablage ist nicht festgenagelt (Zweig `main`).
+- Ein späterer Wechsel des Modells tauscht `VoiceModel`, den Ordner `App/Sources/Supertonic` und die Zeile in der
+  Stimmenauswahl. Die Sprechkette in `Voice.swift` bleibt.
+
+## iPhone: was noch zu prüfen ist
+
+- Hörprobe am Gerät: Klang der umgewandelten Fassung (die Hörproben vom 24.11. entstanden am PC mit der ONNX-Fassung),
+  Pausen zwischen den Sätzen, Wechsel zwischen deutscher und englischer Stimme.
+- Echtzeitfaktor und Ladezeit auf dem iPhone 16 Pro (Protokoll, siehe oben). Laut Paket 0,15.
+- Verhalten bei Bluetooth und CarPlay, beim Wechsel des Audiowegs und im Gesprächsmodus (Zuhören direkt nach der
+  Antwort).
+- Download über Mobilfunk ist nicht gesperrt. Wer das nicht will, lädt im WLAN.
 
 ## Was fehlt: PC („Hey Jarvis“)
 
-Das liegt im Gateway (`~/relay`, `gateway/src/notifyd/speech_out.py`), nicht in dieser App. Der Nachtbau der App ändert
-das Gateway nicht. Zu tun dort:
+Das liegt im Gateway (`gateway/src/notifyd/speech_out.py`), nicht in dieser App. Der Nachtbau der App ändert das
+Gateway nicht. Zu tun dort:
 
 - Deutsch mit Supertonic 3 M2 statt Piper Thorsten. Die ONNX-Dateien (`onnx/`, rund 390 MB) und
   `voice_styles/M2.json` liegen in `~/.cache/supertonic3` und gehören für den Dienst nach

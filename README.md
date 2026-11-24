@@ -29,7 +29,10 @@ iPhone 16 Pro (iOS 17 oder neuer).
   von Christopher). Mikrofon antippen und sprechen. Nach einer kurzen Pause fragt Jarvis von selbst; der rote Knopf
   beendet die Aufnahme und legt den Text ins Schreibfeld, Senden während der Aufnahme schickt ihn gleich ab. Die
   Erkennung läuft auf dem iPhone und nutzt das Vokabular des Gateways (`voice_vocab`). Die Antwort wird Satz für Satz
-  vorgelesen. Im Gesprächsmodus hört Jarvis danach wieder zu. In den Antworten lässt sich per langem Drücken Text
+  vorgelesen. Seit 0.4.6 kann Jarvis Deutsch mit Supertonic 3 (Stimme M2) sprechen, auf dem iPhone und ohne Netz:
+  Einstellungen → „Sprache und Stimme“ → „Stimme Deutsch“ → „Supertonic 3 (M2)“, dann einmalig „Modell laden“ (rund
+  400 MB). Die Apple-Stimme bleibt voreingestellt und springt ein, wenn das Modell fehlt oder scheitert
+  (`docs/jarvis-stimme.md`). Im Gesprächsmodus hört Jarvis danach wieder zu. In den Antworten lässt sich per langem Drücken Text
   markieren und in Teilen kopieren. Der Kurzbefehl „Jarvis in Relay“ funktioniert per Siri
   oder über die Aktionstaste. Eine Trennlinie im Verlauf zeigt, wo am PC ein neues Gespräch begonnen hat (jeden Tag um
   4 Uhr): Was davor steht, weiß Jarvis nicht mehr. Details und der geplante Knopf „Neues Gespräch beginnen“:
@@ -121,6 +124,16 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Bildschirm bleibt an:** Im Chat und im Live-Bildschirm bis 60 s nach der letzten Berührung, während einer
   Mikrofon-Aufnahme (Diktat, Jarvis) höchstens 10 Minuten ab ihrem Start, im Sprachmodus durchgehend. Danach oder beim
   Ende der Aufnahme gilt wieder die normale automatische Sperre.
+- **Mails lesen** (Tab „Posteingang“, nur lesen): In der geöffneten Mail lassen sich per langem Drücken einzelne
+  Wörter und Stellen markieren und kopieren. Links stehen farbig und unterstrichen und öffnen sich erst, wenn du sie
+  antippst (Webadressen in Safari, Mailadressen im Mailprogramm), nie von selbst. Langes Drücken auf einen Link zeigt
+  die Zieladresse mit „In Safari öffnen“ und „Adresse kopieren“. Kann der Text über das Ziel täuschen (ein anderer
+  Name direkt davor, ein Anmeldeteil vor dem @, eine Zahlenadresse, Sonderzeichen im Namen), fragt die App schon beim
+  Tippen und zeigt, wohin der Link wirklich führt.
+- **Smart Home** (Tab „Mehr“, seit 0.4.6 vorbereitet): Seite „Fernseher“ mit „Fernseher einschalten“, „HDMI 2
+  aktivieren“, „Fernsehen“ und „Fernseher ausschalten“. Die App schickt dem Gateway nur den Namen der Aktion, der PC
+  startet sein eigenes Skript und meldet dessen Ausgabe zurück. Schaltet erst, wenn das Gateway den Aufruf
+  `smart_home` kennt, bis dahin sagt die Seite das. Vertrag und Stand: `docs/smart-home.md`.
 - **Sperre mit Face ID** (Einstellungen → Sicherheit)
 - **Nutzungsprotokoll und „Fehler melden“** (Einstellungen → Nutzungsprotokoll, standardmäßig an): Die App zeichnet
   auf, was du tust (Ansicht, Aktion, Sitzung, Verbindung, Fehler), ohne Inhalte, von Text, Diktat und Fotos nur Art
@@ -169,7 +182,8 @@ Tests unter Linux: `cd RelayCore && swift test`. Ende-zu-Ende-Test gegen ein Gat
   Risiken), `docs/feature-parity.md` (Abgleich mit der Android-App), `docs/rueckfragen.md`, `docs/routinen.md`,
   `docs/pc-tmux.md` (Handy und PC in derselben Sitzung, Wrapper und tmux-Einstellung für den PC), `docs/jarvis-kontext.md`
   (wann Jarvis ein neues Gespräch beginnt, was im Gateway für den Knopf fehlt), `docs/jarvis-stimme.md` (Supertonic 3
-  als Jarvis' Stimme: was gebaut ist, was für iPhone und PC fehlt), `docs/telefonzugriff.md`
+  als Jarvis' Stimme: Einrichtung am iPhone, was am PC fehlt), `docs/smart-home.md` (Fernseher über den PC schalten,
+  Vertrag für das Gateway), `docs/telefonzugriff.md`
   (Agenten greifen über Relay aufs iPhone zu, Stufe 1 seit 0.3.11), `docs/benachrichtigungen-fremder-apps.md` (Konzept:
   WhatsApp-Mitteilungen für Agenten), `docs/testbericht.md`. Der Release-Text verlinkt README, Nachtlog und Changelog im Stand des Tags.
 - Lokal prüfen (nur Python nötig): `python3 scripts/changelog_section.py 0.3.5 --release --repo <owner/repo> --tag v0.3.5`

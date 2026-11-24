@@ -2,6 +2,17 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.6 (2026-11-24)
+
+**Neu**
+- Jarvis kann Deutsch mit einer neuen Stimme sprechen: Supertonic 3, Stimme M2. Sie läuft auf dem iPhone, ohne Netz und ohne Cloud. Einschalten: Einstellungen → „Sprache und Stimme“ → „Stimme Deutsch“ → „Supertonic 3 (M2) · auf dem Gerät“, dann in der Zeile darunter einmalig „Modell laden“ (rund 400 MB, am besten im WLAN). „Testen“ spricht einen Probesatz. Beim ersten Mal dauert der Start länger. Zahlen, Daten und Uhrzeiten spricht die Stimme als Wörter. Die Apple-Stimme bleibt voreingestellt, spricht weiter Englisch und springt ein, wenn das Modell fehlt, noch lädt oder scheitert. „Modell löschen“ gibt den Platz wieder frei. Gebaut und automatisch geprüft, auf einem iPhone aber noch nicht gehört.
+- Posteingang: Links in einer geöffneten Mail sind jetzt farbig, unterstrichen und antippbar. Webadressen öffnen sich in Safari, Mailadressen im Mailprogramm, immer erst auf dein Tippen. Langes Drücken auf einen Link zeigt die Zieladresse mit „In Safari öffnen“ und „Adresse kopieren“. Kann der Text über das Ziel täuschen (zum Beispiel steht ein anderer Name direkt davor, oder die Adresse beginnt mit einem fremden Namen vor dem @), fragt Relay schon beim Tippen und zeigt, wohin der Link wirklich führt.
+- Posteingang: Im Text einer Mail lassen sich per langem Drücken einzelne Wörter und Stellen markieren und kopieren, auch über mehrere Absätze. Bisher ging nur der ganze Absatz.
+- Tab „Mehr“: neuer Punkt „Smart Home“ mit der Seite „Fernseher“ (Fernseher einschalten, HDMI 2 aktivieren, Fernsehen, Fernseher ausschalten). Vorbereitet: Geschaltet wird über den PC, und dem PC fehlt dafür noch eine Ergänzung. Bis dahin meldet die Seite „Das Gateway auf dem PC kann den Fernseher noch nicht schalten.“
+
+**Geändert**
+- Die Zahlen-Wandlung aus 0.4.5 ist jetzt angeschlossen: Sie gilt für die Stimme Supertonic. Die Apple-Stimme liest Zahlen wie bisher selbst.
+
 ## 0.4.5 (2026-11-24)
 
 **Geändert**
