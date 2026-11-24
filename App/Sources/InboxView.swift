@@ -426,23 +426,40 @@ struct SuggestionCard: View {
 }
 
 /// Eine Mail zum Lesen (rpc `inbox_mail`): Betreff, Kopf, Anhänge mit Namen, der Text als reiner Text. Der Inhalt
-/// ist fremd: keine Auszeichnung, keine Links, keine Bilder. Antworten und Löschen gibt es hier nicht.
+/// ist fremd: keine Auszeichnung, keine Bilder, nichts wird von selbst geladen. Im Text lassen sich Stellen
+/// markieren und kopieren. Links (nur http, https, mailto) öffnen sich erst auf Tippen; langes Drücken zeigt die
+/// Zieladresse, und wo der Text über das Ziel täuschen kann, fragt die App vor dem Öffnen. Antworten und Löschen
+/// gibt es hier nicht.
 struct MailView: View {
     let id: String
     @EnvironmentObject var model: AppModel
     @State private var mail: MailMessage?
     @State private var error: String?
     @State private var loading = false
+    /// Der Text in einem Stück (Absätze durch Leerzeilen getrennt) und die Links darin.
+    @State private var text = ""
+    @State private var links: [MailLink] = []
+    /// Link, dessen Zieladresse gerade gezeigt wird (langes Drücken oder Warnung vor dem Öffnen).
+    @State private var asking: MailLink?
+    /// UI-Test: Was geöffnet worden wäre (dort verlässt die App den Simulator nicht).
+    @State private var openedNote: String?
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 if let m = mail {
                     header(m)
-                    ForEach(Array(m.paragraphs.enumerated()), id: \.offset) { _, p in
-                        Text(verbatim: p).font(RelayFont.reply).foregroundStyle(RelayColor.onSurface)
-                            .textSelection(.enabled)
+                    if let openedNote {
+                        Text(verbatim: "Geöffnet: \(openedNote)").font(RelayFont.bodySmall).foregroundStyle(RelayColor.onSurfaceVariant)
+                            .accessibilityIdentifier("mailLinkOpened")
+                    }
+                    if !text.isEmpty {
+                        MailBodyText(text: text, links: links, onTap: { tapped($0) }, onHold: { asking = $0 })
                             .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if !links.isEmpty {
+                        Text("Links öffnen sich erst, wenn du sie antippst. Langes Drücken zeigt die Zieladresse.")
+                            .font(RelayFont.bodySmall).foregroundStyle(RelayColor.onSurfaceVariant)
                     }
                     if m.paragraphs.isEmpty {
                         Text("Diese Mail hat keinen Text.").font(RelayFont.bodyMedium).foregroundStyle(RelayColor.onSurfaceVariant)
@@ -470,6 +487,28 @@ struct MailView: View {
         .relayPage()
         .task(id: id) { await load() }
         .onAppear { UsageRecorder.shared.screen("mail") }
+        .confirmationDialog(asking?.warning == nil ? "Link" : "Vorsicht bei diesem Link",
+                            isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }),
+                            titleVisibility: .visible, presenting: asking) { link in
+            Button(link.isMail ? "Mail schreiben" : "In Safari öffnen") { open(link) }
+            Button("Adresse kopieren") { UIPasteboard.general.string = link.isMail ? link.host : link.target }
+            Button("Abbrechen", role: .cancel) {}
+        } message: { link in
+            Text(verbatim: (link.warning.map { $0 + "\n\n" } ?? "") + "Ziel: " + (link.isMail ? link.host : link.target))
+        }
+    }
+
+    /// Tipp auf einen Link: gleich öffnen, außer der Text kann über das Ziel täuschen. Dann zuerst die Adresse zeigen.
+    private func tapped(_ link: MailLink) {
+        if link.warning != nil { asking = link } else { open(link) }
+    }
+
+    /// Öffnet einen Link im Browser (mailto im Mailprogramm). Nur auf Martins Tippen, nur http, https und mailto.
+    private func open(_ link: MailLink) {
+        guard let url = MailBodyText.url(link) else { return }
+        UsageRecorder.shared.record("mail", "link geöffnet", kind: link.isMail ? "mailto" : "web")
+        if UITestMode.active { openedNote = link.target; return }
+        UIApplication.shared.open(url)
     }
 
     private func header(_ m: MailMessage) -> some View {
@@ -520,7 +559,15 @@ struct MailView: View {
         defer { loading = false }
         do {
             let r = try await model.rpc("inbox_mail", ["id": .string(id)], timeout: 60)
-            if let m = MailMessage.from(r) { mail = m; error = nil } else { error = "Das Gateway hat keine Mail geliefert." }
+            if let m = MailMessage.from(r) {
+                let t = m.paragraphs.joined(separator: "\n\n")
+                text = t
+                links = MailLinks.find(t)
+                mail = m
+                error = nil
+            } else {
+                error = "Das Gateway hat keine Mail geliefert."
+            }
         } catch {
             self.error = error.localizedDescription
         }

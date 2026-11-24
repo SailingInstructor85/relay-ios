@@ -953,6 +953,7 @@ MAILS = [
     ("1042", 12, "Anna Muster <anna.muster@example.org>", "Unterlagen für Donnerstag", ["Ablaufplan.pdf", "Teilnehmer.xlsx"],
      "Hallo,\n\nanbei der Ablaufplan für Donnerstag und die Liste der Teilnehmer. Bitte schau bis Mittwoch kurz drüber, "
      "ob die Zeiten für dich passen.\n\nDer Raum im zweiten Stock ist ab 9 Uhr reserviert. Kaffee und Wasser stehen bereit.\n\n"
+     "Der Plan steht auch unter https://example.org/ablaufplan im Netz.\n\n"
      "Viele Grüße\nAnna"),
     ("1041", 95, "Stadtbibliothek Beispielstadt <service@bibliothek.example.org>", "Ihre Vormerkung liegt bereit", [],
      "Guten Tag,\n\ndas vorgemerkte Buch liegt bis Samstag an der Ausleihe für Sie bereit.\n\n"

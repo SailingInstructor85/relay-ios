@@ -30,12 +30,23 @@ final class InboxTests: RelayTestCase {
         shot("posteingang")
         tap(Self.firstSubject, 5)
         XCTAssertTrue(id("mailSubject").waitForExistence(timeout: 8), "Mailansicht nicht geöffnet")
-        expect("anbei der Ablaufplan", 5)
+        // Der Mailtext steht in einem markierbaren Textfeld (langes Drücken markiert Text), siehe `hasSelectableText`.
+        XCTAssertTrue(hasSelectableText("anbei der Ablaufplan", 5) || has("anbei der Ablaufplan", 2), "Erwartet, aber nicht da: anbei der Ablaufplan")
+        if !(hasSelectableText("https://example.org/ablaufplan", 3) || has("example.org/ablaufplan", 2)) { notes.append("Mail: Link nicht im Mailtext gefunden") }
         expect("Ablaufplan.pdf", 4)
         expect("anna.muster@example.org", 4)
         XCTAssertTrue(mockReceived("inbox_mail", where: { ($0["id"] as? String) == "1042" }), "inbox_mail mit der Nummer fehlt")
         shot("mail")
         XCTAssertTrue(app.tabBars.buttons[Self.tabInbox].exists, "Tab-Leiste fehlt in der Mailansicht")
+        // Tipp auf den Link: Im Test öffnet die App nichts, sie zeigt nur, was sie geöffnet hätte. Weich geprüft,
+        // weil der Link im Textfeld je nach iOS-Version anders im Baum steht.
+        let link = app.links.matching(NSPredicate(format: "label CONTAINS[c] %@", "example.org/ablaufplan")).firstMatch
+        if link.waitForExistence(timeout: 2) {
+            link.tap()
+            if id("mailLinkOpened").waitForExistence(timeout: 3) { shot("mail-link") } else { notes.append("Mail: Tipp auf den Link kam nicht an") }
+        } else {
+            notes.append("Mail: Link nicht als Element im Baum")
+        }
         back()
         expect(Self.firstSubject, 5)
         assertNothingWritten()
