@@ -43,7 +43,7 @@ final class TabsTests: XCTestCase {
         for r in [Route.chat("k"), .chatSearch("k", "q"), .jarvis, .jarvisListening, .jarvisAsk("x"), .jarvisSend(shown: "a", text: "b"), .drive, .vaultChat] {
             XCTAssertTrue(r.hidesTabBar, "\(r)")
         }
-        for r in [Route.settings, .usage, .memory, .digest, .tokens, .notices, .notice("s1"), .routines, .mail("12"), .calendar] {
+        for r in [Route.settings, .usage, .memory, .digest, .tokens, .notices, .notice("s1"), .routines, .smartHome, .mail("12"), .calendar] {
             XCTAssertFalse(r.hidesTabBar, "\(r)")
         }
     }

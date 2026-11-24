@@ -854,6 +854,16 @@ def rpc_power_status(p):
             "busy": [{"key": K["busy"], "title": "Bench-Skript reparieren", "alias": "c1"}]}
 
 
+def rpc_smart_home(p):
+    """Fest hinterlegte Aktionen für den Fernseher; alles andere wird abgelehnt."""
+    texts = {"on": "Fernseher eingeschaltet.", "off": "Fernseher ausgeschaltet.", "hdmi2": "Umgeschaltet auf HDMI 2",
+             "tv": "Umgeschaltet auf Fernsehen"}
+    if p.get("device") != "tv" or p.get("action") not in texts:
+        raise RpcError("bad action")
+    mutate(lambda st: st["sent"].append({"smart_home": p}))
+    return {"ok": True, "text": texts[p["action"]]}
+
+
 def rpc_power_off(p):
     mutate(lambda st: st["sent"].append({"power_off": p}))
     return {}

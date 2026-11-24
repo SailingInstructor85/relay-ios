@@ -175,4 +175,21 @@ final class TabTests: RelayTestCase {
         XCTAssertFalse(id("promptYes").exists, "Blatt nach der Antwort noch offen")
         shot("rueckfrage-blatt-beantwortet")
     }
+
+    /// Smart Home im Tab „Mehr“: „HDMI 2 aktivieren“ schickt nur Gerät und Aktionsnamen ans Gateway, die Rückmeldung
+    /// des Skripts steht danach oben auf der Seite.
+    func test10_SmartHomeFernseher() {
+        launchConnected()
+        showTab(Self.tabMore)
+        expect("Smart Home", 5)
+        tap("Smart Home", 4)
+        expect("Fernseher einschalten", 5)
+        expect("Fernseher ausschalten", 3)
+        shot("smarthome")
+        tapID("smartHome.hdmi2")
+        XCTAssertTrue(mockReceived("smart_home", where: { ($0["device"] as? String) == "tv" && ($0["action"] as? String) == "hdmi2" }),
+                      "smart_home mit HDMI 2 nicht aufgerufen")
+        expect("Umgeschaltet auf HDMI 2", 6)
+        shot("smarthome-ergebnis")
+    }
 }

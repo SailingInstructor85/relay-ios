@@ -93,6 +93,7 @@ struct RouteView: View {
         case .drive: DriveView()
         case .vaultChat: VaultChatView()
         case .routines: RoutinesView()
+        case .smartHome: SmartHomeView()
         case .mail(let id): MailView(id: id)
         case .calendar: CalendarWeekView()
         }

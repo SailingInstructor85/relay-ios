@@ -42,6 +42,8 @@ public enum Route: Hashable, Sendable {
     case notices
     case notice(String)
     case routines, drive, vaultChat
+    /// Smart Home: fest hinterlegte Aktionen, die das Gateway am PC ausführt (Fernseher).
+    case smartHome
     /// Eine Mail aus dem Posteingang (Nummer im Index des Gateways), nur lesen.
     case mail(String)
     /// Wochenliste des Kalenders (Tipp auf die Kalenderkarte auf „Heute“).

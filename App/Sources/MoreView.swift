@@ -1,7 +1,7 @@
 import SwiftUI
 import RelayCore
 
-/// Tab „Mehr“: das frühere Hauptmenü der Sitzungsliste als Seite. Assistent, Hinweise, Routinen, Einstellungen,
+/// Tab „Mehr“: das frühere Hauptmenü der Sitzungsliste als Seite. Assistent, Hinweise, Routinen, Smart Home, Einstellungen,
 /// die Übersichten und die Aktionen für alle Sitzungen und den Desktop.
 struct MoreView: View {
     @EnvironmentObject var model: AppModel
@@ -25,6 +25,8 @@ struct MoreView: View {
                             detail: openQuestions == 0 ? nil : (openQuestions == 1 ? "1 Rückfrage" : "\(openQuestions) Rückfragen")) { push(.notices) }
                     MoreDivider()
                     MoreRow(title: "Routinen", symbol: "calendar.badge.clock") { push(.routines) }
+                    MoreDivider()
+                    MoreRow(title: "Smart Home", symbol: "house") { push(.smartHome) }
                     MoreDivider()
                     MoreRow(title: "Einstellungen", symbol: "gear") { push(.settings) }
                 }
