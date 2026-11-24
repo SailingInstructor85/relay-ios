@@ -12,7 +12,43 @@ public enum MdBlock: Sendable, Equatable {
     case table(header: [String], rows: [[String]], rightAligned: [Bool])
 }
 
+/// Abschnitte einer Nachricht für die Anzeige mit markierbarem Text (Jarvis-Chat): Aufeinanderfolgende Textblöcke
+/// (Absatz, Überschrift, Listenpunkt, Zitat) bilden ein Stück Fließtext, in dem sich über Absätze hinweg markieren
+/// lässt. Trennlinie, Codeblock und Tabelle stehen einzeln dazwischen.
+public enum MdRun: Sendable, Equatable {
+    case text([MdBlock])
+    case block(MdBlock)
+}
+
 public enum MdBlocks {
+    /// Ob ein Block reiner Text ist (und damit in ein markierbares Textstück gehört).
+    public static func isText(_ b: MdBlock) -> Bool {
+        switch b {
+        case .paragraph, .heading, .item, .quote: return true
+        case .rule, .code, .table: return false
+        }
+    }
+
+    /// Fasst aufeinanderfolgende Textblöcke zusammen, die Reihenfolge bleibt.
+    public static func runs(_ blocks: [MdBlock]) -> [MdRun] {
+        var out: [MdRun] = []
+        var text: [MdBlock] = []
+        for b in blocks {
+            if isText(b) { text.append(b); continue }
+            if !text.isEmpty { out.append(.text(text)); text = [] }
+            out.append(.block(b))
+        }
+        if !text.isEmpty { out.append(.text(text)) }
+        return out
+    }
+
+    /// Das Zeichen vor einem Listenpunkt: Kästchen, Nummer oder Punkt.
+    public static func marker(number: Int?, checked: Bool?) -> String {
+        if let c = checked { return c ? "☑" : "☐" }
+        if let n = number { return "\(n)." }
+        return "•"
+    }
+
     private static let fence = Rx.make("^\\s{0,3}(`{3,}(?=[^`]*$)|~{3,})\\s*([\\w+#.-]*)")
     private static let sepRow = Rx.make("^\\s*\\|?\\s*:?-{1,}:?\\s*(\\|\\s*:?-{1,}:?\\s*)*\\|?\\s*$")
     private static let headingRx = Rx.make("^\\s{0,3}(#{1,6})\\s+(.*?)\\s*#*\\s*$")

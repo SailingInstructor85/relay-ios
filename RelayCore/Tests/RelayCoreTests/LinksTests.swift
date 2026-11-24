@@ -72,6 +72,28 @@ final class LinksTests: XCTestCase {
         XCTAssertEqual(b[9], .table(header: ["A", "B"], rows: [["1", "2"]], rightAligned: [false, true]))
     }
 
+    func testMarkdownRuns() {
+        // Textblöcke hintereinander ergeben ein markierbares Stück, Code und Tabelle trennen
+        let md = "# Titel\n\nText\n\n- a\n- b\n\n```\ncode\n```\n\n> zitat\n\n---\n\nEnde"
+        let r = MdBlocks.runs(MdBlocks.parse(md))
+        XCTAssertEqual(r.count, 5)
+        XCTAssertEqual(r[0], .text([.heading(level: 1, text: "Titel"), .paragraph("Text"),
+                                    .item(indent: 0, number: nil, checked: nil, text: "a"), .item(indent: 0, number: nil, checked: nil, text: "b")]))
+        XCTAssertEqual(r[1], .block(.code(lang: "", text: "code")))
+        XCTAssertEqual(r[2], .text([.quote("zitat")]))
+        XCTAssertEqual(r[3], .block(.rule))
+        XCTAssertEqual(r[4], .text([.paragraph("Ende")]))
+        XCTAssertEqual(MdBlocks.runs([]), [])
+        XCTAssertEqual(MdBlocks.runs([.rule]), [.block(.rule)])
+    }
+
+    func testListMarker() {
+        XCTAssertEqual(MdBlocks.marker(number: nil, checked: nil), "•")
+        XCTAssertEqual(MdBlocks.marker(number: 3, checked: nil), "3.")
+        XCTAssertEqual(MdBlocks.marker(number: 3, checked: true), "☑")
+        XCTAssertEqual(MdBlocks.marker(number: nil, checked: false), "☐")
+    }
+
     func testTableCellsEscape() {
         XCTAssertEqual(MdBlocks.cells("| a \\| b | c |"), ["a | b", "c"])
     }

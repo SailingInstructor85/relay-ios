@@ -29,7 +29,8 @@ iPhone 16 Pro (iOS 17 oder neuer).
   von Christopher). Mikrofon antippen und sprechen. Nach einer kurzen Pause fragt Jarvis von selbst; der rote Knopf
   beendet die Aufnahme und legt den Text ins Schreibfeld, Senden während der Aufnahme schickt ihn gleich ab. Die
   Erkennung läuft auf dem iPhone und nutzt das Vokabular des Gateways (`voice_vocab`). Die Antwort wird Satz für Satz
-  vorgelesen. Im Gesprächsmodus hört Jarvis danach wieder zu. Der Kurzbefehl „Jarvis in Relay“ funktioniert per Siri
+  vorgelesen. Im Gesprächsmodus hört Jarvis danach wieder zu. In den Antworten lässt sich per langem Drücken Text
+  markieren und in Teilen kopieren. Der Kurzbefehl „Jarvis in Relay“ funktioniert per Siri
   oder über die Aktionstaste.
 - **Alle Sitzungen beenden** (Menü der Sitzungsliste): Jede gewählte Sitzung schreibt ihren Eintrag ins Agenten-Log
   der Daily Note und ihre Übergabe, dann beendet das Gateway sie. Sitzungen mit offener Auswahl oder Freigabe am PC

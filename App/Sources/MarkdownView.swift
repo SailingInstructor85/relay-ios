@@ -40,10 +40,22 @@ enum LinkRouter {
 struct MarkdownText: View {
     let text: String
     var selectable = true
+    /// Text per langem Drücken markieren (Griffe, Teile kopieren) statt nur das Kopieren-Pop-up für den ganzen Absatz:
+    /// Fließtext läuft dann über `SelectableBlocks` (UITextView). Genutzt im Jarvis-Chat.
+    var marking = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(MdBlocks.parse(text).enumerated()), id: \.offset) { _, b in block(b) }
+            if marking {
+                ForEach(Array(MdBlocks.runs(MdBlocks.parse(text)).enumerated()), id: \.offset) { _, r in
+                    switch r {
+                    case .text(let blocks): SelectableBlocks(blocks: blocks)
+                    case .block(let b): block(b)
+                    }
+                }
+            } else {
+                ForEach(Array(MdBlocks.parse(text).enumerated()), id: \.offset) { _, b in block(b) }
+            }
         }
     }
 
@@ -76,11 +88,7 @@ struct MarkdownText: View {
         if selectable { Text(a).textSelection(.enabled) } else { Text(a) }
     }
 
-    private func marker(number: Int?, checked: Bool?) -> String {
-        if let c = checked { return c ? "☑" : "☐" }
-        if let n = number { return "\(n)." }
-        return "•"
-    }
+    private func marker(number: Int?, checked: Bool?) -> String { MdBlocks.marker(number: number, checked: checked) }
 
     /// Inline markdown with bare URLs made tappable.
     static func inline(_ s: String) -> AttributedString {
@@ -101,6 +109,123 @@ struct MarkdownText: View {
             guard lo < hi else { continue }
             if out[lo..<hi].runs.contains(where: { $0.link != nil || $0.inlinePresentationIntent?.contains(.code) == true }) { continue }
             out[lo..<hi].link = url
+        }
+        return out
+    }
+}
+
+/// Fließtext einer Antwort als ein Stück, in dem sich per langem Drücken Text markieren lässt (UITextView, nicht
+/// editierbar, ohne eigenes Scrollen). SwiftUI-`Text` mit `textSelection` kann auf dem iPhone nur den ganzen Text
+/// kopieren. Überschriften, Listen und Zitate werden als Absatzformate gesetzt, Links bleiben tippbar.
+/// Schrift wie `RelayFont.reply` (Serif, Textstil callout), sie wächst mit der Systemschriftgröße.
+struct SelectableBlocks: UIViewRepresentable {
+    let blocks: [MdBlock]
+
+    final class Coordinator {
+        var blocks: [MdBlock] = []
+        var size: DynamicTypeSize?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> UITextView {
+        let v = UITextView()
+        v.isEditable = false
+        v.isSelectable = true
+        v.isScrollEnabled = false
+        v.backgroundColor = .clear
+        v.textContainerInset = .zero
+        v.textContainer.lineFragmentPadding = 0
+        v.dataDetectorTypes = []
+        v.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        v.setContentHuggingPriority(.required, for: .vertical)
+        return v
+    }
+
+    func updateUIView(_ v: UITextView, context: Context) {
+        let c = context.coordinator
+        let size = context.environment.dynamicTypeSize
+        // nur bei neuem Inhalt setzen, sonst ginge eine laufende Markierung verloren
+        guard c.blocks != blocks || c.size != size else { return }
+        c.blocks = blocks
+        c.size = size
+        v.attributedText = Self.attributed(blocks)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        var width = (uiView.window?.windowScene?.screen.bounds.width ?? 393) - 32
+        if let w = proposal.width, w.isFinite, w > 0 { width = w }
+        let fit = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: ceil(fit.height))
+    }
+
+    // MARK: Text aufbauen
+
+    private static func baseFont() -> UIFont {
+        let d = UIFontDescriptor.preferredFontDescriptor(withTextStyle: .callout)
+        return UIFont(descriptor: d.withDesign(.serif) ?? d, size: 0)
+    }
+
+    private static func variant(_ font: UIFont, bold: Bool, italic: Bool, scale: CGFloat = 1) -> UIFont {
+        var traits = font.fontDescriptor.symbolicTraits
+        if bold { traits.insert(.traitBold) }
+        if italic { traits.insert(.traitItalic) }
+        let d = font.fontDescriptor.withSymbolicTraits(traits) ?? font.fontDescriptor
+        return UIFont(descriptor: d, size: font.pointSize * scale)
+    }
+
+    static func attributed(_ blocks: [MdBlock]) -> NSAttributedString {
+        let out = NSMutableAttributedString()
+        let base = baseFont()
+        for (i, b) in blocks.enumerated() {
+            let last = i == blocks.count - 1
+            let para = NSMutableParagraphStyle()
+            para.lineSpacing = 3
+            para.paragraphSpacing = last ? 0 : 6
+            var font = base
+            var color = UIColor.label
+            var prefix = ""
+            let text: String
+            switch b {
+            case .paragraph(let t):
+                text = t
+            case .heading(let level, let t):
+                text = t
+                font = variant(base, bold: true, italic: false, scale: level == 1 ? 1.25 : level == 2 ? 1.1 : 1)
+                if i > 0 { para.paragraphSpacingBefore = 4 }
+            case .item(let indent, let number, let checked, let t):
+                text = t
+                prefix = MdBlocks.marker(number: number, checked: checked) + "\t"
+                let lead = CGFloat(indent) * 14
+                para.firstLineHeadIndent = lead
+                para.headIndent = lead + 22
+                para.tabStops = [NSTextTab(textAlignment: .left, location: lead + 22, options: [:])]
+                para.defaultTabInterval = 22
+            case .quote(let t):
+                text = t
+                color = .secondaryLabel
+                para.firstLineHeadIndent = 11
+                para.headIndent = 11
+            case .rule, .code, .table:
+                continue  // stehen als eigene Blöcke zwischen den Textstücken (MdBlocks.runs)
+            }
+            if !prefix.isEmpty {
+                out.append(NSAttributedString(string: prefix, attributes: [.font: base, .foregroundColor: UIColor.secondaryLabel, .paragraphStyle: para]))
+            }
+            let inline = MarkdownText.inline(text)
+            for run in inline.runs {
+                let intent = run.inlinePresentationIntent ?? []
+                var attrs: [NSAttributedString.Key: Any] = [.foregroundColor: color, .paragraphStyle: para]
+                if intent.contains(.code) {
+                    attrs[.font] = UIFont.monospacedSystemFont(ofSize: font.pointSize * 0.9, weight: .regular)
+                } else {
+                    attrs[.font] = variant(font, bold: intent.contains(.stronglyEmphasized), italic: intent.contains(.emphasized))
+                }
+                if intent.contains(.strikethrough) { attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+                if let url = run.link { attrs[.link] = url }
+                out.append(NSAttributedString(string: String(inline[run.range].characters), attributes: attrs))
+            }
+            if !last { out.append(NSAttributedString(string: "\n", attributes: [.font: font, .paragraphStyle: para])) }
         }
         return out
     }

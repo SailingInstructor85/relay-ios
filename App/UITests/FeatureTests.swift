@@ -287,7 +287,19 @@ final class InfoTests: RelayTestCase {
         shot("jarvis-streamt")
         settle(5)
         shot("jarvis-antwort")
-        expect("Du hast gefragt", 4)
+        // Die Antwort steht in einem markierbaren Textfeld (langes Drücken markiert Text), siehe `hasSelectableText`.
+        XCTAssertTrue(hasSelectableText("Du hast gefragt", 4) || has("Du hast gefragt", 2), "Erwartet, aber nicht da: Du hast gefragt")
+        // Langes Drücken auf die Antwort: Auswahl mit Griffen und Bearbeiten-Menü (Kopieren), nur fürs Bild
+        let answer = app.textViews.matching(NSPredicate(format: "value CONTAINS[c] %@", "Du hast gefragt")).firstMatch
+        if answer.exists {
+            answer.press(forDuration: 1.0)
+            settle(0.8)
+            shot("jarvis-text-markiert")
+            if !(app.menuItems.count > 0 || has("Kopieren", 1)) { notes.append("Jarvis: nach langem Drücken kein Bearbeiten-Menü gefunden") }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        } else {
+            notes.append("Jarvis: Antwort nicht als Textfeld im Baum")
+        }
         XCTAssertTrue(mockReceived("ask"))
     }
 
@@ -312,7 +324,7 @@ final class InfoTests: RelayTestCase {
         shot("jarvis-text-im-feld")
         tapID("jarvisSend")
         XCTAssertTrue(mockReceived("ask", where: { ($0["text"] as? String) == phrase }), "ask mit dem diktierten Text fehlt")
-        expect("Du hast gefragt", 6)
+        XCTAssertTrue(hasSelectableText("Du hast gefragt", 6) || has("Du hast gefragt", 2), "Erwartet, aber nicht da: Du hast gefragt")
         shot("jarvis-diktat-gesendet")
     }
 

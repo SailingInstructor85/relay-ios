@@ -47,9 +47,10 @@ struct JarvisView: View {
                                 HStack {
                                     Spacer()
                                     if t.voice { Image(systemName: "waveform").font(.caption).foregroundStyle(.secondary) }
-                                    Text(t.q).padding(10).background(Color.accentColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 14))
+                                    Text(t.q).textSelection(.enabled).padding(10).background(Color.accentColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 14))
                                 }
-                                if t.a.isEmpty && !t.done { ProgressView() } else { MarkdownText(text: t.a).font(RelayFont.reply).lineSpacing(3) }
+                                // Antwort mit markierbarem Text: langes Drücken setzt die Griffe, Teile lassen sich einzeln kopieren
+                                if t.a.isEmpty && !t.done { ProgressView() } else { MarkdownText(text: t.a, marking: true).font(RelayFont.reply).lineSpacing(3) }
                             }.padding(.horizontal).id(t.id)
                         }
                         if voice.listening {

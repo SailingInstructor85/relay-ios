@@ -150,6 +150,18 @@ class RelayTestCase: XCTestCase {
         return false
     }
 
+    /// Text in einem markierbaren Textfeld (UITextView, etwa die Antworten im Jarvis-Chat): Dort steht der Text im
+    /// Wert des Elements, nicht in der Beschriftung, `has` findet ihn deshalb nicht.
+    func hasSelectableText(_ s: String, _ timeout: TimeInterval = 4) -> Bool {
+        let pred = NSPredicate(format: "value CONTAINS[c] %@", s)
+        let end = Date().addingTimeInterval(timeout)
+        repeat {
+            if app.textViews.matching(pred).firstMatch.exists { return true }
+            Thread.sleep(forTimeInterval: 0.3)
+        } while Date() < end
+        return false
+    }
+
     @discardableResult
     func tap(_ s: String, _ timeout: TimeInterval = 5, exact: Bool = false, soft: Bool = false) -> Bool {
         if has(s, timeout, exact: exact), let e = find(s, exact: exact) {
