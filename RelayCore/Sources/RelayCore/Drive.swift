@@ -303,6 +303,43 @@ public enum DriveQueue {
     }
 }
 
+// MARK: Mikrofon-Knopf
+
+/// Der Mikrofon-Knopf im Sprachmodus (2026-11-24): Er steht immer dann da, wenn eine Antwort per Sprache möglich ist.
+/// Ein Tipp bricht das Vorlesen ab und nimmt sofort auf; läuft die Aufnahme, beendet er sie und übernimmt, was bis
+/// dahin gehört wurde (ohne auf die Sprechpause zu warten).
+public enum DriveMic: Equatable, Sendable {
+    /// Kein Knopf: nichts zu beantworten, die Antwort ist unterwegs, oder die Pause hat ihren eigenen Knopf „Sprechen“.
+    case hidden
+    /// „Jetzt sprechen“: die Aufnahme sofort beginnen.
+    case speak
+    /// „Fertig“: die laufende Aufnahme beenden und das Gehörte übernehmen.
+    case finish
+
+    public static let speakLabel = "Jetzt sprechen"
+    public static let finishLabel = "Fertig"
+
+    /// `talk`: die Phase eines laufenden Gesprächs mit einer Sitzung (hat Vorrang vor den Rückfragen), sonst nil.
+    /// `canListen`: Mikrofon und Spracherkennung sind erlaubt.
+    public static func state(drive: DrivePhase, talk: TalkPhase?, listening: Bool, sending: Bool, canListen: Bool) -> DriveMic {
+        guard canListen, !sending else { return .hidden }
+        let answers: Bool
+        if let talk {
+            switch talk {
+            case .dictating, .confirming: answers = true
+            default: answers = false
+            }
+        } else {
+            switch drive {
+            case .answering, .confirming: answers = true
+            default: answers = false
+            }
+        }
+        guard answers else { return .hidden }
+        return listening ? .finish : .speak
+    }
+}
+
 // MARK: Gespräch mit einer Sitzung
 
 public enum TalkEffect: Equatable, Sendable {

@@ -238,4 +238,26 @@ final class DriveTests: XCTestCase {
         XCTAssertFalse(r.contains("docs/"))
         XCTAssertEqual(DriveTalk.spokenReply(summary: "Tests grün.", lastMessage: long, question: nil), "Tests grün.")
     }
+
+    func testMicButton() {
+        func m(_ d: DrivePhase, _ t: TalkPhase? = nil, listening: Bool = false, sending: Bool = false, can: Bool = true) -> DriveMic {
+            DriveMic.state(drive: d, talk: t, listening: listening, sending: sending, canListen: can)
+        }
+        // Rückfrage: beim Beantworten und bei der Kontrolle steht der Knopf, auch während noch vorgelesen wird
+        XCTAssertEqual(m(.answering), .speak)
+        XCTAssertEqual(m(.confirming("ja")), .speak)
+        XCTAssertEqual(m(.answering, listening: true), .finish)
+        XCTAssertEqual(m(.confirming("ja"), listening: true), .finish)
+        // nichts zu beantworten, Antwort unterwegs, Pause (eigener Knopf „Sprechen“), beendet
+        for p in [DrivePhase.idle, .waiting, .paused, .stopped, .sending("ja")] { XCTAssertEqual(m(p), .hidden) }
+        XCTAssertEqual(m(.confirming("ja"), sending: true), .hidden)
+        // ohne Mikrofon-Erlaubnis kein Knopf
+        XCTAssertEqual(m(.answering, can: false), .hidden)
+        // ein Gespräch hat Vorrang vor der Phase der Rückfragen
+        XCTAssertEqual(m(.waiting, .dictating), .speak)
+        XCTAssertEqual(m(.waiting, .confirming("hallo"), listening: true), .finish)
+        XCTAssertEqual(m(.answering, .working), .hidden)
+        XCTAssertEqual(m(.answering, .sending("hallo")), .hidden)
+        XCTAssertEqual(m(.answering, .ended), .hidden)
+    }
 }

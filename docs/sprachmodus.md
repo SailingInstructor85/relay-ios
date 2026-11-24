@@ -1,6 +1,6 @@
 # Sprachmodus („Autofahrt“)
 
-Stand: 2026-11-07, Version 0.3.9. Relay ohne Lesen nutzen, etwa beim Autofahren: Die App liest offene Rückfragen der
+Stand: 2026-11-24, Version 0.4.4 (Mikrofon-Knopf), Grundfassung 0.3.9 vom 2026-11-07. Relay ohne Lesen nutzen, etwa beim Autofahren: Die App liest offene Rückfragen der
 Agenten vor, Martin antwortet per Sprache, hört die Antwort zur Kontrolle und gibt sie mit „senden“ frei. Danach kann
 er per Sprache mit einer laufenden Sitzung sprechen.
 
@@ -42,6 +42,16 @@ Zweimal hintereinander nichts gehört: Die App pausiert, damit das Mikrofon nich
 
 Alles, was man sagen kann, geht auch über große Knöpfe: Ja, Nein, Wiederholen, Später, Senden, Nochmal.
 
+**Mikrofon-Knopf (seit 0.4.4):** Solange eine Antwort möglich ist (Frage beantworten, Antwort kontrollieren, im
+Gespräch mit einer Sitzung), steht über den übrigen Knöpfen ein großer Mikrofon-Knopf.
+
+- „Jetzt sprechen“: bricht das Vorlesen ab und nimmt sofort auf. Man muss die Ansage nicht zu Ende hören.
+- „Fertig“ (rot, während der Aufnahme): beendet die Aufnahme sofort und übernimmt, was bis dahin gehört wurde, ohne
+  die Sprechpause von 3 Sekunden abzuwarten.
+
+Ohne Erlaubnis für Mikrofon oder Spracherkennung erscheint der Knopf nicht, dann bleiben die übrigen Knöpfe. In der
+Pause (zweimal nichts gehört) steht wie bisher „Sprechen“.
+
 ## Gespräch mit einer Sitzung
 
 Wartet der Sprachmodus auf Rückfragen, stehen darunter die vier zuletzt aktiven Sitzungen und „Mit Jarvis sprechen“.
@@ -79,7 +89,8 @@ verwirft sie, ein neuer Satz ersetzt sie, erst „senden“ schickt. Erkennt die
 ## Technik
 
 - RelayCore `Drive.swift`: `DriveText` (Wörter, Ansagen), `DriveSession` (Ablauf Rückfragen), `DriveTalk` (Gespräch
-  mit einer Sitzung), `DriveQueue` (offene Rückfragen aus den Hinweisen). Tests: `DriveTests`.
+  mit einer Sitzung), `DriveQueue` (offene Rückfragen aus den Hinweisen), `DriveMic` (wann der Mikrofon-Knopf steht
+  und was er tut). Tests: `DriveTests`.
 - App `DriveView.swift`: `DriveController` führt die Schritte aus (Vorlesen und Zuhören über `VoiceIO`, Antwort über
   `answerQuestion` wie unter „Hinweise“, Nachricht an die Sitzung über `send`, Warten über den Sitzungszustand).
   Während der Sprachmodus offen ist, liest „Fertige Sitzungen vorlesen“ nichts zusätzlich vor.

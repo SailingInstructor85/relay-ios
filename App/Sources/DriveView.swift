@@ -31,6 +31,8 @@ final class DriveController: ObservableObject {
     private var prepared = false
     /// Die Ansicht ist zu: der Ablauf endet nach dem laufenden Schritt, ohne weiter zu sprechen oder zuzuhören.
     private var closed = false
+    /// Der Mikrofon-Knopf wurde getippt: Ansagen bis zum nächsten Zuhören entfallen (stehen nur auf dem Bildschirm).
+    private var skipSaying = false
     private var voiceChanges: AnyCancellable?
     /// Längste Wartezeit auf die Antwort einer Sitzung.
     static let replyLimit: TimeInterval = 15 * 60
@@ -70,6 +72,28 @@ final class DriveController: ObservableObject {
         if talk != nil { talkRun(talk!.command(c)) } else { run(drive.command(c)) }
     }
     func resume() { run(drive.resume()) }
+
+    /// Mikrofon und Spracherkennung sind erlaubt (im UI-Test: die Knöpfe stehen trotzdem da).
+    var canListen: Bool { micAllowed || quiet }
+
+    /// Was der Mikrofon-Knopf gerade tut (`DriveMic`).
+    var mic: DriveMic {
+        DriveMic.state(drive: drive.phase, talk: talk?.phase, listening: voice.listening, sending: sending, canListen: canListen)
+    }
+
+    /// Mikrofon-Knopf: Läuft die Aufnahme, endet sie sofort und das Gehörte zählt. Sonst bricht das Vorlesen ab und
+    /// die App hört gleich zu, statt erst die Ansage zu Ende zu sprechen.
+    func micTapped() {
+        if voice.listening {
+            UsageRecorder.shared.record("sprachmodus", "aufnahme beendet", kind: "sprache", length: voice.partial.count)
+            voice.stopListening()
+            return
+        }
+        guard mic == .speak else { return }
+        UsageRecorder.shared.record("sprachmodus", "jetzt sprechen", kind: "sprache")
+        skipSaying = true
+        if voice.speaking { voice.stopSpeaking() } else if loop == nil { enqueue([.listen]) }
+    }
 
     /// Gespräch mit einer Sitzung beginnen (nur, wenn gerade keine Rückfrage vorgelesen wird).
     func startTalk(_ s: Session) {
@@ -113,6 +137,8 @@ final class DriveController: ObservableObject {
 
     private func enqueue(_ steps: [Step]) {
         guard !steps.isEmpty else { return }
+        // ein neuer Schritt (Knopf, neue Rückfrage) wird wieder vorgelesen
+        skipSaying = false
         pending = steps
         if loop == nil { loop = Task { await process() } } else { interrupt() }
     }
@@ -143,8 +169,9 @@ final class DriveController: ObservableObject {
                 switch step {
                 case .say(let t):
                     said = t
-                    if !quiet { voice.speak(ReadAloud.cleaned(t)); await voice.waitUntilSpoken() }
+                    if !quiet && !skipSaying { voice.speak(ReadAloud.cleaned(t)); await voice.waitUntilSpoken() }
                 case .listen:
+                    skipSaying = false
                     heard = ""
                     let h = await hear()
                     if pending != nil || closed || !drive.isActive { break flow }
@@ -357,7 +384,17 @@ struct DriveView: View {
 
     /// Große Knöpfe passend zum Schritt; was man sagen kann, geht auch per Tipp.
     @ViewBuilder private var buttons: some View {
+        micButton
         if let t = c.talk { talkButtons(t) } else { driveButtons }
+    }
+
+    /// Mikrofon-Knopf über den übrigen Knöpfen: sofort sprechen (bricht das Vorlesen ab) oder die Aufnahme beenden.
+    @ViewBuilder private var micButton: some View {
+        switch c.mic {
+        case .speak: big(DriveMic.speakLabel, "mic.fill", .accentColor, id: "driveMic") { c.micTapped() }
+        case .finish: big(DriveMic.finishLabel, "stop.fill", .red, id: "driveMic") { c.micTapped() }
+        case .hidden: EmptyView()
+        }
     }
 
     @ViewBuilder private func talkButtons(_ t: DriveTalk) -> some View {

@@ -53,7 +53,8 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Rückfragen vor (nur Frage und Empfehlung), du antwortest mit „ja“, „nein“ oder in eigenen Worten, hörst die Antwort
   zur Kontrolle und gibst sie mit „senden“ frei („nochmal“ oder ein neuer Satz korrigiert). Neue Rückfragen liest er
   sofort vor. Dazu ein Freihand-Gespräch mit einer laufenden Sitzung: sprechen, kontrollieren, senden, die Antwort
-  gekürzt hören. Große Knöpfe für alles, Bildschirm bleibt an, Ton über Bluetooth oder CarPlay. Details:
+  gekürzt hören. Große Knöpfe für alles, dazu der Mikrofon-Knopf „Jetzt sprechen“ (bricht das Vorlesen ab und nimmt
+  sofort auf, während der Aufnahme beendet „Fertig“ sie). Bildschirm bleibt an, Ton über Bluetooth oder CarPlay. Details:
   `docs/sprachmodus.md`.
 - **Routinen** (Menü → „Routinen“): Routinen des Gateways mit Zeitplan, letztem Lauf, Schalter, „Jetzt ausführen“
   und den systemd-Timern des PCs; „Neue Routine“ in Worten an den Chef-Agenten. Braucht einen `team:`-Block in der

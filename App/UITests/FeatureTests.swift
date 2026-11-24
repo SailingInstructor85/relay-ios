@@ -204,6 +204,8 @@ final class InfoTests: RelayTestCase {
         settle(2)
         shot("sprachmodus-frage")
         expect("Soll ich die alte Route", 6)
+        // der Mikrofon-Knopf steht beim Beantworten über den übrigen Knöpfen
+        if !id("driveMic").waitForExistence(timeout: 3) { notes.append("Sprachmodus: Mikrofon-Knopf „Jetzt sprechen“ fehlt") }
         tapID("driveYes")
         settle(1)
         shot("sprachmodus-kontrolle")
