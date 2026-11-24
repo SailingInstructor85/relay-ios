@@ -561,6 +561,15 @@ public enum ReadingMode {
 // MARK: chat header
 
 public enum ChatHeader {
+    /// Wie breit der Titel im Chat-Kopf höchstens sein darf, damit er zwischen Zurück-Knopf (links) und Knopfgruppe
+    /// (rechts: Zustand, bei offenen Sitzungen „Weiter“, Sitzungsmenü) passt und nicht unter den Zurück-Knopf rutscht.
+    /// Die Maße sind Schätzwerte der Leiste unter iOS 26; bei wenig Platz bleibt eine Mindestbreite, der Text kürzt sich.
+    public static func titleMaxWidth(screenWidth: Double, hasNext: Bool) -> Double {
+        let back = 68.0                       // Rand, runder Zurück-Knopf, Abstand
+        let trailing = hasNext ? 196.0 : 148.0 // Rand, Zustand, („Weiter“,) Menü, Abstände
+        return min(260, max(96, screenWidth - back - trailing))
+    }
+
     /// "/home/martin/relay" -> "~/relay"; "/home/martin" -> "~"; anything else unchanged.
     public static func shortPath(_ cwd: String) -> String {
         let parts = cwd.split(separator: "/", omittingEmptySubsequences: true)

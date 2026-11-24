@@ -245,16 +245,28 @@ final class ChatTests: RelayTestCase {
         if id("agentBadge").label != "Agent: Claude" { notes.append("Agentenmarke Claude: \(id("agentBadge").label)") }
         expect("opus", 3, soft: true)
         shot("kopf-claude")
+        headerClearOfBack("Claude")
         back()
         settle(1)
         openSession("Datenbank migrieren")
         XCTAssertTrue(id("agentBadge").waitForExistence(timeout: 6), "Agentenmarke fehlt (Codex)")
         XCTAssertEqual(id("agentBadge").label, "Agent: Codex")
         shot("kopf-codex")
+        headerClearOfBack("Codex")
         tapID("chatMenu"); settle(0.6)
         expect("Agent: Codex · Konto x1", 3, soft: true)
         shot("kopf-codex-menue")
         app.tap()
+    }
+
+    /// Titel und Agentenmarke im Chat-Kopf liegen rechts neben dem Zurück-Knopf, nicht darunter (Fehler bis 0.4.2).
+    private func headerClearOfBack(_ what: String) {
+        let back = app.navigationBars.buttons.element(boundBy: 0).frame
+        let badge = id("agentBadge").frame
+        guard !back.isEmpty, !badge.isEmpty else { notes.append("Kopf \(what): Rahmen nicht lesbar (\(back) / \(badge))"); return }
+        XCTAssertGreaterThanOrEqual(badge.minX, back.maxX - 1, "Agentenmarke liegt unter dem Zurück-Knopf (\(what)): \(badge) / \(back)")
+        let menu = id("chatMenu").frame
+        if !menu.isEmpty, badge.maxX > menu.minX + 1 { notes.append("Kopf \(what): Agentenmarke reicht unter das Sitzungsmenü: \(badge) / \(menu)") }
     }
 
     func test12_HideKeyboard() {
@@ -283,11 +295,17 @@ final class ChatTests: RelayTestCase {
         XCTAssertTrue(value.contains("Tastatur zu"), "Text weg: \(value)")
     }
 
+    static let readingLabel = "Lesemodus"
+
     func test14_ReadingMode() {
-        // Lesemodus: Leisten und Eingabezeile weg, der Verlauf bleibt; der kleine Knopf oben rechts holt alles zurück.
+        // Lesemodus (Eintrag oben im Sitzungsmenü): Leisten und Eingabezeile weg, der Verlauf bleibt; der kleine Knopf
+        // oben rechts holt alles zurück.
         launchConnected()
         openSession("API Refactoring")
-        tapID("readingOn")
+        tapID("chatMenu")
+        settle(0.6)
+        shot("sitzungsmenue-lesemodus")
+        tap(Self.readingLabel, 4, exact: true)
         settle(1.2)
         shot("lesemodus-an")
         XCTAssertFalse(id("chatInput").exists, "Eingabezeile im Lesemodus sichtbar")
@@ -297,6 +315,8 @@ final class ChatTests: RelayTestCase {
         settle(1.2)
         shot("lesemodus-aus")
         XCTAssertTrue(id("chatInput").waitForExistence(timeout: 4), "Eingabezeile nach dem Lesemodus fehlt")
-        XCTAssertTrue(id("readingOn").waitForExistence(timeout: 4), "Lesemodus-Knopf nach dem Lesemodus fehlt")
+        tapID("chatMenu")
+        XCTAssertTrue(has(Self.readingLabel, 4, exact: true), "Eintrag Lesemodus fehlt im Sitzungsmenü nach dem Lesemodus")
+        app.tap()
     }
 }

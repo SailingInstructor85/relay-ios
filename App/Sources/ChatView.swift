@@ -56,6 +56,8 @@ struct ChatView: View {
     @FocusState private var focused: Bool
     /// Lesemodus: Navigationsleiste, Eingabezeile und Tastatur weg, der Verlauf füllt den Bildschirm (ReadingMode).
     @State private var reading = false
+    /// Breite des Chats, daraus ergibt sich, wie breit der Titel im Kopf sein darf (ChatHeader.titleMaxWidth).
+    @State private var chatWidth: Double = 393
 
     private var session: Session? { model.session(for: sessionKey) }
     private var key: String { session?.key ?? sessionKey }
@@ -128,6 +130,13 @@ struct ChatView: View {
             }
         }
         .background { RelayColor.background.ignoresSafeArea() }
+        .background {
+            GeometryReader { g in
+                Color.clear
+                    .onAppear { chatWidth = g.size.width }
+                    .onChange(of: g.size.width) { _, w in chatWidth = w }
+            }
+        }
         .toolbarBackground(RelayColor.background, for: .navigationBar)
         .navigationTitle(session?.name ?? "Sitzung")
         .navigationBarTitleDisplayMode(.inline)
@@ -358,6 +367,9 @@ struct ChatView: View {
         }
     }
 
+    /// Ob rechts im Kopf der Knopf „Weiter“ steht (dann ist für den Titel weniger Platz).
+    private var hasNext: Bool { !Triage.queue(model.triageSessions, unread: model.unread, current: key).isEmpty }
+
     @ViewBuilder private var titleView: some View {
         let label = VStack(spacing: 0) {
             HStack(spacing: 4) {
@@ -380,7 +392,9 @@ struct ChatView: View {
                 }.id(standTick)
             }
         }
-        .frame(maxWidth: 190) // die Symbolleiste rechts ist breit; ohne Grenze quillt der Untertitel unter die Knöpfe
+        // Der Titel bekommt nur den Platz zwischen Zurück-Knopf und Knopfgruppe. Mit fester Breite (190) rutschte er
+        // unter iOS 26 unter den Zurück-Knopf, weil rechts mehr stand, als daneben passte.
+        .frame(maxWidth: ChatHeader.titleMaxWidth(screenWidth: chatWidth, hasNext: hasNext))
         if session?.tool == "claude" {
             Menu {
                 let idle = session?.state != "busy"
@@ -504,6 +518,8 @@ struct ChatView: View {
             Menu {
                 if let s = session {
                     if s.liveTmux != nil { Button { showScreen = true } label: { Label("Live-Bildschirm", systemImage: "terminal") } }
+                    Button { toggleReading() } label: { Label(ReadingMode.enterLabel, systemImage: "arrow.up.left.and.arrow.down.right") }
+                        .accessibilityIdentifier("readingOn")
                     Button { showSearch = true } label: { Label("Im Verlauf suchen", systemImage: "magnifyingglass") }
                     Button { Task { await summarize() } } label: { Label("Zusammenfassen", systemImage: "text.alignleft") }
                         .disabled(summary?.loading == true)
@@ -535,13 +551,7 @@ struct ChatView: View {
                 }
             } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("Sitzungsmenü").accessibilityIdentifier("chatMenu")
         }
-        ToolbarItem(placement: .topBarTrailing) {
-            if session?.liveTmux != nil { Button { showScreen = true } label: { Image(systemName: "terminal") } }
-        }
-        ToolbarItem(placement: .topBarTrailing) {
-            Button { toggleReading() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
-                .accessibilityLabel(ReadingMode.enterLabel).accessibilityIdentifier("readingOn")
-        }
+        // Terminal-Knopf und Lesemodus stehen im Sitzungsmenü (oben), damit neben dem Zurück-Knopf Platz für den Titel bleibt.
     }
 
     // MARK: Lesemodus

@@ -177,6 +177,16 @@ final class ComposeTests: XCTestCase {
         XCTAssertEqual(RunningText.freshPreview("Hier ist der Plan", lastReply: "Etwas anderes"), "Hier ist der Plan")
     }
 
+    func testTitleMaxWidth() {
+        // iPhone hochkant: der Titel bleibt schmaler als der Platz zwischen Zurück-Knopf und Knopfgruppe
+        XCTAssertEqual(ChatHeader.titleMaxWidth(screenWidth: 393, hasNext: false), 177)
+        XCTAssertEqual(ChatHeader.titleMaxWidth(screenWidth: 393, hasNext: true), 129)
+        XCTAssertLessThan(ChatHeader.titleMaxWidth(screenWidth: 393, hasNext: true), 190)
+        // schmales Gerät: Mindestbreite, quer: Obergrenze
+        XCTAssertEqual(ChatHeader.titleMaxWidth(screenWidth: 320, hasNext: true), 96)
+        XCTAssertEqual(ChatHeader.titleMaxWidth(screenWidth: 852, hasNext: true), 260)
+    }
+
     func testChatHeader() {
         XCTAssertEqual(ChatHeader.shortPath("/home/martin/relay"), "~/relay")
         XCTAssertEqual(ChatHeader.shortPath("/home/martin"), "~")

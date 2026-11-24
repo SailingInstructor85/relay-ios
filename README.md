@@ -11,8 +11,8 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Sitzungsliste** über alle Konten: zuerst „Wartet auf dich“, dann „Arbeitet“, „Bereit“ und „Beendet“; dazu Suche,
   Anheften, „Erledigt“ (Wischen nach rechts) und Schließen (Wischen nach links)
 - **Chat pro Sitzung:** Transkript mit Nachladen älterer Nachrichten, Live-Anhänge (`watch`), eingeklappte
-  Werkzeugaufrufe, Codeblöcke, Statuszeile während die Sitzung arbeitet. Lesemodus über den Knopf oben rechts
-  (Leisten und Tastatur weg, der Verlauf füllt den Bildschirm). Die Tastatur schließt der Eintrag „Tastatur ausblenden“ im Befehlsmenü („/“ links
+  Werkzeugaufrufe, Codeblöcke, Statuszeile während die Sitzung arbeitet. Lesemodus über den Eintrag „Lesemodus“ im Sitzungsmenü (oben rechts, dort auch der Live-Bildschirm;
+  Leisten und Tastatur weg, der Verlauf füllt den Bildschirm). Die Tastatur schließt der Eintrag „Tastatur ausblenden“ im Befehlsmenü („/“ links
   an der Eingabeleiste, dort auch Slash-Befehle und „Esc senden“), ein Tipp in den Verlauf oder Wischen nach unten. Im Kopf steht unter dem Namen, welcher Agent in der Sitzung arbeitet
   (Claude oder Codex, farbig mit Symbol), dahinter Modell, Ordner und Kontext; dieselbe Angabe steht unten im Sitzungsmenü.
 - **Antwortkarten** für Fragen, Auswahllisten (`/model`, Berechtigungsabfragen, Plan-Freigabe) und Panels (`/usage`,
