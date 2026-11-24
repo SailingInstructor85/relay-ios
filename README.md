@@ -36,10 +36,12 @@ iPhone 16 Pro (iOS 17 oder neuer).
   markieren und in Teilen kopieren. Der Kurzbefehl „Jarvis in Relay“ funktioniert per Siri
   oder über die Aktionstaste. Eine Trennlinie im Verlauf zeigt, wo am PC ein neues Gespräch begonnen hat (jeden Tag um
   4 Uhr): Was davor steht, weiß Jarvis nicht mehr. Details und der geplante Knopf „Neues Gespräch beginnen“:
-  `docs/jarvis-kontext.md`. Die Büroklammer links am Eingabefeld gibt Dokumente in den Chat
-  (Datei, Fotos oder Videos, Kamera): Sie stehen als Marken über der Eingabe und gehen mit der nächsten Nachricht, getippt
-  oder gesprochen, als Upload an den PC. Jarvis bekommt die Pfade mit deinem Auftrag und gibt das Dokument an die
-  passende Sitzung weiter oder startet eine neue dafür. Lesen kann er die Datei selbst nicht.
+  `docs/jarvis-kontext.md`. Die Büroklammer links am Eingabefeld gibt Fotos und Dokumente in den Chat
+  (Fotos, Screenshots oder Videos aus der Mediathek, Kamera, Bild aus der Zwischenablage, Datei): Sie stehen als Marken
+  über der Eingabe, Bilder mit Vorschau, und gehen mit der nächsten Nachricht, getippt oder gesprochen, als Upload an
+  den PC. Jarvis bekommt die Pfade mit deinem Auftrag und gibt Bild oder Dokument an die passende Sitzung weiter oder
+  startet eine neue dafür, die es dort ablegt, wo es hingehört (ein Bild zum Beispiel in der Notiz des Vorgangs).
+  Lesen kann er die Datei selbst nicht.
 - **Alle Sitzungen beenden** (Menü der Sitzungsliste): Jede gewählte Sitzung schreibt ihren Eintrag ins Agenten-Log
   der Daily Note und ihre Übergabe, dann beendet das Gateway sie. Sitzungen mit offener Auswahl oder Freigabe am PC
   bleiben mit Grund offen. Das Gateway schickt Nachrichten mit getrenntem Enter und prüft, ob das Eingabefeld am PC

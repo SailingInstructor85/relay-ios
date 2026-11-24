@@ -2,6 +2,18 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.7 (2026-11-24)
+
+**Neu**
+- Jarvis: Fotos und Screenshots anhängen ist jetzt deutlicher und vollständiger. In der Büroklammer links am Eingabefeld steht „Fotos, Screenshots oder Videos“ oben. Dort wählst du aus der Mediathek beliebig viele Bilder aus, auch Screenshots. Neu ist „Bild aus Zwischenablage“ für einen eben kopierten Screenshot (der Punkt erscheint nur, wenn ein Bild in der Zwischenablage liegt). „Kamera“ und „Datei“ (Dateien-App) bleiben.
+- Jarvis: Angehängte Bilder stehen mit Vorschaubild über der Eingabe, du siehst also vor dem Senden, was mitgeht. Dokumente zeigen wie bisher ein Symbol und den Namen.
+
+**Geändert**
+- Jarvis erfährt jetzt, ob er ein Bild oder ein Dokument bekommt. Bei Bildern gibt er den Auftrag so weiter, dass die Sitzung am PC das Bild ansieht, es beim passenden Vorgang ablegt und in die Notiz einbindet, zum Beispiel den Screenshot einer SMS in eine Bewerbungsnotiz. Schreib dazu, wohin es soll. Ohne Text schlägt Jarvis ein Ziel vor und fragt vorher.
+- Fotos von der Kamera und Bilder aus der Zwischenablage werden im Jarvis-Chat wie Fotos aus der Mediathek vor dem Hochladen verkleinert (lange Kante 2048 Punkte).
+
+Hinweis: Die Büroklammer im Jarvis-Chat gibt es seit 0.4.4. Fehlt sie bei dir, läuft auf dem iPhone noch eine ältere Version (die Version steht im Tab „Mehr“ ganz unten), dann in SideStore aktualisieren.
+
 ## 0.4.6 (2026-11-24)
 
 **Neu**

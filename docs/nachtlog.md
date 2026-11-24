@@ -743,3 +743,31 @@ Offen für Martin:
 - Den PC-Teil der Stimme und den Aufruf `smart_home` im Gateway beauftragen (eigene Sitzung in `~/relay`, Vorgaben in `docs/jarvis-stimme.md` und `docs/smart-home.md`). Bis dahin ziehen die Läufe Eintrag 1 und 2 wieder, ohne dass die App-Seite etwas tun kann.
 
 Version: `project.yml` 0.4.5 auf 0.4.6. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 24. November 2026, 15:25 (Version 0.4.7)
+
+Ein Eintrag aus dem Backlog, erledigt. Am Gateway (`~/relay`) wurde nichts geändert.
+
+1. Jarvis-Chat: Upload-Knopf für Fotos und Dokumente (Screenshots anhängen). Erledigt.
+   Zuerst geprüft, was der Lauf von 08:30 (Version 0.4.4) gebracht hat: Die Büroklammer `jarvisAttach` im Jarvis-Chat gibt es seitdem, mit „Datei“ (mehrere), „Fotos oder Videos“ (Mehrfachauswahl aus der Mediathek, der Baustein aus 0.3.13) und „Kamera“. Screenshots liegen in der Mediathek und gingen damit schon. Das Nutzungsprotokoll am PC zeigt, warum Martin den Knopf nicht hatte: Das iPhone lief am 24.11. mit 0.4.0 und 0.4.3, die Büroklammer kam erst mit 0.4.4. Kein Eintrag „dokument angehängt“ im Protokoll, der Knopf ist also noch nie benutzt worden.
+   Nachgezogen ist das Fehlende für Fotos und Screenshots:
+   - Menü der Büroklammer (A: JarvisView.swift): „Fotos, Screenshots oder Videos“ steht oben, dann „Kamera“, neu „Bild aus Zwischenablage“ (nur wenn ein Bild darin liegt, wie im Sitzungs-Chat), dann „Datei“. Der Knopf heißt für VoiceOver „Fotos oder Dokumente anhängen“.
+   - Vorschau: Die Marken über der Eingabe (`jarvisDocs`) zeigen bei Bildern ein Vorschaubild (36 Punkte). Bei Fotos und Videos aus der Mediathek kommt es aus `StagedMedia`, bei Kamera, Zwischenablage und Bilddateien aus `AttachPrep.thumbnail`. Ohne Bild zeigt die Marke ein Symbol nach Art (`JarvisDocs.symbol`).
+   - Kamera und Zwischenablage laufen über eine gemeinsame Funktion `addImage`: verkleinern auf 2048 px wie in der Mediathek, Vorschau, Größenprüfung.
+   - Auftrag an Jarvis (C: JarvisDocs.swift, Tests `JarvisDocsTests`): `head` nennt Bilder als Bilder („ein Bild vom iPhone (Foto oder Screenshot)“, „N Bilder“, gemischt „N Anhänge (Bilder und Dokumente)“, sonst wie bisher „Dokument“). Ist ein Bild dabei, sagt ein Zusatz, dass die Sitzung das Bild ansehen kann und es nach den Regeln des Vaults beim Vorgang ablegt und in die Notiz einbindet. Das gilt auch für das Teilen-Blatt („An Jarvis geben“), das denselben Auftrag baut.
+   - UI-Test `FeatureTests.test10_Jarvis`: Hinweistext angepasst, am Schluss öffnet der Test das Menü und prüft weich „Fotos, Screenshots oder Videos“ und „Datei“.
+
+Entscheidungen:
+- Kein zweiter Knopf. Die Büroklammer bleibt der eine Ort für Anhänge, wie im Sitzungs-Chat. Ein eigener Foto-Knopf daneben hätte das Eingabefeld schmaler gemacht.
+- Der Menüpunkt heißt nur im Jarvis-Chat „Fotos, Screenshots oder Videos“. Im Sitzungs-Chat und im Vault-Chat bleibt „Fotos oder Videos“ (dort hängt ein UI-Test am Namen, und der Anlass betraf Jarvis).
+- Wohin ein Bild gehört, entscheidet weiter die Sitzung am PC nach den Vault-Regeln und nach Martins Text. Die App nennt keinen festen Ordner.
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert, nichts am iPhone angetippt. Stellen für den Compiler: `JarvisDoc` mit dem neuen Feld `preview` (Vorgabewert, die bisherigen Aufrufe ohne das Feld bleiben), `addImage` mit dem Tupel aus `Task.detached`.
+- „Bild aus Zwischenablage“: iOS fragt beim Einfügen aus einer anderen App nach Erlaubnis. Im Simulator nicht geprüft, das Verhalten ist dasselbe wie im Sitzungs-Chat.
+- Ob Jarvis am PC den Zusatz zu Bildern so weitergibt, dass die Sitzung das Bild wirklich in die Notiz einbindet, zeigt erst ein echter Versuch. Der Prompt von Jarvis liegt am PC.
+
+Offen für Martin:
+- App auf 0.4.7 aktualisieren und im Jarvis-Chat einen Screenshot über die Büroklammer anhängen, mit einem Satz dazu, wohin er soll.
+
+Version: `project.yml` 0.4.6 auf 0.4.7. Nicht gepusht, kein Tag. Das übernimmt das Skript.
