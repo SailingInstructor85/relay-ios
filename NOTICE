@@ -5,3 +5,11 @@ Third-party parts (Swift Package Manager):
   - swift-nio-ssh (fork used by Citadel), Apache-2.0
   - swift-nio, swift-crypto, swift-log, swift-atomics, swift-collections, swift-system, swift-asn1 (Apple), Apache-2.0
   - BigInt (attaswift), MIT
+
+Übernommener Quelltext (App/Sources/Supertonic, außer SupertonicStore.swift):
+  - speech-swift (soniqo, https://github.com/soniqo/speech-swift), Modul SupertonicTTS, Stand v0.0.29, Apache-2.0.
+    Geändert: ohne das Modul AudioCommon (Relay lädt das Modell selbst), siehe Kopfzeilen der Dateien.
+
+Nicht Teil der App, erst auf Wunsch vom Nutzer geladen (Einstellungen, Stimme Deutsch):
+  - Supertonic 3 (Supertone), Modellgewichte unter OpenRAIL-M, in der CoreML-Fassung aus der Hugging-Face-Ablage
+    aufklarer/Supertonic-3-CoreML.

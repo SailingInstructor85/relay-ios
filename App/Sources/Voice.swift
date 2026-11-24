@@ -33,7 +33,18 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private var fake = false
 
     private let synth = AVSpeechSynthesizer()
-    private var queue = SpeechQueue<ObjectIdentifier>()
+    private var queue = SpeechQueue<AnyHashable>()
+    /// Sätze, die der Reihe nach gesprochen werden, wenn Supertonic die deutsche Stimme ist (siehe `sayInOrder`).
+    private struct Spoken { let id: Int; let text: String; let lang: String }
+    private var chain: [Spoken] = []
+    private var chainTask: Task<Void, Never>?
+    private var chainSerial = 0
+    /// Erhöht sich bei jedem Stopp: Was davor begonnen wurde, zählt danach nicht mehr.
+    private var chainRound = 0
+    /// Ton des nächsten Satzes, schon berechnet, während der laufende noch spielt.
+    private var prepared: [Int: Task<[Float], Error>] = [:]
+    private var player: PCMPlayer?
+    private var appleWaiting: (id: ObjectIdentifier, c: CheckedContinuation<Void, Never>)?
     private var splitter = SentenceSplitter()
     private var speakWaiters: [CheckedContinuation<Void, Never>] = []
 
@@ -253,6 +264,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     func beginReply() {
         splitter.reset()
         queue.begin()
+        SupertonicStore.shared.warmUp()
     }
 
     func speak(_ text: String) { beginReply(); feed(text); flush() }
@@ -268,8 +280,17 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     func stopSpeaking() {
         splitter.reset()
         queue.stop()
+        chainRound += 1
+        chain.removeAll()
+        prepared.values.forEach { $0.cancel() }
+        prepared.removeAll()
+        player?.stop()
         // auch ohne isSpeaking (zwischen zwei Sätzen, pausiert): die Warteschlange des Synthesizers leeren
         synth.stopSpeaking(at: .immediate)
+        if let w = appleWaiting {
+            appleWaiting = nil
+            w.c.resume()
+        }
         update()
     }
 
@@ -282,26 +303,115 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private func say(_ raw: String) {
         let text = Self.speakable(raw)
         guard text.rangeOfCharacter(from: .alphanumerics) != nil else { return }
+        if SupertonicStore.shared.active || chainTask != nil {
+            sayInOrder(text)
+            return
+        }
         let u = Self.utterance(text)
-        guard queue.enqueue(ObjectIdentifier(u)) else { return }
+        guard queue.enqueue(AnyHashable(ObjectIdentifier(u))) else { return }
         try? AudioFocus.takeForRecording(holder)
         synth.speak(u)
         update()
     }
 
+    // MARK: Supertonic (Jarvis' Stimme auf dem Gerät)
+
+    /// Ist Supertonic als deutsche Stimme gewählt, laufen alle Sätze einer nach dem anderen durch diese Kette:
+    /// deutsche durch Supertonic, englische durch die Apple-Stimme. So bleibt die Reihenfolge erhalten, obwohl
+    /// Supertonic den Ton erst berechnen muss. Scheitert Supertonic bei einem Satz oder ist das Modell noch nicht
+    /// im Speicher, spricht ihn die Apple-Stimme.
+    private func sayInOrder(_ text: String) {
+        chainSerial += 1
+        let item = Spoken(id: chainSerial, text: text, lang: Voices.langFor(text, setting: SpeechPrefs.outputLang))
+        guard queue.enqueue(AnyHashable(item.id)) else { return }
+        try? AudioFocus.takeForRecording(holder)
+        chain.append(item)
+        update()
+        prepareNext()
+        guard chainTask == nil else { return }
+        chainTask = Task { [weak self] in
+            while let me = self, !me.chain.isEmpty {
+                let item = me.chain.removeFirst()
+                let round = me.chainRound
+                await me.speakInOrder(item, round: round)
+                if round == me.chainRound { me.utteranceEnded(AnyHashable(item.id)) }
+            }
+            self?.chainEnded()
+        }
+    }
+
+    private func chainEnded() {
+        chainTask = nil
+        player?.rest()
+        update()
+    }
+
+    /// Berechnet den Ton des nächsten deutschen Satzes voraus, damit zwischen zwei Sätzen keine Lücke entsteht.
+    private func prepareNext() {
+        let store = SupertonicStore.shared
+        guard store.active, store.warm, let next = chain.first, next.lang == VoiceModel.language,
+              prepared[next.id] == nil else { return }
+        let text = next.text
+        prepared[next.id] = Task { try await store.synthesize(text) }
+    }
+
+    private func speakInOrder(_ item: Spoken, round: Int) async {
+        let store = SupertonicStore.shared
+        if item.lang == VoiceModel.language, store.active {
+            if store.warm || prepared[item.id] != nil {
+                let text = item.text
+                let task = prepared.removeValue(forKey: item.id) ?? Task { try await store.synthesize(text) }
+                prepareNext()
+                do {
+                    let pcm = try await task.value
+                    guard round == chainRound else { return }
+                    if player == nil { player = PCMPlayer() }
+                    try await player?.play(pcm)
+                    return
+                } catch {
+                    // die Apple-Stimme spricht diesen Satz
+                }
+                guard round == chainRound else { return }
+            } else {
+                // Das Modell ist noch nicht im Speicher: laden lassen, bis dahin spricht die Apple-Stimme.
+                store.warmUp()
+            }
+        }
+        await speakWithApple(item.text)
+    }
+
+    private func speakWithApple(_ text: String) async {
+        let u = Self.utterance(text)
+        let id = ObjectIdentifier(u)
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            appleWaiting = (id, c)
+            synth.speak(u)
+        }
+    }
+
+    /// Der Synthesizer meldet einen Satz als fertig oder abgebrochen.
+    private func appleEnded(_ id: ObjectIdentifier) {
+        if let w = appleWaiting, w.id == id {
+            appleWaiting = nil
+            w.c.resume()
+            return
+        }
+        utteranceEnded(AnyHashable(id))
+    }
+
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) {
         // den Satz bis zur Verarbeitung festhalten: so kann ein neuer Satz nicht dieselbe Kennung (Adresse) bekommen
         nonisolated(unsafe) let utt = u
-        Task { @MainActor in self.utteranceEnded(ObjectIdentifier(utt)) }
+        Task { @MainActor in self.appleEnded(ObjectIdentifier(utt)) }
     }
 
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) {
         // den Satz bis zur Verarbeitung festhalten: so kann ein neuer Satz nicht dieselbe Kennung (Adresse) bekommen
         nonisolated(unsafe) let utt = u
-        Task { @MainActor in self.utteranceEnded(ObjectIdentifier(utt)) }
+        Task { @MainActor in self.appleEnded(ObjectIdentifier(utt)) }
     }
 
-    private func utteranceEnded(_ id: ObjectIdentifier) {
+    private func utteranceEnded(_ id: AnyHashable) {
         queue.ended(id)
         update()
     }
@@ -381,6 +491,13 @@ enum SpeechPrefs {
         let chosen = d.string(forKey: lang == "de" ? voiceDeKey : voiceEnKey) ?? ""
         return all.first { $0.identifier == chosen } ?? all.first ?? AVSpeechSynthesisVoice(language: lang == "de" ? "de-DE" : "en-US")
     }
+
+    /// Einstellung „Sprache der Ausgabe“: auto | de | en.
+    static var outputLang: String { d.string(forKey: langKey) ?? "auto" }
+
+    /// Supertonic 3 (M2) ist als deutsche Stimme gewählt. Die Apple-Stimme bleibt der Rückfall: `voice(lang:)`
+    /// findet die Kennung nicht und nimmt die beste vorhandene.
+    static var supertonicChosen: Bool { d.string(forKey: voiceDeKey) == VoiceModel.tag }
 
     static func voice(for text: String) -> AVSpeechSynthesisVoice? {
         voice(lang: Voices.langFor(text, setting: d.string(forKey: langKey) ?? "auto"))

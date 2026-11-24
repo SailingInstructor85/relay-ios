@@ -387,6 +387,7 @@ struct JarvisView: View {
                 let heard: String
                 endedBy = .pause
                 UsageRecorder.shared.record("jarvis", "diktat gestartet", kind: "diktat")
+                SupertonicStore.shared.warmUp()  // Jarvis' Stimme lädt, während du sprichst
                 do { heard = try await voice.listen() } catch {
                     UsageRecorder.shared.record("jarvis", "fehler", kind: "diktat", error: error.localizedDescription)
                     self.error = error.localizedDescription; return
