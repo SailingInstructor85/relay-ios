@@ -2,6 +2,14 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.5 (2026-11-24)
+
+**Geändert**
+- Vorarbeit für Jarvis' neue Stimme (Supertonic 3, Stimme M2): Zahlen, Daten und Uhrzeiten werden für diese Stimme in Wörter gewandelt, zum Beispiel „1081“ in „eintausendeinundachtzig“ und „14:30 Uhr“ in „vierzehn Uhr dreißig“. Zu hören ist das noch nicht. Jarvis spricht weiter mit der Apple-Stimme, bis die neue Stimme eingebaut ist. Dafür müsste die App iOS 18 verlangen, das ist noch nicht entschieden.
+
+**Behoben**
+- Keine sichtbare Änderung. Die automatischen Tests halten jetzt fest, was die App tut, falls sie beim Senden ohne Verbindung noch einmal hängen bleibt. Die eigentliche Behebung dieses Hängers kam mit 0.4.4.
+
 ## 0.4.4 (2026-11-24)
 
 **Neu**

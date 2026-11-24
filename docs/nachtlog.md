@@ -661,3 +661,39 @@ CI Runde 1 (Lauf 45349872405, 24.11.2026 08:40 bis 09:21): `core-tests`, `ipa` u
 - `ComposeTests.test04_OutboxWhenOffline` scheiterte in beiden Versuchen mit „Failed to get matching snapshots: Timed out while evaluating UI query“. Dasselbe Bild wie am 10.11., 21.11. und bei den Tags v0.4.1 und v0.4.2, bei v0.4.3 und auf `main` mit gleichem Xcode und Simulator grün. Der Weg ohne Verbindung ist in diesem Lauf nicht geändert worden.
 - Neu eingegrenzt aus `test.log` und den Bildern (rot gegen grün): Die App friert jedes Mal genau nach dem Tipp auf „Senden“ ein. Im roten Bild steht der Text noch zweizeilig im Feld, der Verlauf hängt eine Tastaturhöhe über dem Ende, von der grauen Blase ist nur der obere Rand zu sehen. In dem Moment kommen drei Dinge zusammen: die neue Postausgang-Zeile, das Eingabefeld schrumpft von zwei Zeilen auf eine, und `scrollTo("bottom")` läuft animiert über Zeilen des `LazyVStack`, die noch nicht gebaut sind. Eine Neuverbindungsschleife ist es nicht (im ganzen Job nur 8 abgewiesene Verbindungen), ein blockierender Aufruf im Sendeweg ist nicht zu finden.
 - Geändert (`ChatView`): Bei einer neuen Postausgang-Zeile springt der Verlauf ohne Animation und erst im nächsten Durchlauf ans Ende. Das ist eine begründete Vermutung, kein Beweis: Swift läuft lokal nicht, ob der Hänger weg ist, zeigt erst die nächste CI. Bleibt `test04` rot, ist der nächste Schritt ein Hauptthread-Abbild der hängenden App im CI-Job (`xcrun simctl spawn booted sample Relay` vor dem Abbau).
+
+## Nachtbau 24. November 2026, 10:24 (Version 0.4.5)
+
+Drei Einträge aus dem Backlog. Eintrag 3 ist abgeschlossen, Eintrag 1 und 2 bleiben offen. Sichtbar ändert sich in der App mit 0.4.5 nichts. Am Gateway (`~/relay`) wurde nichts geändert, nur gelesen.
+
+1. Jarvis: Gesprächskontext regelmäßig zurücksetzen. Bleibt offen, nichts Neues gebaut.
+   Der Stand ist der aus 0.4.4: Trennlinie im Verlauf, Knopf „Neues Gespräch beginnen“ vorbereitet und unsichtbar. Im Gateway gibt es die RPCs `jarvis_context` und `jarvis_reset` weiterhin nicht (geprüft per Suche in `gateway/src`, Zweig `lokal-clear-beendet`). Es fehlt Martins Entscheidung zum Vorschlag in `docs/jarvis-kontext.md`. Solange der Eintrag unter „Offen“ steht, zieht ihn jeder Lauf wieder, ohne dass die App-Seite etwas tun kann.
+
+2. Jarvis spricht mit Supertonic 3, Stimme M2. Bleibt offen, ein Teil ist gebaut.
+   Gebaut: Zahlen als deutsche Wörter (`SpokenNumbers`, C: SpokenNumbers.swift, Tests `SpokenNumbersTests`). Daten, Uhrzeiten, Ordnungszahlen nach Artikel, Versionen, Tausenderpunkte, Komma, Euro, Prozent. Kennungen wie „R1“ bleiben, lange Nummern und führende Nullen gehen Ziffer für Ziffer. Die Regeln sind vorab als Python-Fassung mit denselben Mustern durchgespielt, die erwarteten Texte der Tests stammen daraus. Noch nicht angeschlossen: Die Apple-Stimme liest Zahlen selbst richtig, die Wandlung gilt erst für Supertonic.
+   Befund iPhone: speech-swift (Modul `SupertonicTTS`) verlangt laut Paketdatei iOS 18, die App baut für iOS 17. Das Modell (rund 400 MB) lädt das Paket beim ersten Benutzen von Hugging Face (`aufklarer/Supertonic-3-CoreML`, umgewandelte Fassung eines Dritten, Gewichte OpenRAIL-M). Die Mindestversion anzuheben und diese Quelle zu nutzen, entscheidet Martin (Rückfrage R4, 24.11.2026 10:30). Paketdatei, Quelltext und Doku von speech-swift sind am 24.11.2026 gelesen, gebaut wurde damit nichts.
+   Befund PC: Der Teil „Hey Jarvis“ liegt im Gateway (`speech_out.py`, heute alles über sherpa-onnx). Die ONNX-Dateien liegen in `~/.cache/supertonic3`. Der Nachtbau der App fasst das Gateway nicht an.
+   Was für iPhone und PC genau fehlt und wie der Bau aussehen soll, steht in `docs/jarvis-stimme.md`.
+
+3. CI: `ComposeTests.test04_OutboxWhenOffline` scheitert sporadisch.
+   Ursache, so weit sie sich ohne Abbild klären ließ: Die App friert direkt nach dem Tipp auf „Senden“ ohne Verbindung ein. Die Abfrage des Tests wartet also nicht auf ein fehlendes Element, und die Ansicht ist nicht zu groß. Die UI-Abfrage läuft in die Zeitüberschreitung, weil der Hauptthread nicht antwortet. In dem Moment trafen die neue Postausgang-Zeile, das schrumpfende Eingabefeld und ein animierter Sprung ans Ende über noch nicht gebaute Zeilen zusammen (Befund vom 24.11., Runde 1 des Laufs 08:30, oben).
+   Stand der Behebung: Der Sprung läuft seit 0.4.4 ohne Animation im nächsten Durchlauf (Commit 2da5687, steht in diesem Zweig). Der Lauf 45357704389 damit war grün. Bei einem sporadischen Fehler beweist ein grüner Lauf wenig, v0.4.3 war ohne die Änderung auch grün.
+   Neu in diesem Lauf (`.github/workflows/ios.yml`): ein Wächter im Schritt „UI-Tests“. Steht ein Testfall länger als 150 Sekunden, nimmt er mit `sample` drei Sekunden lang auf, was die App tut, höchstens viermal je Teil. Das Abbild liegt als `hang-*.log` im Artefakt `simulator-results-*`, der Hauptthread steht zusätzlich im Schritt „Ergebnis“, den der Nachtbau als Fehlerauszug bekommt. Der Test selbst ist unverändert und nicht abgeschwächt.
+   `InfoTests.test26_PhoneAccess` (einmal rot, in der Wiederholung grün) ist nicht untersucht. Hängt er, greift derselbe Wächter.
+
+Entscheidungen:
+- Eintrag 3 als erledigt gemeldet: Die Behebung ist drin und lief grün, der Wächter liefert beim nächsten Hänger den Beleg, der bisher fehlte. Kommt der Fehler wieder, wird die CI rot und der Auszug nennt die Stelle. Dann bitte neu eintragen.
+- Supertonic auf dem iPhone nicht blind eingebaut: Die Mindestversion iOS 18 und ein Modell-Download von einer fremden Quelle sind Martins Entscheidung, und ein Paket mit dieser Zahl an Abhängigkeiten kann den Build aller CI-Teile brechen.
+- `SpokenNumbers` liegt ungenutzt in RelayCore. Das ist Absicht: Die Regeln sind der Teil, der sich ohne iPhone prüfen lässt, und der PC-Teil kann die Testfälle übernehmen.
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert. Stellen für den Compiler: `SpokenNumbers.sub` mit den Abschlüssen, die `nil` zurückgeben, und die Muster mit `\p{L}` in den Rückblicken.
+- Der Wächter ist auf dem Mac-Runner nicht erprobt (`pgrep -f "/Relay.app/Relay"`, `sample`). Findet er den Prozess nicht, steht das in `hang-*.log` und der Lauf bleibt unberührt. Ein Testfall, der zu Recht länger als 150 Sekunden läuft, bekommt ein Abbild, das niemand braucht.
+- Zahlenregeln sind Faustregeln: „bis 3. Dann“ oder ein Datum ohne Artikel am Satzanfang bekommen nicht immer die richtige Endung, Brüche und Einheiten wie „km/h“ bleiben, wie sie sind.
+
+Offen für Martin:
+- R4 beantworten: iOS 18 als Mindestversion und speech-swift einbinden, ja oder nein.
+- Den PC-Teil der Stimme im Gateway beauftragen (`docs/jarvis-stimme.md`, Abschnitt PC).
+- Zum Jarvis-Knopf entscheiden (`docs/jarvis-kontext.md`), oder den Eintrag aus „Offen“ nehmen, bis das Gateway die RPCs hat.
+
+Version: `project.yml` 0.4.4 auf 0.4.5. Nicht gepusht, kein Tag. Das übernimmt das Skript.

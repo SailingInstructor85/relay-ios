@@ -168,7 +168,8 @@ Tests unter Linux: `cd RelayCore && swift test`. Ende-zu-Ende-Test gegen ein Gat
 - `docs/` gehört zum Repo und wird je Version mitgepflegt: `docs/nachtlog.md` (was wann gebaut wurde, Entscheidungen,
   Risiken), `docs/feature-parity.md` (Abgleich mit der Android-App), `docs/rueckfragen.md`, `docs/routinen.md`,
   `docs/pc-tmux.md` (Handy und PC in derselben Sitzung, Wrapper und tmux-Einstellung für den PC), `docs/jarvis-kontext.md`
-  (wann Jarvis ein neues Gespräch beginnt, was im Gateway für den Knopf fehlt), `docs/telefonzugriff.md`
+  (wann Jarvis ein neues Gespräch beginnt, was im Gateway für den Knopf fehlt), `docs/jarvis-stimme.md` (Supertonic 3
+  als Jarvis' Stimme: was gebaut ist, was für iPhone und PC fehlt), `docs/telefonzugriff.md`
   (Agenten greifen über Relay aufs iPhone zu, Stufe 1 seit 0.3.11), `docs/benachrichtigungen-fremder-apps.md` (Konzept:
   WhatsApp-Mitteilungen für Agenten), `docs/testbericht.md`. Der Release-Text verlinkt README, Nachtlog und Changelog im Stand des Tags.
 - Lokal prüfen (nur Python nötig): `python3 scripts/changelog_section.py 0.3.5 --release --repo <owner/repo> --tag v0.3.5`
