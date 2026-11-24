@@ -104,7 +104,12 @@ struct ChatView: View {
                     outbox.sweep(seen: messages.filter { $0.role == "user" }.map(\.text))
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
-                .onChange(of: outbox.items.count) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
+                // Ohne Animation und erst im nächsten Durchlauf: Die neue Postausgang-Zeile und das geleerte (wieder
+                // einzeilige) Eingabefeld sind dann schon gesetzt. Der animierte Sprung über noch nicht gebaute Zeilen
+                // des LazyVStack fror die App beim Senden ohne Verbindung gelegentlich ein (CI, test04_OutboxWhenOffline).
+                .onChange(of: outbox.items.count) { _, _ in
+                    DispatchQueue.main.async { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
                 .onChange(of: menu?.id) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
                 .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
                 .onChange(of: jumpTo) { _, id in
