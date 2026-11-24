@@ -31,7 +31,9 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Erkennung läuft auf dem iPhone und nutzt das Vokabular des Gateways (`voice_vocab`). Die Antwort wird Satz für Satz
   vorgelesen. Im Gesprächsmodus hört Jarvis danach wieder zu. In den Antworten lässt sich per langem Drücken Text
   markieren und in Teilen kopieren. Der Kurzbefehl „Jarvis in Relay“ funktioniert per Siri
-  oder über die Aktionstaste.
+  oder über die Aktionstaste. Eine Trennlinie im Verlauf zeigt, wo am PC ein neues Gespräch begonnen hat (jeden Tag um
+  4 Uhr): Was davor steht, weiß Jarvis nicht mehr. Details und der geplante Knopf „Neues Gespräch beginnen“:
+  `docs/jarvis-kontext.md`.
 - **Alle Sitzungen beenden** (Menü der Sitzungsliste): Jede gewählte Sitzung schreibt ihren Eintrag ins Agenten-Log
   der Daily Note und ihre Übergabe, dann beendet das Gateway sie. Sitzungen mit offener Auswahl oder Freigabe am PC
   bleiben mit Grund offen. Das Gateway schickt Nachrichten mit getrenntem Enter und prüft, ob das Eingabefeld am PC
@@ -161,7 +163,8 @@ Tests unter Linux: `cd RelayCore && swift test`. Ende-zu-Ende-Test gegen ein Gat
   dort ein kurzer Standardtext, der Build bricht nicht ab.
 - `docs/` gehört zum Repo und wird je Version mitgepflegt: `docs/nachtlog.md` (was wann gebaut wurde, Entscheidungen,
   Risiken), `docs/feature-parity.md` (Abgleich mit der Android-App), `docs/rueckfragen.md`, `docs/routinen.md`,
-  `docs/pc-tmux.md` (Handy und PC in derselben Sitzung, Wrapper und tmux-Einstellung für den PC), `docs/telefonzugriff.md`
+  `docs/pc-tmux.md` (Handy und PC in derselben Sitzung, Wrapper und tmux-Einstellung für den PC), `docs/jarvis-kontext.md`
+  (wann Jarvis ein neues Gespräch beginnt, was im Gateway für den Knopf fehlt), `docs/telefonzugriff.md`
   (Agenten greifen über Relay aufs iPhone zu, Stufe 1 seit 0.3.11), `docs/benachrichtigungen-fremder-apps.md` (Konzept:
   WhatsApp-Mitteilungen für Agenten), `docs/testbericht.md`. Der Release-Text verlinkt README, Nachtlog und Changelog im Stand des Tags.
 - Lokal prüfen (nur Python nötig): `python3 scripts/changelog_section.py 0.3.5 --release --repo <owner/repo> --tag v0.3.5`

@@ -25,6 +25,11 @@ struct JarvisView: View {
     @FocusState private var inputFocused: Bool
     @State private var teaching = false
     @State private var confirmClear = false
+    /// Füllstand des Gesprächs am PC (RPC `jarvis_context`); nil, solange das Gateway ihn nicht liefert.
+    @State private var context: JarvisContext.Status?
+    /// Wann hier „Neues Gespräch beginnen“ getippt wurde (für die Trennlinie im Verlauf).
+    @State private var resets: [Double] = JarvisResets.load()
+    @State private var notice: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,7 +47,10 @@ struct JarvisView: View {
                                 Text(JarvisDictation.howTo).font(.callout).foregroundStyle(.secondary)
                             }.padding()
                         }
-                        ForEach(turns) { t in
+                        let breaks = JarvisContext.breaks(times: turns.map(\.ts), resets: resets)
+                        ForEach(Array(turns.enumerated()), id: \.element.id) { i, t in
+                            // hier hat am PC ein neues Gespräch begonnen (neuer Tag ab 4 Uhr oder zurückgesetzt)
+                            if breaks.contains(i) { contextBreak(JarvisContext.breakLabel) }
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack {
                                     Spacer()
@@ -52,6 +60,9 @@ struct JarvisView: View {
                                 // Antwort mit markierbarem Text: langes Drücken setzt die Griffe, Teile lassen sich einzeln kopieren
                                 if t.a.isEmpty && !t.done { ProgressView() } else { MarkdownText(text: t.a, marking: true).font(RelayFont.reply).lineSpacing(3) }
                             }.padding(.horizontal).id(t.id)
+                        }
+                        if !asking, JarvisContext.breakPending(last: turns.last?.ts, now: Date().timeIntervalSince1970, resets: resets) {
+                            contextBreak(JarvisContext.nextBreakLabel)
                         }
                         if voice.listening {
                             HStack { Spacer(); Text(voice.partial.isEmpty ? "Ich höre…" : voice.partial).italic().foregroundStyle(.secondary).padding(10) }
@@ -63,6 +74,10 @@ struct JarvisView: View {
                 .onChange(of: voice.partial) { _, _ in proxy.scrollTo("partial", anchor: .bottom) }
             }
             if let e = error { ErrorBanner(text: Binding(get: { e }, set: { error = $0 })).padding(.vertical, 4) }
+            if let n = notice {
+                Text(n).font(.footnote).foregroundStyle(.secondary).padding(.horizontal).padding(.vertical, 4)
+                    .accessibilityIdentifier("jarvisNotice")
+            }
             micBar
             HStack {
                 TextField("Jarvis schreiben…", text: $input, axis: .vertical).lineLimit(1...4)
@@ -89,6 +104,13 @@ struct JarvisView: View {
                         Text("English").tag("en")
                     } label: { Label("Sprache der Erkennung", systemImage: "globe") }
                     Button { teaching = true } label: { Label("Erkennung korrigieren", systemImage: "character.book.closed") }
+                    // nur wenn das Gateway den Füllstand liefert (dann kennt es auch das Zurücksetzen)
+                    if let c = context {
+                        Section(JarvisContext.fillLabel(c)) {
+                            Button { Task { await resetContext() } } label: { Label(JarvisContext.resetLabel, systemImage: "arrow.counterclockwise") }
+                                .disabled(asking)
+                        }
+                    }
                     Button(role: .destructive) { confirmClear = true } label: { Label("Chat löschen", systemImage: "trash") }
                         .disabled(turns.isEmpty)
                 } label: { Image(systemName: "slider.horizontal.3") }
@@ -104,6 +126,7 @@ struct JarvisView: View {
             }
             await loadVocab()
             if autoListen { startVoice(trigger: "mic") }
+            context = await model.jarvisContext()
         }
         .onChange(of: inputFocused) { _, focused in if focused { model.warmJarvis() } }
         .onDisappear { stopVoice() }
@@ -144,6 +167,32 @@ struct JarvisView: View {
     private func stopReading() {
         UsageRecorder.shared.record("jarvis", "vorlesen gestoppt", kind: "vorlesen")
         voice.stopSpeaking()
+    }
+
+    // MARK: Gesprächskontext
+
+    /// Trennlinie im Verlauf: davor und danach sind es am PC zwei Gespräche.
+    private func contextBreak(_ label: String) -> some View {
+        HStack(spacing: 8) {
+            Rectangle().fill(Color.secondary.opacity(0.3)).frame(height: 1)
+            Text(label).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            Rectangle().fill(Color.secondary.opacity(0.3)).frame(height: 1)
+        }
+        .padding(.horizontal)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("jarvisBreak")
+    }
+
+    /// „Neues Gespräch beginnen“: Der PC beginnt für Jarvis ein neues Gespräch, der Verlauf auf dem iPhone bleibt.
+    private func resetContext() async {
+        do {
+            try await model.jarvisReset()
+            resets = JarvisContext.adding(Date().timeIntervalSince1970, to: resets)
+            JarvisResets.save(resets)
+            notice = JarvisContext.resetDone
+            UsageRecorder.shared.record("jarvis", "neues gespräch")
+            context = await model.jarvisContext()
+        } catch { self.error = error.localizedDescription }
     }
 
     // MARK: voice
@@ -250,6 +299,7 @@ struct JarvisView: View {
         let q = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         asking = true; defer { asking = false }
+        notice = nil
         turns.append(Turn(q: q, a: "", done: false, voice: byVoice))
         let idx = turns.count - 1
         let speak = byVoice && speakAnswers
@@ -307,6 +357,13 @@ enum JarvisStore {
         try? d.write(to: u, options: .atomic)
     }
     static func clear() { if let u = url { try? FileManager.default.removeItem(at: u) } }
+}
+
+/// Wann auf diesem iPhone „Neues Gespräch beginnen“ getippt wurde (UserDefaults, höchstens 50 Zeitpunkte).
+enum JarvisResets {
+    private static let key = "jarvisResets"
+    static func load() -> [Double] { (UserDefaults.standard.array(forKey: key) as? [Double]) ?? [] }
+    static func save(_ list: [Double]) { UserDefaults.standard.set(list, forKey: key) }
 }
 
 /// "Erkennung korrigieren": teaches the Desktop a term, or what a misheard phrase meant.

@@ -46,6 +46,18 @@ extension AppModel {
         }
     }
 
+    /// Füllstand des Jarvis-Gesprächs am PC (RPC `jarvis_context`: `bytes`, `max_bytes`). nil, wenn das Gateway den
+    /// RPC nicht kennt oder nicht antwortet: dann zeigt Jarvis weder Füllstand noch „Neues Gespräch beginnen“.
+    func jarvisContext() async -> JarvisContext.Status? {
+        guard state == .connected, let r = try? await rpc("jarvis_context", [:], timeout: 10) else { return nil }
+        return JarvisContext.status(r)
+    }
+
+    /// Der PC beginnt für Jarvis ein neues Gespräch (RPC `jarvis_reset`).
+    func jarvisReset() async throws {
+        _ = try await rpc("jarvis_reset", [:], timeout: 20)
+    }
+
     /// "Erkennung korrigieren": adds a term, or the correction "heard => meant", then reloads the vocabulary.
     func teachVocab(heard: String, meant: String, into voice: VoiceIO) async throws {
         var p: [String: JSON] = ["meant": .string(meant.trimmingCharacters(in: .whitespacesAndNewlines))]
