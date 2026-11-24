@@ -12,8 +12,9 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Anheften, „Erledigt“ (Wischen nach rechts) und Schließen (Wischen nach links)
 - **Chat pro Sitzung:** Transkript mit Nachladen älterer Nachrichten, Live-Anhänge (`watch`), eingeklappte
   Werkzeugaufrufe, Codeblöcke, Statuszeile während die Sitzung arbeitet. Lesemodus über den Eintrag „Lesemodus“ im Sitzungsmenü (oben rechts, dort auch der Live-Bildschirm;
-  Leisten und Tastatur weg, der Verlauf füllt den Bildschirm). Die Tastatur schließt der Eintrag „Tastatur ausblenden“ im Befehlsmenü („/“ links
-  an der Eingabeleiste, dort auch Slash-Befehle und „Esc senden“), ein Tipp in den Verlauf oder Wischen nach unten. Im Kopf steht unter dem Namen, welcher Agent in der Sitzung arbeitet
+  Leisten und Tastatur weg, der Verlauf füllt den Bildschirm). Die Tastatur schließt der runde Knopf „Tastatur ausblenden“ rechts über dem Eingabefeld
+  (erscheint, sobald die Tastatur offen ist), ein Tipp in den Verlauf oder Wischen nach unten. Slash-Befehle und „Esc senden“ stehen im Befehlsmenü („/“ links
+  an der Eingabeleiste). Im Kopf steht unter dem Namen, welcher Agent in der Sitzung arbeitet
   (Claude oder Codex, farbig mit Symbol), dahinter Modell, Ordner und Kontext; dieselbe Angabe steht unten im Sitzungsmenü.
 - **Antwortkarten** für Fragen, Auswahllisten (`/model`, Berechtigungsabfragen, Plan-Freigabe) und Panels (`/usage`,
   `/status`), mit `expect_menu`, damit eine veraltete Karte keinen neuen Dialog beantwortet

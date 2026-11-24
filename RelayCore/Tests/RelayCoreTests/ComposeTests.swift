@@ -345,6 +345,13 @@ final class WindDownTests: XCTestCase {
 final class KeyboardBarTests: XCTestCase {
     func testHideButtonLabel() {
         XCTAssertEqual(KeyboardBar.hideLabel, "Tastatur ausblenden")
+        XCTAssertGreaterThanOrEqual(KeyboardBar.minTapSize, 44)
+    }
+
+    func testHideButtonOnlyWithKeyboard() {
+        XCTAssertTrue(KeyboardBar.showsHideButton(keyboardOpen: true, reading: false))
+        XCTAssertFalse(KeyboardBar.showsHideButton(keyboardOpen: false, reading: false))
+        XCTAssertFalse(KeyboardBar.showsHideButton(keyboardOpen: true, reading: true))
     }
 }
 
@@ -370,8 +377,6 @@ final class CommandMenuTests: XCTestCase {
     }
 
     func testHideKeyboardOnlyWithOpenKeyboard() {
-        XCTAssertTrue(CommandMenu.showsHideKeyboard(keyboardOpen: true))
-        XCTAssertFalse(CommandMenu.showsHideKeyboard(keyboardOpen: false))
         XCTAssertEqual(CommandMenu.escLabel, "Esc senden")
     }
 }

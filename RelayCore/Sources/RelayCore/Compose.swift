@@ -505,15 +505,21 @@ public enum RunningText {
 // MARK: Tastatur und Lesemodus
 
 /// „Tastatur ausblenden“ im Chat (2026-11-07): schließt die Tastatur, Text und Diktat bleiben dabei.
-/// Seit dem Umbau der Eingabeleiste (Schnellantworten und Slash-Chips entfernt) ist es ein Eintrag im Befehlsmenü
-/// („/“ links neben der Büroklammer) und erscheint dort nur bei offener Tastatur. In der Leiste über der Tastatur
-/// lag der Knopf früher über Senden und Mikrofon, deshalb steht er dort nicht.
+/// Bis 0.3.20 saß der Knopf rechts in der Schnellantwort-Zeile, in 0.4.0 bis 0.4.2 nur als Eintrag im Befehlsmenü
+/// (zwei Tipps). Seit 0.4.3 ist er wieder ein eigener Knopf: Er schwebt rechts unten über dem Verlauf, also direkt
+/// über dem Eingabefeld, und nimmt keine eigene Zeile ein. In der Leiste über der Tastatur lag er früher über
+/// Senden und Mikrofon, deshalb steht er dort nicht.
 public enum KeyboardBar {
     public static let hideLabel = "Tastatur ausblenden"
+    /// Mindestgröße der Tippfläche (Apple: 44 pt).
+    public static let minTapSize: Double = 44
+
+    /// Der Knopf erscheint nur bei offener Tastatur. Im Lesemodus gibt es keine Eingabe, also auch keinen Knopf.
+    public static func showsHideButton(keyboardOpen: Bool, reading: Bool) -> Bool { keyboardOpen && !reading }
 }
 
 /// Befehlsmenü an der Eingabeleiste des Chats: ersetzt die frühere Chipzeile. Oben die eingestellten Befehle des
-/// Werkzeugs, im Untermenü die übrigen Standardbefehle, dazu „Esc senden“ und „Tastatur ausblenden“.
+/// Werkzeugs, im Untermenü die übrigen Standardbefehle, dazu „Esc senden“.
 public enum CommandMenu {
     public static let label = "Befehle"
     public static let moreLabel = "Weitere Befehle"
@@ -533,9 +539,6 @@ public enum CommandMenu {
         let more = SlashCatalog.forTool(tool, user: top).filter { !seen.contains($0) }
         return Items(top: top, more: more)
     }
-
-    /// Ob „Tastatur ausblenden“ im Menü steht: nur bei offener Tastatur.
-    public static func showsHideKeyboard(keyboardOpen: Bool) -> Bool { keyboardOpen }
 }
 
 /// Lesemodus im Chat (2026-11-07): Navigationsleiste, Eingabezeile und Tastatur verschwinden, der Verlauf füllt den

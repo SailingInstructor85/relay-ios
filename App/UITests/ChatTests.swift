@@ -270,8 +270,9 @@ final class ChatTests: RelayTestCase {
     }
 
     func test12_HideKeyboard() {
-        // Tastatur offen: „Tastatur ausblenden“ steht im Befehlsmenü („/“ links an der Eingabeleiste, seit dem Wegfall der
-        // Chipzeilen). Das Menü verdeckt weder Senden noch Mikrofon, der Eintrag schließt die Tastatur, der Text bleibt.
+        // Tastatur offen: der Knopf „Tastatur ausblenden“ schwebt rechts über dem Eingabefeld (seit 0.4.3 wieder direkt
+        // sichtbar), verdeckt weder Senden noch Mikrofon und schließt die Tastatur mit einem Tipp; der Text bleibt.
+        // Das Befehlsmenü („/“) bleibt daneben an der Eingabeleiste.
         launchConnected()
         openSession("API Refactoring")
         typeInto("chatInput", "Tastatur zu")
@@ -284,15 +285,20 @@ final class ChatTests: RelayTestCase {
         XCTAssertFalse(menu.intersects(field), "Befehlsmenü überdeckt das Eingabefeld: \(menu) / \(field)")
         XCTAssertTrue(id("chatSend").isHittable, "Senden bei offener Tastatur nicht antippbar")
         XCTAssertTrue(id("chatMic").isHittable, "Mikrofon bei offener Tastatur nicht antippbar")
-        tapID("commandMenu")
-        settle(0.8)
-        shot("befehlsmenue-tastatur-offen")
-        tap("Tastatur ausblenden", 4)
+        XCTAssertTrue(id("hideKeyboard").waitForExistence(timeout: 4), "Knopf Tastatur ausblenden fehlt bei offener Tastatur")
+        let hide = id("hideKeyboard").frame
+        XCTAssertFalse(hide.intersects(send), "Knopf überdeckt Senden: \(hide) / \(send)")
+        XCTAssertFalse(hide.intersects(mic), "Knopf überdeckt Mikrofon: \(hide) / \(mic)")
+        XCTAssertLessThanOrEqual(hide.maxY, field.minY + 1, "Knopf liegt nicht über dem Eingabefeld: \(hide) / \(field)")
+        XCTAssertGreaterThanOrEqual(hide.height, 43, "Tippfläche zu klein: \(hide)")
+        XCTAssertTrue(id("hideKeyboard").isHittable, "Knopf Tastatur ausblenden nicht antippbar")
+        tapID("hideKeyboard")
         settle(1)
         shot("tastatur-zu")
         XCTAssertEqual(app.keyboards.count, 0, "Tastatur noch offen")
         let value = id("chatInput").value as? String ?? ""
         XCTAssertTrue(value.contains("Tastatur zu"), "Text weg: \(value)")
+        XCTAssertFalse(id("hideKeyboard").exists, "Knopf Tastatur ausblenden steht noch da, obwohl die Tastatur zu ist")
     }
 
     static let readingLabel = "Lesemodus"

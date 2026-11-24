@@ -111,6 +111,10 @@ struct ChatView: View {
                     if let id { withAnimation { proxy.scrollTo(id, anchor: .top) }; jumpTo = nil }
                 }
             }
+            // „Tastatur ausblenden“ schwebt rechts unten über dem Verlauf, also direkt über dem Eingabefeld (ein Tipp)
+            .overlay(alignment: .bottomTrailing) {
+                if KeyboardBar.showsHideButton(keyboardOpen: focused, reading: reading) { hideKeyboardButton }
+            }
             if let sm = summary {
                 SummaryCard(state: sm, speaking: voice.speaking, onSpeak: { voice.speak($0) }, onStop: { voice.stopSpeaking() },
                             onClose: { voice.stopSpeaking(); summary = nil })
@@ -250,8 +254,8 @@ struct ChatView: View {
 
     /// Befehlsmenü an der Eingabeleiste („/“ links neben der Büroklammer). Es ersetzt die frühere Zeile mit
     /// Schnellantworten und Slash-Chips: oben die eingestellten Befehle des Werkzeugs, im Untermenü die übrigen,
-    /// darunter „Esc senden“ und bei offener Tastatur „Tastatur ausblenden“. Ein Befehl landet wie bisher im Feld
-    /// und wird nicht sofort gesendet.
+    /// darunter „Esc senden“. Ein Befehl landet wie bisher im Feld und wird nicht sofort gesendet.
+    /// „Tastatur ausblenden“ ist seit 0.4.3 wieder ein eigener Knopf über dem Eingabefeld (`hideKeyboardButton`).
     private var commandMenu: some View {
         let items = CommandMenu.items(tool: tool, user: slashChips)
         return Menu {
@@ -264,16 +268,30 @@ struct ChatView: View {
             Divider()
             Button(role: .destructive) { sendEscape() } label: { Label(CommandMenu.escLabel, systemImage: "escape") }
                 .disabled(session == nil)
-            if CommandMenu.showsHideKeyboard(keyboardOpen: focused) {
-                Button { focused = false } label: { Label(KeyboardBar.hideLabel, systemImage: "keyboard.chevron.compact.down") }
-                    .accessibilityIdentifier("hideKeyboard")
-            }
         } label: {
             Text("/").font(.system(.title3, design: .monospaced).weight(.semibold))
                 .frame(minWidth: 28, minHeight: 28).contentShape(Rectangle())
         }
         .menuOrder(.fixed)
         .accessibilityLabel(CommandMenu.label).accessibilityIdentifier("commandMenu")
+    }
+
+    /// Knopf „Tastatur ausblenden“ (Martin, 2026-11-24: wieder direkt sichtbar wie bis 0.3.20, ein Tipp statt zwei).
+    /// Er erscheint nur bei offener Tastatur, rechts über dem Eingabefeld, und liegt nicht über Senden und Mikrofon.
+    /// Text und laufendes Diktat bleiben, nur der Fokus geht. Tippfläche mindestens 44 pt.
+    private var hideKeyboardButton: some View {
+        Button { focused = false } label: {
+            Image(systemName: "keyboard.chevron.compact.down").font(.callout.weight(.medium))
+                .foregroundStyle(RelayColor.onSurfaceVariant)
+                .frame(width: 36, height: 36)
+                .background(.regularMaterial, in: Circle())
+                .overlay { Circle().strokeBorder(RelayColor.outlineVariant, lineWidth: 1) }
+                .frame(minWidth: KeyboardBar.minTapSize, minHeight: KeyboardBar.minTapSize)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 10).padding(.bottom, 2)
+        .accessibilityLabel(KeyboardBar.hideLabel).accessibilityIdentifier("hideKeyboard")
     }
 
     private func insertCommand(_ c: String) { input = c + " "; focused = true }

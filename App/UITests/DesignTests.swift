@@ -37,11 +37,14 @@ final class DesignTests: RelayTestCase {
             id("commandMenu").tap()
             settle(1)
             shot(prefix + "chat-befehlsmenue")
-            if !tap("Tastatur ausblenden", 2, soft: true) { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)).tap() }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)).tap()  // Menü schließen
             settle(0.8)
         } else {
             notes.append("Befehlsmenü (commandMenu) fehlt")
         }
+        // Knopf „Tastatur ausblenden“ rechts über dem Eingabefeld (auf dem Bild „chat-tastatur“ zu sehen)
+        if id("hideKeyboard").waitForExistence(timeout: 2) { id("hideKeyboard").tap(); settle(0.8) }
+        else { notes.append("Knopf Tastatur ausblenden (hideKeyboard) fehlt") }
         shot(prefix + "chat-eingabeleiste")
         // Vorschlagsliste beim Tippen von „/“
         let field = id("chatInput")
