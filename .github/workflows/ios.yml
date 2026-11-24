@@ -154,7 +154,28 @@ jobs:
               CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
               test-without-building > test.log 2>&1 && rc=0 || rc=$?
           }
+          # Hängt ein Testfall länger als zweieinhalb Minuten (ComposeTests.test04_OutboxWhenOffline fror sporadisch nach dem
+          # Tipp auf „Senden“ ein, die UI-Abfrage lief dann in die Zeitüberschreitung), hält ein Wächter fest, was der
+          # Hauptthread der App gerade tut (sample, drei Sekunden). Das Abbild landet als hang-*.log im Artefakt und
+          # im Schritt „Ergebnis“. Der Wächter ändert am Testlauf nichts.
+          (
+            last=""; since=0; n=0
+            while sleep 10; do
+              cur=$(grep -E "Test Case '.*' (started|passed|failed)" test.log 2>/dev/null | tail -1 || true)
+              if [ "$cur" != "$last" ]; then last="$cur"; since=0; continue; fi
+              since=$((since + 10))
+              case "$cur" in *started*) ;; *) continue ;; esac
+              if [ "$since" -eq 150 ] && [ "$n" -lt 4 ]; then
+                n=$((n + 1))
+                pid=$(pgrep -f "/Relay.app/Relay" | head -1 || true)
+                { echo "$cur"; echo "pid=$pid nach ${since}s"; } > "hang-$n.log"
+                if [ -n "$pid" ]; then sample "$pid" 3 -mayDie >> "hang-$n.log" 2>&1 || true; fi
+              fi
+            done
+          ) &
+          WATCH=$!
           run_tests
+          kill "$WATCH" 2>/dev/null || true
           # Startet der Test-Runner selbst nicht ("The test runner failed to initialize for UI testing", meist
           # "Timed out while loading Accessibility", Lauf 42145853158), ist kein Testfall gelaufen und die App nie
           # gestartet: Simulator neu starten und den Teil einmal wiederholen. Echte Testfehler werden nicht wiederholt.
@@ -179,7 +200,7 @@ jobs:
           xcrun xcresulttool export attachments --path Results.xcresult --output-path out/raw 2>&1 | tail -5 || true
           python3 testing/export_shots.py out/raw out/shots || true
           sudo chmod a+r /tmp/relaymock/* 2>/dev/null; cp /tmp/relaymock/mock.log /tmp/relaymock/rpc-all.jsonl /tmp/relaymock/sshd.log out/ 2>/dev/null || true
-          cp test.log test-versuch1.log build-sim.log out/ 2>/dev/null || true
+          cp test.log test-versuch1.log build-sim.log hang-*.log out/ 2>/dev/null || true
           xcrun simctl spawn "$UDID" log show --last 90m --predicate 'process == "Relay" AND (messageType == fault OR messageType == error)' --style compact 2>&1 | tail -n 2000 > out/relay-app-errors.log || true
           ls -la ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -i relay > out/crash-reports.txt || true
           ls out/shots | wc -l
@@ -219,6 +240,12 @@ jobs:
             grep -E "Test Case .* failed" test.log | cut -c1-300 | sort -u || true
             echo "Fehlermeldungen:"
             grep -E "error: |Erwartet, aber nicht da|Nicht gefunden|Kennung nicht gefunden|Feld fehlt|crashed|Lost connection" test.log | cut -c1-400 | sort -u | tail -60 || true
+            for f in hang-*.log; do
+              [ -f "$f" ] || continue
+              echo "Hänger ($f), Hauptthread der App:"
+              head -2 "$f"
+              grep -E -A45 -m1 "Thread_.*(main-thread|DispatchQueue_1:)" "$f" | cut -c1-220 || true
+            done
             echo "Mock-Aufrufe zu den gescheiterten Tests (wind_down):"
             grep -E '"method": "(wind_down|wind_down_status)"' /tmp/relaymock/rpc-all.jsonl 2>/dev/null | cut -c1-300 | tail -30 || true
             echo "Mock-Log (Fehler und Sitzungen):"
