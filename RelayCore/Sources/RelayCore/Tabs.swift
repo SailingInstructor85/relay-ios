@@ -36,6 +36,9 @@ public enum Route: Hashable, Sendable {
     case jarvis, jarvisListening
     /// Jarvis öffnen und diese Frage sofort stellen (Eingabeleiste auf „Heute“).
     case jarvisAsk(String)
+    /// Jarvis öffnen und `text` sofort senden; im Verlauf steht dafür `shown` (Dokumente aus dem Teilen-Blatt: der
+    /// Auftrag mit den Pfaden geht an Jarvis, zu sehen sind Nachricht und Dateinamen).
+    case jarvisSend(shown: String, text: String)
     case notices
     case notice(String)
     case routines, drive, vaultChat
@@ -47,7 +50,7 @@ public enum Route: Hashable, Sendable {
     /// Unterseiten mit eigener Eingabeleiste oder Sprachbedienung: dort verschwindet die Tab-Leiste.
     public var hidesTabBar: Bool {
         switch self {
-        case .chat, .chatSearch, .jarvis, .jarvisListening, .jarvisAsk, .drive, .vaultChat: return true
+        case .chat, .chatSearch, .jarvis, .jarvisListening, .jarvisAsk, .jarvisSend, .drive, .vaultChat: return true
         default: return false
         }
     }

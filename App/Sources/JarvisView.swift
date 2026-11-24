@@ -1,5 +1,19 @@
 import SwiftUI
+import UIKit
+import UniformTypeIdentifiers
 import RelayCore
+
+/// Ein Dokument, das im Jarvis-Chat angehängt ist und mit der nächsten Nachricht hochgeladen wird: eine Datei aus der
+/// Dateien-App oder ein Kamerafoto (Bytes) oder ein Foto oder Video aus der Mediathek (`StagedMedia`).
+struct JarvisDoc: Identifiable {
+    let id = UUID()
+    let name: String
+    let data: Data?
+    let media: StagedMedia?
+
+    func bytes() -> Data? { data ?? media?.bytes() }
+    func discard() { media?.discard() }
+}
 
 /// Jarvis, the overview agent on the Desktop (rpc `ask`, streamed). By voice: tap the microphone, speak, the answer is
 /// read aloud sentence by sentence; in conversation mode it listens again after each answer until nothing is said.
@@ -8,6 +22,9 @@ struct JarvisView: View {
     var autoListen = false
     /// Eine Frage, die beim Öffnen sofort gestellt wird (Eingabeleiste auf „Heute“).
     var initialQuestion: String?
+    /// Was für `initialQuestion` im Verlauf steht (Dokumente aus dem Teilen-Blatt: Nachricht und Dateinamen statt des
+    /// ganzen Auftrags mit Pfaden); nil = die Frage selbst.
+    var initialShown: String?
     @State private var askedInitial = false
 
     struct Turn: Identifiable { var id = UUID(); let q: String; var a: String; var done: Bool; let voice: Bool; var ts = Date().timeIntervalSince1970 }
@@ -30,6 +47,12 @@ struct JarvisView: View {
     /// Wann hier „Neues Gespräch beginnen“ getippt wurde (für die Trennlinie im Verlauf).
     @State private var resets: [Double] = JarvisResets.load()
     @State private var notice: String?
+    /// Angehängte Dokumente: Sie gehen mit der nächsten Nachricht (getippt oder gesprochen) an den PC und zu Jarvis.
+    @State private var docs: [JarvisDoc] = []
+    @State private var importing = false
+    @State private var pickingPhoto = false
+    @State private var camera = false
+    @State private var uploading = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,13 +102,25 @@ struct JarvisView: View {
                     .accessibilityIdentifier("jarvisNotice")
             }
             micBar
+            if !uploading.isEmpty { Text(uploading).font(.caption).foregroundStyle(.secondary).padding(.bottom, 4) }
+            if !docs.isEmpty { docStrip }
             HStack {
-                TextField("Jarvis schreiben…", text: $input, axis: .vertical).lineLimit(1...4)
+                // Dokumente in den Chat geben: Jarvis bekommt sie mit der nächsten Nachricht und gibt sie weiter
+                Menu {
+                    Button { importing = true } label: { Label("Datei", systemImage: "doc") }
+                    // A picker inside a Menu does not open on iOS; a moment later the menu has closed (as in the chat).
+                    Button { Task { try? await Task.sleep(nanoseconds: 350_000_000); pickingPhoto = true } } label: { Label("Fotos oder Videos", systemImage: "photo.on.rectangle") }
+                    if CameraPicker.available { Button { camera = true } label: { Label("Kamera", systemImage: "camera") } }
+                } label: { Image(systemName: "paperclip").font(.title3) }
+                    .disabled(asking)
+                    .accessibilityLabel("Dokument anhängen").accessibilityIdentifier("jarvisAttach")
+                TextField(docs.isEmpty ? "Jarvis schreiben…" : "Was soll Jarvis damit tun?", text: $input, axis: .vertical).lineLimit(1...4)
                     .focused($inputFocused).accessibilityIdentifier("jarvisInput")
                     .padding(8).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
                 Button { sendTapped() } label: {
                     Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
-                }.disabled(!JarvisDictation.canSend(typed: input, listening: voice.listening, partial: voice.partial, asking: asking))
+                }.disabled(!(JarvisDictation.canSend(typed: input, listening: voice.listening, partial: voice.partial, asking: asking)
+                             || JarvisDocs.canSend(docs: docs.count, asking: asking)))
                     .accessibilityLabel("Senden").accessibilityIdentifier("jarvisSend")
             }.padding([.horizontal, .bottom])
         }
@@ -121,8 +156,8 @@ struct JarvisView: View {
             model.warmJarvis()
             if let q = initialQuestion, !askedInitial {
                 askedInitial = true
-                UsageRecorder.shared.content("jarvis", "gesendet", session: nil, kind: "text", text: q)
-                Task { await ask(q, byVoice: false) }
+                UsageRecorder.shared.content("jarvis", "gesendet", session: nil, kind: initialShown == nil ? "text" : "datei", text: initialShown ?? q)
+                Task { await ask(q, byVoice: false, shown: initialShown) }
             }
             await loadVocab()
             if autoListen { startVoice(trigger: "mic") }
@@ -132,6 +167,21 @@ struct JarvisView: View {
         .onDisappear { stopVoice() }
         .onChange(of: voice.speaking) { _, s in if !s { releaseIfDone() } }
         .sheet(isPresented: $teaching) { TeachRecognitionView(voice: voice) }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result { addFiles(urls) }
+        }
+        .sheet(isPresented: $pickingPhoto) {
+            PhotoLibraryPicker { providers in
+                pickingPhoto = false
+                if !providers.isEmpty { Task { await addPicked(providers) } }
+            }.ignoresSafeArea()
+        }
+        .fullScreenCover(isPresented: $camera) {
+            CameraPicker { img in
+                camera = false
+                if let img, let d = img.jpegData(compressionQuality: 0.95) { Task { await addCamera(d) } }
+            }.ignoresSafeArea()
+        }
         .confirmationDialog("Den Jarvis-Verlauf auf diesem iPhone löschen?", isPresented: $confirmClear, titleVisibility: .visible) {
             Button("Chat löschen", role: .destructive) { turns = []; JarvisStore.clear() }
         }
@@ -167,6 +217,107 @@ struct JarvisView: View {
     private func stopReading() {
         UsageRecorder.shared.record("jarvis", "vorlesen gestoppt", kind: "vorlesen")
         voice.stopSpeaking()
+    }
+
+    // MARK: Dokumente
+
+    /// Die angehängten Dokumente über der Eingabe, jedes mit einem Knopf zum Herausnehmen.
+    private var docStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(docs) { d in
+                    HStack(spacing: 4) {
+                        Image(systemName: "doc")
+                        Text(d.name).lineLimit(1).truncationMode(.middle).frame(maxWidth: 180)
+                        Button { removeDoc(d.id) } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.plain).disabled(asking)
+                            .accessibilityLabel("Aus der Auswahl nehmen")
+                    }
+                    .font(.footnote)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(Color(.secondarySystemBackground), in: Capsule())
+                }
+            }.padding(.horizontal)
+        }
+        .padding(.bottom, 6)
+        .accessibilityIdentifier("jarvisDocs")
+    }
+
+    private func removeDoc(_ id: UUID) {
+        docs.first(where: { $0.id == id })?.discard()
+        docs.removeAll { $0.id == id }
+    }
+
+    private func attached(_ new: [JarvisDoc], kind: String) {
+        guard !new.isEmpty else { return }
+        docs += new
+        UsageRecorder.shared.record("jarvis", "dokument angehängt", kind: kind, length: new.count)
+    }
+
+    /// Dateien aus der Dateien-App: sofort lesen (der Zugriff gilt nur jetzt), hochgeladen wird erst beim Senden.
+    private func addFiles(_ urls: [URL]) {
+        var new: [JarvisDoc] = []
+        var problems: [String] = []
+        for url in urls {
+            let ok = url.startAccessingSecurityScopedResource()
+            defer { if ok { url.stopAccessingSecurityScopedResource() } }
+            let name = url.lastPathComponent
+            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { problems.append(JarvisDocs.unreadable(name)); continue }
+            guard data.count <= JarvisDocs.maxBytes else { problems.append(JarvisDocs.tooBig(name)); continue }
+            new.append(JarvisDoc(name: name, data: data, media: nil))
+        }
+        attached(new, kind: "datei")
+        if !problems.isEmpty { error = problems.joined(separator: ", ") }
+    }
+
+    /// Fotos und Videos aus der Mediathek (Fotos schon auf 2048 px verkleinert, Videos bleiben in ihrer Datei).
+    private func addPicked(_ providers: [NSItemProvider]) async {
+        uploading = providers.count > 1 ? "Lade \(providers.count) Fotos aus der Mediathek…" : "Lade Auswahl…"
+        let (items, failed) = await StagedMedia.load(providers, stamp: Int(Date().timeIntervalSince1970))
+        uploading = ""
+        let tooBig = items.filter { $0.size() > JarvisDocs.maxBytes }
+        tooBig.forEach { $0.discard() }
+        attached(items.filter { $0.size() <= JarvisDocs.maxBytes }.map { JarvisDoc(name: $0.name, data: nil, media: $0) }, kind: "foto")
+        var problems = tooBig.map { JarvisDocs.tooBig($0.name) }
+        if failed > 0 { problems.append(failed == 1 ? "1 Auswahl konnte nicht geladen werden" : "\(failed) Auswahlen konnten nicht geladen werden") }
+        if !problems.isEmpty { error = problems.joined(separator: ", ") }
+    }
+
+    private func addCamera(_ jpeg: Data) async {
+        let raw = "kamera-\(Int(Date().timeIntervalSince1970)).jpg"
+        let p = await Task.detached(priority: .userInitiated) { AttachPrep.prepared(name: raw, data: jpeg) }.value
+        attached([JarvisDoc(name: p.name, data: p.data, media: nil)], kind: "foto")
+    }
+
+    /// Senden: ohne Dokumente die Frage wie bisher. Mit Dokumenten gehen sie zuerst an den PC, dann bekommt Jarvis die
+    /// Pfade mit dem Auftrag (`JarvisDocs.prompt`); im Verlauf stehen Nachricht und Dateinamen. Scheitert ein Upload,
+    /// bleiben Dokumente und Text stehen.
+    private func submit(_ text: String, byVoice: Bool, trigger: String? = nil, t0: Date? = nil) async {
+        guard !docs.isEmpty else { await ask(text, byVoice: byVoice, trigger: trigger, t0: t0); return }
+        let batch = docs
+        var paths: [String] = []
+        asking = true
+        do {
+            for (i, d) in batch.enumerated() {
+                uploading = JarvisDocs.progress(index: i, count: batch.count, name: d.name)
+                guard let data = d.bytes() else { throw RelayError(JarvisDocs.unreadable(d.name)) }
+                guard data.count <= JarvisDocs.maxBytes else { throw RelayError(JarvisDocs.tooBig(d.name)) }
+                paths.append(try await model.upload(name: d.name, data: data))
+            }
+        } catch {
+            uploading = ""
+            asking = false
+            self.error = error.localizedDescription
+            if input.isEmpty { input = text }
+            UsageRecorder.shared.record("jarvis", "dokument fehlgeschlagen", kind: "datei", error: error.localizedDescription)
+            return
+        }
+        uploading = ""
+        batch.forEach { $0.discard() }
+        docs.removeAll { d in batch.contains { $0.id == d.id } }
+        UsageRecorder.shared.record("jarvis", "dokument gesendet", kind: "datei", length: batch.count)
+        await ask(JarvisDocs.prompt(message: text, paths: paths, vault: model.vaultDir), byVoice: byVoice, trigger: trigger, t0: t0,
+                  shown: JarvisDocs.shown(message: text, names: batch.map(\.name)))
     }
 
     // MARK: Gesprächskontext
@@ -220,7 +371,7 @@ struct JarvisView: View {
         }
         let q = input; input = ""
         UsageRecorder.shared.content("jarvis", "gesendet", session: nil, kind: "text", text: q)
-        Task { await ask(q, byVoice: false) }
+        Task { await submit(q, byVoice: false) }
     }
 
     private func startVoice(trigger: String) {
@@ -251,8 +402,11 @@ struct JarvisView: View {
                     let o = JarvisDictation.outcome(heard: heard, end: end, typed: input)
                     input = o.field
                     if let q = o.ask {
-                        await ask(q, byVoice: true, trigger: kind, t0: t0)
+                        await submit(q, byVoice: true, trigger: kind, t0: t0)
                         if speakAnswers { await voice.waitUntilSpoken() }
+                    } else if end == .send, !docs.isEmpty {
+                        // Senden ohne Worte, aber mit Dokumenten: Jarvis bekommt sie und fragt nach
+                        await submit("", byVoice: false)
                     } else if !o.field.isEmpty {
                         inputFocused = true
                     }
@@ -268,7 +422,7 @@ struct JarvisView: View {
                 silent = 0
                 // "stop", "danke", "tschüss" end the conversation instead of being asked
                 if conversation && SpeechText.isStopPhrase(heard) { return }
-                await ask(heard, byVoice: true, trigger: kind, t0: t0)
+                await submit(heard, byVoice: true, trigger: kind, t0: t0)
                 if speakAnswers { await voice.waitUntilSpoken() }
                 kind = "follow_up"
             } while conversation && !Task.isCancelled
@@ -295,12 +449,13 @@ struct JarvisView: View {
 
     // MARK: ask
 
-    private func ask(_ raw: String, byVoice: Bool, trigger: String? = nil, t0: Date? = nil) async {
+    /// `shown`: was statt der Frage im Verlauf steht (Dokumente: Nachricht und Dateinamen statt des Auftrags mit Pfaden).
+    private func ask(_ raw: String, byVoice: Bool, trigger: String? = nil, t0: Date? = nil, shown: String? = nil) async {
         let q = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         asking = true; defer { asking = false }
         notice = nil
-        turns.append(Turn(q: q, a: "", done: false, voice: byVoice))
+        turns.append(Turn(q: shown ?? q, a: "", done: false, voice: byVoice))
         let idx = turns.count - 1
         let speak = byVoice && speakAnswers
         if speak { voice.beginReply() }

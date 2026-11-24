@@ -80,9 +80,10 @@ public enum AppSearch {
     }
 }
 
-/// Where a shared file goes: a new agent session (the default), the vault filing agent, the agent that files into
-/// the documents folder outside the vault, or a running session.
+/// Where a shared file goes: Jarvis (the default since 0.4.4: he hands it on), a new agent session, the vault filing
+/// agent, the agent that files into the documents folder outside the vault, or a running session.
 public enum ShareTarget: Equatable {
+    case jarvis
     case newSession
     case vault
     case documents
@@ -93,9 +94,10 @@ public enum ShareTarget: Equatable {
 public enum ShareLogic {
     public static let maxBytes = 50 * 1024 * 1024
 
-    /// The target of the share sheet. Nothing tapped: always a new session, with or without a message, never silently
-    /// the last used session. A running session gets the file only when it was tapped.
-    public static func target(picked: ShareTarget?) -> ShareTarget { picked ?? .newSession }
+    /// The target of the share sheet. Nothing tapped: Jarvis, with or without a message (Martin, 2026-11-23: shared
+    /// documents land at Jarvis, he hands them on), never silently the last used session. A running session gets the
+    /// file only when it was tapped.
+    public static func target(picked: ShareTarget?) -> ShareTarget { picked ?? .jarvis }
 
     /// Name of the new session, from the file name: "scan.pdf" or "scan.pdf und 2 weitere".
     public static func sessionName(paths: [String]) -> String {
@@ -107,6 +109,7 @@ public enum ShareLogic {
     /// Label of the confirm button for a target.
     public static func confirmLabel(_ t: ShareTarget) -> String {
         switch t {
+        case .jarvis: return "An Jarvis"
         case .newSession: return "Starten"
         case .vault, .documents: return "Ablegen"
         case .session: return "Senden"

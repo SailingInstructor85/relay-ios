@@ -2,8 +2,9 @@ import SwiftUI
 import RelayCore
 
 /// "In Relay öffnen" (no Share Extension): a file opened from Files, Mail or another app arrives through `onOpenURL`.
-/// The sheet asks where it goes and uploads the files. Default is "Neue Sitzung": a new agent in the vault folder whose
-/// first message is the note plus the upload paths. "Ins Vault einsortieren" starts an agent that files the uploads
+/// The sheet asks where it goes and uploads the files. Default is "An Jarvis geben" (since 0.4.4): Jarvis opens and gets
+/// the upload paths with the note (`JarvisDocs.prompt`), he hands the file on. "Neue Sitzung" starts a new agent in the
+/// vault folder whose first message is the note plus the upload paths. "Ins Vault einsortieren" starts an agent that files the uploads
 /// (`VaultDrop`), "In Dokumente ablegen" one that asks for the folder below the documents root first (`DocDrop`).
 /// A running session gets the paths only when it was tapped (`ShareLogic.target`).
 struct ShareView: View {
@@ -48,6 +49,8 @@ struct ShareView: View {
                     TextField(hint, text: $message, axis: .vertical).lineLimit(1...5).accessibilityIdentifier("shareMessage")
                 }
                 Section("Ziel") {
+                    targetRow(.jarvis, id: "shareJarvis", icon: "waveform", title: "An Jarvis geben",
+                              note: "Jarvis bekommt Datei und Nachricht und gibt sie an die passende Sitzung weiter")
                     targetRow(.newSession, id: "shareNew", icon: "plus.bubble", title: "Neue Sitzung",
                               note: "Ein neuer Agent im Vault-Ordner bekommt die Datei und deine Nachricht")
                 }
@@ -99,6 +102,7 @@ struct ShareView: View {
 
     private var hint: String {
         switch target {
+        case .jarvis: return "Was soll Jarvis damit tun?"
         case .newSession: return "Was soll der Agent damit tun?"
         case .vault, .documents: return "Hinweis für den Agenten (worum geht es?)"
         case .session: return "Was soll die Sitzung damit tun?"
@@ -147,8 +151,19 @@ struct ShareView: View {
                     Task { @MainActor in progress = "Lade \(n + 1)/\(items.count) \(label) hoch… \(Int(p * 100)) %" }
                 })
             }
+            if target == .jarvis {
+                // Jarvis öffnet sich im aktuellen Tab und bekommt den Auftrag mit den Pfaden; zu sehen sind Nachricht und Dateinamen
+                progress = ""
+                let route = Route.jarvisSend(shown: JarvisDocs.shown(message: message, names: items.map(\.name)),
+                                             text: JarvisDocs.prompt(message: message, paths: paths, vault: model.vaultDir))
+                UsageRecorder.shared.record("teilen", "an jarvis", kind: "datei", length: paths.count)
+                onDone()
+                AppRouter.shared.push(route, in: AppRouter.shared.tab)
+                return
+            }
             let start: (prompt: String, name: String)?
             switch target {
+            case .jarvis: start = nil
             case .newSession: start = (ShareLogic.body(message: message, paths: paths, text: nil), ShareLogic.sessionName(paths: paths))
             case .vault: start = (VaultDrop.prompt(paths: paths, note: message, docs: model.docsDir), VaultDrop.name(paths: paths))
             case .documents: start = (DocDrop.prompt(paths: paths, note: message, root: model.docsDir), DocDrop.name(paths: paths))

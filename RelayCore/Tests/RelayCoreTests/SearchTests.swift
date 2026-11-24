@@ -71,8 +71,10 @@ final class SearchTests: XCTestCase {
     }
 
     func testShareTarget() {
-        // nichts angetippt: immer eine neue Sitzung, nie stillschweigend die zuletzt genutzte
-        XCTAssertEqual(ShareLogic.target(picked: nil), .newSession)
+        // nichts angetippt: Jarvis bekommt die Datei (seit 0.4.4), nie stillschweigend die zuletzt genutzte Sitzung
+        XCTAssertEqual(ShareLogic.target(picked: nil), .jarvis)
+        XCTAssertEqual(ShareLogic.target(picked: .jarvis), .jarvis)
+        XCTAssertEqual(ShareLogic.confirmLabel(.jarvis), "An Jarvis")
         // eine Sitzung bekommt die Datei nur, wenn sie angetippt wurde
         XCTAssertEqual(ShareLogic.target(picked: .session("claude:c1:a")), .session("claude:c1:a"))
         XCTAssertEqual(ShareLogic.target(picked: .vault), .vault)

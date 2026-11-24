@@ -33,7 +33,10 @@ iPhone 16 Pro (iOS 17 oder neuer).
   markieren und in Teilen kopieren. Der Kurzbefehl „Jarvis in Relay“ funktioniert per Siri
   oder über die Aktionstaste. Eine Trennlinie im Verlauf zeigt, wo am PC ein neues Gespräch begonnen hat (jeden Tag um
   4 Uhr): Was davor steht, weiß Jarvis nicht mehr. Details und der geplante Knopf „Neues Gespräch beginnen“:
-  `docs/jarvis-kontext.md`.
+  `docs/jarvis-kontext.md`. Die Büroklammer links am Eingabefeld gibt Dokumente in den Chat
+  (Datei, Fotos oder Videos, Kamera): Sie stehen als Marken über der Eingabe und gehen mit der nächsten Nachricht, getippt
+  oder gesprochen, als Upload an den PC. Jarvis bekommt die Pfade mit deinem Auftrag und gibt das Dokument an die
+  passende Sitzung weiter oder startet eine neue dafür. Lesen kann er die Datei selbst nicht.
 - **Alle Sitzungen beenden** (Menü der Sitzungsliste): Jede gewählte Sitzung schreibt ihren Eintrag ins Agenten-Log
   der Daily Note und ihre Übergabe, dann beendet das Gateway sie. Sitzungen mit offener Auswahl oder Freigabe am PC
   bleiben mit Grund offen. Das Gateway schickt Nachrichten mit getrenntem Enter und prüft, ob das Eingabefeld am PC
@@ -94,9 +97,10 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Anhänge warten auf dem iPhone („wartet auf Verbindung“). Steht die Verbindung wieder, startet Relay einen Agenten im
   Vault-Ordner (Einstellungen → Ablage) mit allen wartenden Nachrichten in der richtigen Reihenfolge; spätere gehen in
   dieselbe Sitzung, solange sie läuft. Nichts geht doppelt raus.
-- **Datei an Relay teilen (seit 0.3.17 mit neuen Zielen):** Eine Datei aus einer anderen App über „Teilen“ oder
-  „Öffnen in“ an Relay geben. Das Blatt zeigt die Ziele: „Neue Sitzung“ (vorausgewählt, ein neuer Agent im Vault-Ordner
-  bekommt Nachricht und Datei), „Ins Vault einsortieren“ (seit 0.3.20: der Agent legt die Datei in die Inbox, sucht den
+- **Datei an Relay teilen (seit 0.4.4 landet sie bei Jarvis):** Eine Datei aus einer anderen App über „Teilen“ oder
+  „Öffnen in“ an Relay geben. Das Blatt zeigt die Ziele: „An Jarvis geben“ (vorausgewählt: die Datei geht an den PC,
+  Jarvis öffnet sich, bekommt Datei und Nachricht und gibt sie an die passende Sitzung weiter; ohne Nachricht schlägt
+  er vor, wohin sie gehört, und fragt), „Neue Sitzung“ (ein neuer Agent im Vault-Ordner bekommt Nachricht und Datei), „Ins Vault einsortieren“ (seit 0.3.20: der Agent legt die Datei in die Inbox, sucht den
   Ordner des Vorgangs im Vault und im Dokumenten-Ordner, schlägt ein bis drei Ziele mit Dateinamen vor und verschiebt
   erst nach deiner Antwort), „In Dokumente ablegen“ (der Agent schlägt Ordner unter dem
   Dokumenten-Ordner vor und fragt im Chat, bevor er verschiebt; Ordner in Einstellungen → Ablage) oder eine bestehende

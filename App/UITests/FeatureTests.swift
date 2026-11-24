@@ -283,6 +283,8 @@ final class InfoTests: RelayTestCase {
         mainMenu("Jarvis fragen")
         settle(1.5)
         shot("jarvis-leer")
+        // die Büroklammer links am Eingabefeld gibt Dokumente in den Chat
+        if !id("jarvisAttach").exists { notes.append("Jarvis: Knopf „Dokument anhängen“ fehlt") }
         typeInto("jarvisInput", "Was läuft gerade?")
         tapID("jarvisSend")
         settle(0.8)

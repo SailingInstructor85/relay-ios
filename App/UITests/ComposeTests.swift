@@ -144,11 +144,13 @@ final class ComposeTests: RelayTestCase {
     }
 
     func test10_ShareOpensNewSession() {
-        // Geteilte Datei mit Nachricht: ohne Antippen eines Ziels startet eine neue Sitzung im Vault-Ordner,
-        // keine bestehende Sitzung bekommt die Datei.
+        // Geteilte Datei mit Nachricht, Ziel „Neue Sitzung“ angetippt: eine neue Sitzung startet im Vault-Ordner,
+        // keine bestehende Sitzung bekommt die Datei. (Seit 0.4.4 ist „An Jarvis geben“ vorausgewählt, siehe test13.)
         launch(share: true)
         XCTAssertTrue(id("shareNew").waitForExistence(timeout: 60), "Teilen-Blatt nicht geöffnet")
         shot("teilen-blatt")
+        tapID("shareNew")
+        settle(0.5)
         if (id("shareNew").value as? String) != "gewählt" { notes.append("Haken an „Neue Sitzung“ nicht lesbar") }
         typeInto("shareMessage", "Bitte einsortieren")
         if id("shareSend").waitForExistence(timeout: 5) { id("shareSend").tap() } else { app.buttons["Starten"].firstMatch.tap() }
@@ -175,5 +177,25 @@ final class ComposeTests: RelayTestCase {
         }, timeout: 40), "Dokumenten-Agent nicht gestartet")
         settle(2)
         shot("teilen-dokumente-gestartet")
+    }
+
+    func test13_ShareLandsAtJarvis() {
+        // Geteilte Datei ohne Antippen eines Ziels: Sie geht als Upload an den PC, Jarvis öffnet sich und bekommt den
+        // Pfad mit der Nachricht. Keine Sitzung startet, keine bestehende bekommt die Datei.
+        launch(share: true)
+        XCTAssertTrue(id("shareJarvis").waitForExistence(timeout: 60), "Ziel „An Jarvis geben“ fehlt")
+        if (id("shareJarvis").value as? String) != "gewählt" { notes.append("Haken an „An Jarvis geben“ nicht lesbar") }
+        typeInto("shareMessage", "Wohin gehört das?")
+        if id("shareSend").waitForExistence(timeout: 5) { id("shareSend").tap() } else { app.buttons["An Jarvis"].firstMatch.tap() }
+        XCTAssertTrue(mockReceived("ask", where: { p in
+            let text = p["text"] as? String ?? ""
+            return text.contains("testbrief.txt") && text.contains("Wohin gehört das?")
+        }, timeout: 40), "Jarvis hat die Datei nicht bekommen")
+        XCTAssertFalse(rpcLog().contains { ["send", "launch"].contains($0["method"] as? String ?? "") }, "Datei ging an eine Sitzung statt an Jarvis")
+        if !id("jarvisInput").waitForExistence(timeout: 5) { notes.append("Jarvis nach dem Teilen nicht geöffnet") }
+        settle(4)
+        shot("teilen-an-jarvis")
+        // im Verlauf stehen Nachricht und Dateiname, nicht der Auftrag mit dem Pfad
+        expect("Anhang: testbrief.txt", 4, soft: true)
     }
 }

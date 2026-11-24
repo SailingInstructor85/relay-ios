@@ -87,6 +87,7 @@ struct RouteView: View {
         case .jarvis: JarvisView()
         case .jarvisListening: JarvisView(autoListen: true)
         case .jarvisAsk(let q): JarvisView(initialQuestion: q)
+        case .jarvisSend(let shown, let text): JarvisView(initialQuestion: text, initialShown: shown)
         case .notices: notice(nil)
         case .notice(let ref): notice(ref)
         case .drive: DriveView()
