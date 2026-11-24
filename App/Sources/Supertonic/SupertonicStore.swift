@@ -114,7 +114,7 @@ final class SupertonicStore: ObservableObject {
         warmTask?.cancel()
         warm = false
         warming = false
-        let worker = worker
+        let worker = self.worker
         Task { await worker.unload() }
         try? FileManager.default.removeItem(at: Self.dir)
         bytes = 0
@@ -180,6 +180,11 @@ final class SupertonicStore: ObservableObject {
             try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? fm.removeItem(at: dest)
             try fm.moveItem(at: tmp, to: dest)
+            // Stimmt die Größe nicht mit der Dateiliste überein, kam etwas anderes als die Datei (Fehlerseite, Abbruch).
+            if f.size > 0, let got = (try? fm.attributesOfItem(atPath: dest.path))?[.size] as? NSNumber, got.int64Value != f.size {
+                try? fm.removeItem(at: dest)
+                throw RelayErrorText("Eine Datei des Modells kam unvollständig an. Bitte noch einmal laden.")
+            }
             done += f.size
             phase = .downloading(done: done, total: total)
         }
@@ -188,8 +193,9 @@ final class SupertonicStore: ObservableObject {
         try note.write(to: dir.appendingPathComponent(Self.marker), options: .atomic)
     }
 
-    /// Lädt eine Datei in eine Zwischenablage und meldet die geladenen Bytes.
-    private static func fetch(_ url: URL, progress: @escaping @Sendable (Int64) -> Void) async throws -> URL {
+    /// Lädt eine Datei in eine Zwischenablage und meldet die geladenen Bytes. Außerhalb des Hauptthreads gebaut:
+    /// Die Rückrufe der Übertragung laufen auf fremden Threads.
+    nonisolated private static func fetch(_ url: URL, progress: @escaping @Sendable (Int64) -> Void) async throws -> URL {
         let box = TaskBox()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (c: CheckedContinuation<URL, Error>) in
@@ -250,7 +256,7 @@ final class SupertonicStore: ObservableObject {
     func warmUp() {
         guard active, !warm, warmTask == nil else { return }
         warming = true
-        let worker = worker, dir = Self.dir
+        let worker = self.worker, dir = Self.dir
         let started = Date()
         warmTask = Task { [weak self] in
             var failure: String?
@@ -272,7 +278,7 @@ final class SupertonicStore: ObservableObject {
     /// Ein deutscher Satz als Ton (mono, 44,1 kHz). Wirft, wenn das Modell fehlt oder die Berechnung scheitert.
     func synthesize(_ text: String) async throws -> [Float] {
         guard installed else { throw RelayErrorText("Supertonic ist nicht geladen.") }
-        let worker = worker, dir = Self.dir
+        let worker = self.worker, dir = Self.dir
         let speed = VoiceModel.speed(tempo: SpeechPrefs.tempo)
         let spoken = VoiceModel.spoken(text)
         let started = Date()
@@ -303,7 +309,7 @@ final class SupertonicStore: ObservableObject {
     func release() {
         guard warm, warmTask == nil else { return }
         warm = false
-        let worker = worker
+        let worker = self.worker
         Task { await worker.unload() }
     }
 }
@@ -354,12 +360,18 @@ final class PCMPlayer {
         }
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             waiting = (id, c)
-            node.scheduleBuffer(buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            Self.schedule(buffer, on: node) { [weak self] in
                 Task { @MainActor in self?.done(id) }
             }
             node.play()
         }
         guardTask.cancel()
+    }
+
+    /// Außerhalb des Hauptthreads gebaut: Die Rückmeldung der Ausgabe kommt auf einem Audiothread.
+    nonisolated private static func schedule(_ buffer: AVAudioPCMBuffer, on node: AVAudioPlayerNode,
+                                             done: @escaping @Sendable () -> Void) {
+        node.scheduleBuffer(buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack) { _ in done() }
     }
 
     private func done(_ id: Int) {
