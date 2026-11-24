@@ -617,3 +617,42 @@ Offen für Martin:
 - Am iPhone prüfen: Chat-Kopf (Titel neben dem Zurück-Knopf, hell und dunkel), Tastatur-Knopf über dem Eingabefeld, langes Drücken in einer Jarvis-Antwort.
 
 Version: `project.yml` 0.4.2 auf 0.4.3. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 24. November 2026, 08:30 (Version 0.4.4)
+
+Drei Einträge aus dem Backlog. Eintrag 1 und 3 sind umgesetzt, Eintrag 2 ist auf der App-Seite gebaut und bleibt offen, weil für den Knopf zwei RPCs im Gateway fehlen. Am Gateway (`~/relay`) wurde nichts geändert, nur gelesen.
+
+1. Sprachmodus: Mikrofon-Knopf für Sprachantworten.
+   Befund aus dem Vergleich: `DriveView.swift` ist auf `alt-main`, in v0.3.20, v0.3.16 und v0.3.12 bis auf eine Zeile (Navigationsziel `Route.jarvisListening`) gleich, gegenüber v0.3.9 kommen nur Bildschirm-an und Audio-Freigabe dazu. Im Sprachmodus ist also kein Knopf weggefallen. Auch die Einstiege gibt es weiter (Hinweise → „Sprachmodus“, „Im Sprachmodus beantworten“, Kurzbefehl), neu dazu das Auto-Symbol in „Dein Zug“. Was es bis 0.4.3 gab: Die App hört nach dem Vorlesen von selbst zu; ein Mikrofon-Knopf („Sprechen“) erschien nur in der Pause nach zweimal Stille. Wer sofort antworten wollte, musste die Ansage abwarten. Einen sichtbaren Mikrofon-Knopf wie den großen in Jarvis gab es im Sprachmodus nie. Seit 0.4.2 sind außerdem alte, längst beantwortete Rückfragen heraus: Der Sprachmodus steht dadurch öfter auf „Wartet auf Rückfragen“, wo gar kein Mikrofon zu sehen ist.
+   Gebaut: großer Knopf über den übrigen Knöpfen, solange eine Antwort möglich ist (Frage beantworten, Antwort kontrollieren, im Gespräch mit einer Sitzung diktieren und kontrollieren). „Jetzt sprechen“ bricht das Vorlesen ab, die Ansagen bis zum Zuhören entfallen, die Aufnahme beginnt sofort. Während der Aufnahme heißt er „Fertig“ (rot) und beendet sie, das Gehörte zählt. Regel `DriveMic.state` (C: Drive.swift), Ausführung `DriveController.micTapped` (A: DriveView.swift). Ohne Mikrofon-Erlaubnis kein Knopf. In der Pause bleibt „Sprechen“.
+   Tests: RelayCore `DriveTests.testMicButton`. UI-Test `test24_DriveMode` prüft, dass `driveMic` beim Beantworten da ist (als Notiz, nicht hart).
+
+2. Jarvis: Gesprächskontext regelmäßig zurücksetzen. Bleibt offen.
+   Befund (Gateway, `router.py`): Das Zurücksetzen gibt es schon. Ein Gespräch je Tag, der Tag beginnt um 4 Uhr (`DAY_STARTS_H`), und ab 600 KB Verlauf (`SESSION_MAX_BYTES`) beginnt mit der nächsten Frage ein neues. Der Kontext kann also nicht volllaufen. Was fehlt, ist ein Zurücksetzen auf Knopfdruck und eine Auskunft über den Füllstand.
+   Gebaut (App): Trennlinie im Jarvis-Verlauf an der Tagesgrenze 4 Uhr („Neues Gespräch. Jarvis kennt das Frühere nicht mehr.“) und am Ende der Hinweis, wenn die nächste Frage ein neues Gespräch beginnt. Vorbereitet: Menüabschnitt „Gespräch am PC zu N % gefüllt“ mit „Neues Gespräch beginnen“, nur sichtbar, wenn das Gateway `jarvis_context` beantwortet. Logik `JarvisContext` (C: JarvisContext.swift), Tests `JarvisContextTests`.
+   Fehlt im Gateway: RPC `jarvis_context` → `{"bytes", "max_bytes", "day", "day_starts_h"}` und RPC `jarvis_reset` → `{}` (neue Sitzungs-ID im State `router_session:<home>`, Prozess unter dem Lock schließen, `prestart()`), dazu zwei Zeilen in `PROTOCOL.md`. Genau beschrieben in `docs/jarvis-kontext.md`, dort steht auch der Vorschlag an Martin (Zeit 4 Uhr und 600 KB lassen, Knopf dazu, offen: neues Gespräch nach langer Pause).
+
+3. Jarvis: Dokumente in den Chat geben, Teilen-Blatt landet bei Jarvis.
+   Befund (Gateway): Jarvis läuft ohne Dateiwerkzeuge (`--tools ""`, nur `mcp__notifyd`). Er kann eine Datei nicht lesen, aber mit `dispatch` an eine laufende Sitzung geben oder mit `new_session` eine Sitzung damit starten. Der Upload (`upload_*`) und `ask` reichen, am Gateway ist nichts zu ändern.
+   Gebaut: Büroklammer links am Jarvis-Eingabefeld (`jarvisAttach`) mit „Datei“ (mehrere möglich), „Fotos oder Videos“, „Kamera“. Die Auswahl steht als Marken über der Eingabe (`jarvisDocs`), jede lässt sich herausnehmen. Beim Senden (getippt, gesprochen oder ohne Text) lädt die App die Dateien hoch und fragt Jarvis mit `JarvisDocs.prompt`: Pfade, Martins Auftrag oder die Bitte um einen Vorschlag, und der Satz, dass er nicht lesen kann und mit vollem Pfad weitergeben soll (neue Sitzung im Vault-Ordner aus den Einstellungen). Im Verlauf steht nur „Nachricht + Anhang: name“ (`JarvisDocs.shown`). Scheitert ein Upload, bleiben Dokumente und Text stehen.
+   Teilen-Blatt: neues Ziel „An Jarvis geben“ (`shareJarvis`), vorausgewählt (`ShareLogic.target` gibt ohne Antippen `.jarvis`). Nach dem Upload schließt das Blatt und Jarvis öffnet sich im aktuellen Tab über `Route.jarvisSend(shown:text:)`. Die übrigen Ziele bleiben, „Neue Sitzung“ gilt nur noch nach Antippen. Der Knopf oben rechts heißt bei Jarvis „An Jarvis“.
+   Tests: RelayCore `JarvisDocsTests`, `SearchTests.testShareTarget`, `TabsTests`. UI-Tests: `ComposeTests.test10_ShareOpensNewSession` tippt jetzt erst „Neue Sitzung“ an, neu `test13_ShareLandsAtJarvis` (prüft `ask` mit Dateiname und Nachricht, kein `send` und kein `launch`), `FeatureTests.test10_Jarvis` vermerkt eine fehlende Büroklammer.
+
+Entscheidungen:
+- Eintrag 1 als erledigt gemeldet, obwohl der Vergleich keinen weggefallenen Knopf zeigt: Der Wunsch im Titel (Mikrofon-Knopf für Sprachantworten im Sprachmodus) ist jetzt erfüllt. Meinte Martin etwas anderes, bitte neu eintragen und sagen, auf welchem Bildschirm der Knopf früher war.
+- Jarvis ist im Teilen-Blatt der Standard, weil Martin es so wollte („landet bei Jarvis, Jarvis verteilt“). Der bisherige Standard „Neue Sitzung“ liegt eine Zeile darunter.
+- Kein toter Knopf: „Neues Gespräch beginnen“ bleibt unsichtbar, bis das Gateway antwortet.
+- Die Trennlinie richtet sich nach der Uhr des iPhones und der festen Grenze 4 Uhr. Den Wechsel nach Größe sieht die App nicht.
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert, nicht am iPhone geprüft. Stellen für den Compiler: `ForEach` über `turns.enumerated()` mit Trennlinie in `JarvisView`, das Menü mit `Section` im Jarvis-Menü, `fileImporter` mit Mehrfachauswahl, `micButton` in `DriveView`.
+- Wie gut Jarvis Dokumente verteilt, hängt an seinem Prompt am PC und am Modell. Der Auftrag der App sagt ihm, was er tun soll; ob er die richtige Sitzung wählt, zeigt erst die Nutzung. Ohne Nachricht soll er erst fragen.
+- Dateien aus der Dateien-App liest die App beim Anhängen in den Speicher (bis 50 MB je Datei). Mehrere sehr große Dateien auf einmal können knapp werden.
+- „Jetzt sprechen“ im Sprachmodus überspringt alle Ansagen bis zum Zuhören. Wer mitten in der Frage tippt, hört den Rest nicht mehr (er steht auf dem Bildschirm).
+- `test13_ShareLandsAtJarvis` schiebt Jarvis auf den Stapel, während das Teilen-Blatt schließt. Öffnet sich Jarvis im Simulator nicht, steht das als Notiz im Test, der `ask` kommt dann nicht und der Test schlägt fehl.
+
+Offen für Martin:
+- Am iPhone prüfen: Mikrofon-Knopf im Sprachmodus, Büroklammer in Jarvis mit einer PDF, eine Datei aus einer anderen App teilen.
+- Entscheiden, ob das Gateway die beiden RPCs für „Neues Gespräch beginnen“ bekommen soll (`docs/jarvis-kontext.md`).
+
+Version: `project.yml` 0.4.3 auf 0.4.4. Nicht gepusht, kein Tag. Das übernimmt das Skript.

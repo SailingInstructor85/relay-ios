@@ -2,6 +2,17 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.4 (2026-11-24)
+
+**Neu**
+- Sprachmodus: großer Mikrofon-Knopf für Sprachantworten. „Jetzt sprechen“ bricht das Vorlesen ab und nimmt sofort auf, du musst die Ansage nicht zu Ende hören. Während der Aufnahme heißt der Knopf „Fertig“ und beendet sie sofort, ohne die Sprechpause abzuwarten. Er steht über den übrigen Knöpfen, solange eine Antwort möglich ist, auch im Gespräch mit einer Sitzung.
+- Jarvis: Büroklammer links am Eingabefeld, um Dokumente in den Chat zu geben (Datei, Fotos oder Videos, Kamera). Die Dokumente stehen als Marken über der Eingabe und gehen mit der nächsten Nachricht mit, getippt oder gesprochen. Jarvis gibt sie an die passende Sitzung weiter oder startet eine neue dafür. Schreibst du nichts dazu, schlägt er vor, wohin es gehört, und fragt vorher.
+- Jarvis: Eine Trennlinie im Verlauf zeigt, wo am PC ein neues Gespräch begonnen hat (jeden Tag um 4 Uhr). Was davor steht, weiß Jarvis nicht mehr.
+
+**Geändert**
+- Teilen an Relay landet jetzt bei Jarvis: Im Blatt ist „An Jarvis geben“ vorausgewählt. Die Datei geht an den PC, Jarvis öffnet sich mit deiner Nachricht und verteilt sie. „Neue Sitzung“, „Ins Vault einsortieren“, „In Dokumente ablegen“ und eine bestehende Sitzung gibt es weiter, sie gelten nach Antippen.
+- Vorbereitet: Knopf „Neues Gespräch beginnen“ im Jarvis-Menü mit Anzeige, wie voll das Gespräch am PC ist. Beides erscheint erst, wenn der PC die Auskunft liefert. Dafür fehlt am PC noch eine kleine Ergänzung. Bis dahin beginnt Jarvis wie bisher täglich um 4 Uhr und bei sehr langem Verlauf von selbst neu.
+
 ## 0.4.3 (2026-11-24)
 
 **Neu**
