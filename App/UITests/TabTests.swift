@@ -31,6 +31,7 @@ final class TabTests: RelayTestCase {
         settle(1.5)
         shot("heute-jarvis")
         XCTAssertTrue(mockReceived("ask", where: { ($0["text"] as? String) == "Was läuft gerade?" }), "ask mit der Frage fehlt")
+        XCTAssertTrue(mockReceived("ask", where: { $0["upload"] == nil }, timeout: 2), "getippte Frage ist als Upload gekennzeichnet")
         XCTAssertTrue(id("jarvisInput").waitForExistence(timeout: 5), "Jarvis nicht geöffnet")
     }
 

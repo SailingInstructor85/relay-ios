@@ -205,6 +205,8 @@ final class ComposeTests: RelayTestCase {
             let text = p["text"] as? String ?? ""
             return text.contains("testbrief.txt") && text.contains("Wohin gehört das?")
         }, timeout: 40), "Jarvis hat die Datei nicht bekommen")
+        // als Upload gekennzeichnet: Das Gateway macht daraus einen neuen Vorgang, nie die Antwort auf eine offene Rückfrage
+        XCTAssertTrue(mockReceived("ask", where: { ($0["upload"] as? Bool) == true }, timeout: 2), "ask ohne Kennzeichen upload")
         XCTAssertFalse(rpcLog().contains { ["send", "launch"].contains($0["method"] as? String ?? "") }, "Datei ging an eine Sitzung statt an Jarvis")
         if !id("jarvisInput").waitForExistence(timeout: 5) { notes.append("Jarvis nach dem Teilen nicht geöffnet") }
         settle(4)

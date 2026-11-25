@@ -13,6 +13,26 @@ final class JarvisDocsTests: XCTestCase {
         XCTAssertFalse(p.contains("Ein Bild kann die Sitzung ansehen"))
     }
 
+    func testAskParamsMarkUploads() {
+        // Ein Upload ist als solcher gekennzeichnet: Das Gateway legt dafür immer einen neuen Vorgang an und verbucht
+        // ihn nie als Antwort auf eine offene Rückfrage.
+        let prompt = JarvisDocs.prompt(message: "", paths: ["/home/m/uploads/2026-11-26/536.pdf"], vault: "~/vault")
+        let up = JarvisDocs.askParams(text: prompt, byVoice: false, upload: true)
+        XCTAssertEqual(up["upload"], .bool(true))
+        XCTAssertEqual(up["text"], .string(prompt))
+        XCTAssertEqual(up["stream"], .bool(true))
+        XCTAssertEqual(up["source"], .string("text"))
+        // gesprochener Auftrag zu einem Anhang bleibt ein Upload
+        let spoken = JarvisDocs.askParams(text: prompt, byVoice: true, upload: true)
+        XCTAssertEqual(spoken["upload"], .bool(true))
+        XCTAssertEqual(spoken["source"], .string("voice"))
+        // getippter oder gesprochener Text ohne Anhang: kein Feld, er darf eine offene Rückfrage beantworten
+        let typed = JarvisDocs.askParams(text: "Ja, wie bei 533", byVoice: false, upload: false)
+        XCTAssertNil(typed["upload"])
+        XCTAssertEqual(Set(typed.keys), ["text", "stream", "source"])
+        XCTAssertNil(JarvisDocs.askParams(text: "Ja", byVoice: true, upload: false)["upload"])
+    }
+
     func testPromptForPictures() {
         let one = JarvisDocs.prompt(message: "Zur Bewerbung bei Muster legen", paths: ["/u/foto-1700000000.png"])
         XCTAssertTrue(one.hasPrefix("Martin gibt dir ein Bild vom iPhone (Foto oder Screenshot). Es liegt als Upload am PC:"))

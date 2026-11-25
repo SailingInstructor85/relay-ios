@@ -165,7 +165,8 @@ struct JarvisView: View {
             if let q = initialQuestion, !askedInitial {
                 askedInitial = true
                 UsageRecorder.shared.content("jarvis", "gesendet", session: nil, kind: initialShown == nil ? "text" : "datei", text: initialShown ?? q)
-                Task { await ask(q, byVoice: false, shown: initialShown) }
+                // aus „Teilen“ kommt die Frage immer mit hochgeladenen Dateien (initialShown gesetzt): ein Upload
+                Task { await ask(q, byVoice: false, shown: initialShown, upload: initialShown != nil) }
             }
             await loadVocab()
             if autoListen { startVoice(trigger: "mic") }
@@ -346,7 +347,7 @@ struct JarvisView: View {
         docs.removeAll { d in batch.contains { $0.id == d.id } }
         UsageRecorder.shared.record("jarvis", "dokument gesendet", kind: "datei", length: batch.count)
         await ask(JarvisDocs.prompt(message: text, paths: paths, vault: model.vaultDir), byVoice: byVoice, trigger: trigger, t0: t0,
-                  shown: JarvisDocs.shown(message: text, names: batch.map(\.name)))
+                  shown: JarvisDocs.shown(message: text, names: batch.map(\.name)), upload: true)
     }
 
     // MARK: Gesprächskontext
@@ -480,7 +481,9 @@ struct JarvisView: View {
     // MARK: ask
 
     /// `shown`: was statt der Frage im Verlauf steht (Dokumente: Nachricht und Dateinamen statt des Auftrags mit Pfaden).
-    private func ask(_ raw: String, byVoice: Bool, trigger: String? = nil, t0: Date? = nil, shown: String? = nil) async {
+    /// `upload`: Die Frage ist ein Upload. Das Gateway macht daraus immer einen neuen Vorgang und nie die Antwort auf
+    /// eine offene Rückfrage (`JarvisDocs.askParams`).
+    private func ask(_ raw: String, byVoice: Bool, trigger: String? = nil, t0: Date? = nil, shown: String? = nil, upload: Bool = false) async {
         let q = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         asking = true; defer { asking = false }
@@ -493,7 +496,7 @@ struct JarvisView: View {
         let stamp = Stamp()
         let sent = Date()
         do {
-            let r = try await model.rpc("ask", ["text": .string(q), "stream": true, "source": .string(byVoice ? "voice" : "text")], timeout: 300) { delta in
+            let r = try await model.rpc("ask", .object(JarvisDocs.askParams(text: q, byVoice: byVoice, upload: upload)), timeout: 300) { delta in
                 Task { @MainActor in
                     turns[idx].a += delta
                     if !streamed.value { stamp.first = Date() }

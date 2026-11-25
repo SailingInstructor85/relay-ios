@@ -29,6 +29,18 @@ public enum JarvisDocs {
         return lines.joined(separator: "\n")
     }
 
+    /// Was mit einer Frage an das Gateway geht (RPC `ask`). `upload`: Die Nachricht ist ein Upload (Fotos oder
+    /// Dokumente mit dem Auftrag aus `prompt`). Dann steht `upload: true` dabei, und das Gateway legt dafür immer einen
+    /// neuen Vorgang an, auch wenn gerade eine Rückfrage offen ist (26.11.2026: Der Auftragstext eines Uploads wurde
+    /// als Antwort auf die offene Rückfrage R13 verbucht, die Rückfrage galt als beantwortet, das Dokument hatte keine
+    /// eigene Kennung). Eine offene Rückfrage beantwortet nur, was Martin ohne Anhang tippt oder spricht: Dort fehlt
+    /// das Feld. Ein Gateway, das das Feld nicht kennt, übergeht es.
+    public static func askParams(text: String, byVoice: Bool, upload: Bool) -> [String: JSON] {
+        var p: [String: JSON] = ["text": .string(text), "stream": .bool(true), "source": .string(byVoice ? "voice" : "text")]
+        if upload { p["upload"] = .bool(true) }
+        return p
+    }
+
     /// Fotos und Screenshots (auch aus der Zwischenablage) sind Bilder, Videos zählen hier als Dokument.
     public static func isPicture(_ nameOrPath: String) -> Bool { Attach.isImage(nameOrPath) }
 
