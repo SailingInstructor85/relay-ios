@@ -18,14 +18,14 @@ final class JarvisDocsTests: XCTestCase {
         // ihn nie als Antwort auf eine offene Rückfrage.
         let prompt = JarvisDocs.prompt(message: "", paths: ["/home/m/uploads/2026-11-26/536.pdf"], vault: "~/vault")
         let up = JarvisDocs.askParams(text: prompt, byVoice: false, upload: true)
-        XCTAssertEqual(up["upload"], .bool(true))
-        XCTAssertEqual(up["text"], .string(prompt))
-        XCTAssertEqual(up["stream"], .bool(true))
-        XCTAssertEqual(up["source"], .string("text"))
+        XCTAssertEqual(up["upload"], JSON.bool(true))
+        XCTAssertEqual(up["text"], JSON.string(prompt))
+        XCTAssertEqual(up["stream"], JSON.bool(true))
+        XCTAssertEqual(up["source"], JSON.string("text"))
         // gesprochener Auftrag zu einem Anhang bleibt ein Upload
         let spoken = JarvisDocs.askParams(text: prompt, byVoice: true, upload: true)
-        XCTAssertEqual(spoken["upload"], .bool(true))
-        XCTAssertEqual(spoken["source"], .string("voice"))
+        XCTAssertEqual(spoken["upload"], JSON.bool(true))
+        XCTAssertEqual(spoken["source"], JSON.string("voice"))
         // getippter oder gesprochener Text ohne Anhang: kein Feld, er darf eine offene Rückfrage beantworten
         let typed = JarvisDocs.askParams(text: "Ja, wie bei 533", byVoice: false, upload: false)
         XCTAssertNil(typed["upload"])
