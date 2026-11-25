@@ -533,12 +533,52 @@ public enum CommandMenu {
         public init(top: [String], more: [String]) { self.top = top; self.more = more }
     }
 
+    /// Der Befehl zum Beenden („/exit“, „/quit“) steht nicht in den Listen: Er hat im Menü einen eigenen Eintrag
+    /// (`SessionExit`), der die Sitzung ganz schließt, statt den Befehl nur ins Feld zu legen.
     public static func items(tool: String, user: [String]) -> Items {
         var seen = Set<String>()
-        let top = user.filter { seen.insert($0).inserted }
-        let more = SlashCatalog.forTool(tool, user: top).filter { !seen.contains($0) }
+        let top = user.filter { !SessionExit.isExit($0) && seen.insert($0).inserted }
+        let more = SlashCatalog.forTool(tool, user: top).filter { !seen.contains($0) && !SessionExit.isExit($0) }
         return Items(top: top, more: more)
     }
+}
+
+/// „/exit“ im Befehlsmenü der Sitzung (Martin, 25.11.2026: alte Sitzungen direkt in der App ganz schließen). Der Eintrag
+/// tippt den Befehl nicht ins Terminal, denn danach stünde die tmux-Sitzung am PC noch. Er nimmt denselben Weg wie
+/// „Sitzung schließen“ im Sitzungsmenü (Gateway `close` mit `stop`): Agent sauber beenden, tmux-Sitzung weg, das
+/// Gespräch bleibt und lässt sich wieder öffnen. Vorher fragt die App kurz nach. Wer den Befehl von Hand ins Feld
+/// schreibt und sendet, bekommt dieselbe Nachfrage.
+public enum SessionExit {
+    /// Wie der Befehl im jeweiligen Werkzeug heißt (Claude „/exit“, Codex „/quit“).
+    public static func command(tool: String) -> String { tool == "codex" ? "/quit" : "/exit" }
+
+    /// Eintrag im Befehlsmenü, zum Beispiel „/exit · Sitzung schließen“.
+    public static func menuLabel(tool: String) -> String { "\(command(tool: tool)) · Sitzung schließen" }
+
+    /// Ist der Text nur der Befehl zum Beenden? Beide Schreibweisen gelten in jedem Werkzeug, Groß- und
+    /// Kleinschreibung und Leerraum am Rand sind egal. „/exit jetzt“ oder „bitte /exit“ sind normale Nachrichten.
+    public static func isExit(_ text: String) -> Bool {
+        ["/exit", "/quit"].contains(text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    }
+
+    /// Schließen lässt sich nur eine laufende Sitzung (wie „Sitzung schließen“ im Sitzungsmenü). Eine beendete,
+    /// geschlossene oder ruhende bietet dort „Wieder öffnen“.
+    public static func available(alive: Bool, exited: Bool, closed: Bool, hibernated: Bool) -> Bool {
+        alive && !exited && !closed && !hibernated
+    }
+
+    public static let confirmTitle = "Sitzung ganz schließen?"
+    public static let confirmButton = "Ganz schließen"
+    public static let cancelButton = "Abbrechen"
+
+    /// Text unter der Nachfrage. Arbeitet die Sitzung gerade, steht das dabei.
+    public static func confirmNote(busy: Bool) -> String {
+        let base = "Der Agent wird beendet und die Sitzung am PC geschlossen. Das Gespräch bleibt erhalten, du kannst die Sitzung später wieder öffnen."
+        return busy ? "Die Sitzung arbeitet gerade, die laufende Arbeit wird abgebrochen. " + base : base
+    }
+
+    /// Hinweis, wenn der Befehl von Hand gesendet wird, die Sitzung aber nicht mehr läuft.
+    public static let notRunning = "Die Sitzung läuft nicht mehr, es gibt nichts zu schließen."
 }
 
 /// Lesemodus im Chat (2026-11-07): Navigationsleiste, Eingabezeile und Tastatur verschwinden, der Verlauf füllt den

@@ -53,6 +53,20 @@ final class ComposeTests: RelayTestCase {
         tap("Esc senden", 3)
         XCTAssertTrue(mockReceived("send", where: { ($0["keys"] as? [String]) == ["Escape"] }), "Esc kam nicht beim Mock an")
         shot("esc-gesendet")
+        // „/exit“ schließt die Sitzung ganz, nach einer kurzen Nachfrage; getippt wird der Befehl nicht.
+        tapID("commandMenu")
+        settle(0.8)
+        expect("/exit · Sitzung schließen", 3)
+        tap("/exit · Sitzung schließen", 3)
+        settle(1.2)
+        shot("exit-nachfrage")
+        expect("Sitzung ganz schließen?", 4)
+        XCTAssertFalse(rpcLog().contains { ($0["method"] as? String) == "close" }, "Sitzung wurde ohne Nachfrage geschlossen")
+        tap("Ganz schließen", 3, exact: true)
+        settle(1.5)
+        XCTAssertTrue(mockReceived("close", where: { ($0["stop"] as? Bool) == true }), "close mit stop kam nicht beim Mock an")
+        XCTAssertFalse(rpcLog().contains { ($0["method"] as? String) == "send" && ((($0["params"] as? [String: Any])?["text"] as? String) ?? "").contains("/exit") }, "„/exit“ wurde ins Terminal getippt")
+        shot("exit-geschlossen")
     }
 
     func test03_SendToBusySession() {

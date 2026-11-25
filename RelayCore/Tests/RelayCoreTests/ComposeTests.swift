@@ -376,6 +376,41 @@ final class CommandMenuTests: XCTestCase {
         XCTAssertEqual(CommandMenu.items(tool: "fremd", user: ["/a"]), CommandMenu.Items(top: ["/a"], more: []))
     }
 
+    func testExitCommandHasItsOwnEntry() {
+        // „/exit“ und „/quit“ stehen nicht in den Listen (dort würden sie nur ins Feld gelegt), sondern als eigener Eintrag.
+        let codex = CommandMenu.items(tool: "codex", user: ["/status", "/quit", "/EXIT"])
+        XCTAssertEqual(codex.top, ["/status"])
+        XCTAssertFalse(codex.more.contains("/quit"))
+        XCTAssertTrue(codex.more.contains("/model"))
+        let claude = CommandMenu.items(tool: "claude", user: ["/exit", "/compact"])
+        XCTAssertEqual(claude.top, ["/compact"])
+        XCTAssertEqual(SessionExit.command(tool: "claude"), "/exit")
+        XCTAssertEqual(SessionExit.command(tool: "codex"), "/quit")
+        XCTAssertEqual(SessionExit.command(tool: "agy"), "/exit")
+        XCTAssertEqual(SessionExit.menuLabel(tool: "claude"), "/exit · Sitzung schließen")
+        XCTAssertEqual(SessionExit.menuLabel(tool: "codex"), "/quit · Sitzung schließen")
+    }
+
+    func testExitTextAndAvailability() {
+        XCTAssertTrue(SessionExit.isExit("/exit"))
+        XCTAssertTrue(SessionExit.isExit("  /Exit \n"))
+        XCTAssertTrue(SessionExit.isExit("/quit"))
+        XCTAssertFalse(SessionExit.isExit("/exit jetzt"))
+        XCTAssertFalse(SessionExit.isExit("bitte /exit"))
+        XCTAssertFalse(SessionExit.isExit("/exits"))
+        XCTAssertFalse(SessionExit.isExit(""))
+        XCTAssertTrue(SessionExit.available(alive: true, exited: false, closed: false, hibernated: false))
+        XCTAssertFalse(SessionExit.available(alive: false, exited: false, closed: false, hibernated: false))
+        XCTAssertFalse(SessionExit.available(alive: true, exited: true, closed: false, hibernated: false))
+        XCTAssertFalse(SessionExit.available(alive: true, exited: false, closed: true, hibernated: false))
+        XCTAssertFalse(SessionExit.available(alive: true, exited: false, closed: false, hibernated: true))
+        XCTAssertTrue(SessionExit.confirmNote(busy: true).hasPrefix("Die Sitzung arbeitet gerade"))
+        XCTAssertFalse(SessionExit.confirmNote(busy: false).contains("arbeitet gerade"))
+        XCTAssertTrue(SessionExit.confirmNote(busy: true).hasSuffix(SessionExit.confirmNote(busy: false)))
+        // Knopf und Titel der Nachfrage unterscheiden sich vom Eintrag „Sitzung schließen“ im Sitzungsmenü
+        XCTAssertNotEqual(SessionExit.confirmButton, "Sitzung schließen")
+    }
+
     func testHideKeyboardOnlyWithOpenKeyboard() {
         XCTAssertEqual(CommandMenu.escLabel, "Esc senden")
     }

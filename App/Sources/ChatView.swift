@@ -36,6 +36,8 @@ struct ChatView: View {
     @ObservedObject private var outbox = Outbox.shared
     @State private var error: String?
     @State private var confirmForce: String?
+    /// Nachfrage vor „/exit“ (Befehlsmenü oder von Hand gesendet): die Sitzung ganz schließen (SessionExit).
+    @State private var confirmExit = false
     @State private var resyncing = false
     @State private var importing = false
     @State private var pickingPhoto = false
@@ -190,6 +192,12 @@ struct ChatView: View {
         } message: {
             Text("Die Nachricht wartet im Postausgang und geht von selbst hinaus, sobald die Sitzung fertig ist. Du kannst sie auch gleich trotzdem senden, bearbeiten oder verwerfen.")
         }
+        .confirmationDialog(SessionExit.confirmTitle, isPresented: $confirmExit, titleVisibility: .visible) {
+            Button(SessionExit.confirmButton, role: .destructive) { Task { await exitSession() } }
+            Button(SessionExit.cancelButton, role: .cancel) {}
+        } message: {
+            Text(SessionExit.confirmNote(busy: session?.state == "busy"))
+        }
         .task(id: key) { await openChat() }
         .onAppear {
             model.rememberOpened(key)
@@ -271,6 +279,12 @@ struct ChatView: View {
                 }
             }
             Divider()
+            if canExit {
+                // erst nachfragen, wenn das Menü zu ist (ein Dialog während des Schließens ging auf dem iPhone verloren)
+                Button(role: .destructive) { Task { try? await Task.sleep(nanoseconds: 350_000_000); confirmExit = true } } label: {
+                    Label(SessionExit.menuLabel(tool: tool), systemImage: "xmark.circle")
+                }
+            }
             Button(role: .destructive) { sendEscape() } label: { Label(CommandMenu.escLabel, systemImage: "escape") }
                 .disabled(session == nil)
         } label: {
@@ -306,6 +320,21 @@ struct ChatView: View {
     private func insertFromMenu(_ c: String) {
         input = c + " "
         Task { try? await Task.sleep(nanoseconds: 350_000_000); focused = true }
+    }
+
+    /// Läuft die Sitzung, sodass „/exit“ sie schließen kann (dieselbe Bedingung wie „Sitzung schließen“ im Sitzungsmenü)?
+    private var canExit: Bool {
+        guard let s = session else { return false }
+        return SessionExit.available(alive: s.alive, exited: s.exited, closed: s.closed, hibernated: s.hibernated)
+    }
+
+    /// „/exit“ nach der Nachfrage: derselbe Weg wie „Sitzung schließen“ (Gateway `close` mit `stop`). Steht der Befehl
+    /// noch im Feld (von Hand getippt), verschwindet er.
+    private func exitSession() async {
+        guard let s = session else { return }
+        UsageRecorder.shared.record("chat", "exit", session: s.key)
+        if SessionExit.isExit(input) { input = "" }
+        await model.close(s)
     }
 
     /// Esc an die Sitzung (bricht eine Auswahl oder Eingabe im Terminal ab); „Stoppen“ im Sitzungsmenü bleibt daneben.
@@ -790,6 +819,11 @@ struct ChatView: View {
         guard voice.listening else {
             // Gewählte Fotos gehen mit: erst hochladen (Pfade ins Feld), dann senden; scheitert ein Upload, wird nichts gesendet.
             if !staged.isEmpty { await uploadStaged(); guard staged.isEmpty else { return } }
+            // „/exit“ von Hand: nicht ins Terminal tippen (die tmux-Sitzung bliebe stehen), sondern nachfragen und ganz schließen
+            if SessionExit.isExit(input) {
+                if canExit { focused = false; confirmExit = true } else { error = SessionExit.notRunning }
+                return
+            }
             await send(input); return
         }
         guard !sendAfterDictation else { return }
