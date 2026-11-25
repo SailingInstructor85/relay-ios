@@ -14,7 +14,9 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Werkzeugaufrufe, Codeblöcke, Statuszeile während die Sitzung arbeitet. Lesemodus über den Eintrag „Lesemodus“ im Sitzungsmenü (oben rechts, dort auch der Live-Bildschirm;
   Leisten und Tastatur weg, der Verlauf füllt den Bildschirm). Die Tastatur schließt der runde Knopf „Tastatur ausblenden“ rechts über dem Eingabefeld
   (erscheint, sobald die Tastatur offen ist), ein Tipp in den Verlauf oder Wischen nach unten. Slash-Befehle und „Esc senden“ stehen im Befehlsmenü („/“ links
-  an der Eingabeleiste). Im Kopf steht unter dem Namen, welcher Agent in der Sitzung arbeitet
+  an der Eingabeleiste). Dort schließt seit 0.4.9 der Eintrag „/exit · Sitzung schließen“ (bei Codex „/quit“) die Sitzung ganz: Nach einer
+  kurzen Nachfrage wird der Agent beendet und die Sitzung am PC geschlossen, das Gespräch bleibt und lässt sich wieder öffnen. Dasselbe
+  passiert, wenn du „/exit“ von Hand sendest. Im Kopf steht unter dem Namen, welcher Agent in der Sitzung arbeitet
   (Claude oder Codex, farbig mit Symbol), dahinter Modell, Ordner und Kontext; dieselbe Angabe steht unten im Sitzungsmenü.
 - **Antwortkarten** für Fragen, Auswahllisten (`/model`, Berechtigungsabfragen, Plan-Freigabe) und Panels (`/usage`,
   `/status`), mit `expect_menu`, damit eine veraltete Karte keinen neuen Dialog beantwortet
@@ -42,7 +44,10 @@ iPhone 16 Pro (iOS 17 oder neuer).
   über der Eingabe, Bilder mit Vorschau, und gehen mit der nächsten Nachricht, getippt oder gesprochen, als Upload an
   den PC. Jarvis bekommt die Pfade mit deinem Auftrag und gibt Bild oder Dokument an die passende Sitzung weiter oder
   startet eine neue dafür, die es dort ablegt, wo es hingehört (ein Bild zum Beispiel in der Notiz des Vorgangs).
-  Lesen kann er die Datei selbst nicht.
+  Lesen kann er die Datei selbst nicht. Seit 0.4.9 kennzeichnet die App einen solchen Upload beim Senden (`upload: true`), damit das
+  Gateway ihn als eigenen Vorgang führt, auch wenn gerade eine Rückfrage offen ist. Eine offene Rückfrage beantwortet nur, was du ohne
+  Anhang tippst oder sprichst. Das greift erst, wenn auch das Gateway das Kennzeichen auswertet (Stand 26.11.2026: Patch liegt bereit,
+  `docs/nachtlog.md`).
 - **Alle Sitzungen beenden** (Menü der Sitzungsliste): Jede gewählte Sitzung schreibt ihren Eintrag ins Agenten-Log
   der Daily Note und ihre Übergabe, dann beendet das Gateway sie. Sitzungen mit offener Auswahl oder Freigabe am PC
   bleiben mit Grund offen. Das Gateway schickt Nachrichten mit getrenntem Enter und prüft, ob das Eingabefeld am PC

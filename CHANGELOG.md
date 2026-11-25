@@ -2,6 +2,17 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.9 (2026-11-26)
+
+**Neu**
+- Sitzung über das Befehlsmenü ganz schließen: Im Menü „/“ links neben dem Eingabefeld steht jetzt „/exit · Sitzung schließen“ (bei Codex „/quit · Sitzung schließen“), direkt über „Esc senden“. Nach einer kurzen Nachfrage („Sitzung ganz schließen?“ → „Ganz schließen“) wird der Agent beendet und die Sitzung am PC geschlossen. Das Gespräch bleibt erhalten, die Sitzung steht in der Liste als geschlossen und lässt sich wieder öffnen. Das ist derselbe Weg wie „Sitzung schließen“ im Sitzungsmenü oben rechts. Den Eintrag gibt es nur bei laufenden Sitzungen.
+
+**Geändert**
+- Wer „/exit“ oder „/quit“ von Hand ins Feld schreibt und sendet, bekommt dieselbe Nachfrage. Bisher wurde der Befehl nur ins Terminal getippt: Der Agent war dann beendet, die Sitzung am PC stand aber noch. In den Listen des Befehlsmenüs steht „/quit“ deshalb nicht mehr als Befehl zum Einfügen.
+- Jarvis-Chat: Fotos und Dokumente, die du über die Büroklammer oder über „Teilen“ an Jarvis gibst, schickt die App jetzt als Upload gekennzeichnet an den PC. So kann der PC ein neues Dokument immer als eigenen Vorgang führen, auch wenn Jarvis gerade eine Rückfrage an dich offen hat. Die Rückfrage beantwortet nur, was du ohne Anhang tippst oder sprichst.
+
+Hinweis: Der Punkt zum Jarvis-Chat wirkt erst, wenn auch der PC das Kennzeichen auswertet. Diese Ergänzung ist vorbereitet und geprüft, aber noch nicht eingespielt. Bis dahin kann ein Dokument, das du während einer offenen Rückfrage schickst, weiter als Antwort auf diese Rückfrage gezählt werden.
+
 ## 0.4.8 (2026-11-25)
 
 **Neu**

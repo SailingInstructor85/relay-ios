@@ -798,3 +798,46 @@ Offen für Martin:
 - Der Gateway-Patch braucht eine Sitzung in `~/relay`.
 
 Version: `project.yml` 0.4.7 auf 0.4.8. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 26. November 2026, 00:30 (Version 0.4.9)
+
+Drei Einträge aus dem Backlog. Erledigt ist einer („/exit“ im Befehlsmenü). Zwei bleiben offen: Beim Upload während einer offenen Rückfrage ist der App-Teil gebaut, die eigentliche Ursache liegt aber im Gateway und ist dort nur als geprüfter Patch vorbereitet. Bei der Aussprache gab es in diesem Lauf nichts zu bauen, sie wartet auf Martins Hörprobe. Am Gateway (`~/relay`) wurde nichts geändert.
+
+1. Upload während offener Jarvis-Rückfrage wird als Antwort verbucht. Offen, App-Teil gebaut.
+   - Ursache (gelesen in `~/relay`, Zweig `lokal-clear-beendet`, 3926df9, `gateway/src/notifyd/daemon.py`, `_ask_member`): Seit das Jarvis-Feld an den Chief geht, merkt sich das Gateway die Rückfrage, die der Chief zurückstellt, und nimmt das nächste `ask` innerhalb von `answer_min` (30 Minuten) als Antwort darauf. Ob dieses `ask` ein getippter Satz oder der Auftragstext eines Uploads ist, konnte das Gateway nicht unterscheiden: Beides kam als `ask {text}`. So wurde der Text „Martin gibt dir ein Dokument vom iPhone …“ zur `answer` von H-518.
+   - Die App allein kann das nicht beheben, weil das Gateway entscheidet, was Antwort ist. Sie kann aber sagen, was ein Upload ist. Gebaut: `JarvisDocs.askParams` (C: JarvisDocs.swift, Tests `JarvisDocsTests.testAskParamsMarkUploads`) baut die Parameter für `ask` und setzt bei einem Upload `upload: true`. Angeschlossen in A: JarvisView.swift an beiden Wegen, auf denen Dateien zu Jarvis kommen: Büroklammer im Jarvis-Chat (getippt oder gesprochen) und „Teilen“ aus einer anderen App. Eine Frage ohne Anhang bleibt ohne das Feld. Ein Gateway, das das Feld nicht kennt, übergeht es, die App verhält sich dort wie bisher.
+   - Gateway-Teil als Patch: `/home/martin/.local/state/agents/relay-nachtbau/gateway-upload-2026-11-26/gateway-upload-eigener-handoff.patch`. Inhalt: `rpc_ask` reicht `upload` an `_ask_member` weiter. Ein Upload wird nie als Antwort genommen und bekommt immer einen eigenen Handoff. Die gemerkte Rückfrage bleibt dabei stehen, der nächste getippte oder gesprochene Satz ohne Anhang beantwortet sie also weiter. Stellt der Chief zum Upload selbst eine Rückfrage, ist das die neue gemerkte. Dazu zwei Tests in `gateway/tests/test_ask_chief.py` (der beobachtete Fall mit zwei getrennten Handoffs und offener Rückfrage, und die Rückfrage zum Upload) und der Parameter in `PROTOCOL.md`.
+   - Geprüft an einer Kopie des Gateways (`git archive` von 3926df9 in denselben Ordner, mit dem venv aus `~/relay/gateway`, ohne den laufenden Dienst): Die zwei neuen Tests bestehen mit dem Patch und schlagen ohne ihn fehl (Gegenprobe). `test_ask_chief`, `test_handoffs`, `test_question_bridge`, `test_team_daemon`: 87 bestanden. Ganze Testsuite des Gateways: 1460 bestanden, 10 übersprungen. `git apply --check` gegen `lokal-clear-beendet` läuft durch.
+   - Einspielen: in `~/relay` `git apply <Patch>`, Tests, committen, danach `systemctl --user restart notifyd`. Wirksam ist es, sobald Gateway mit Patch und App ab 0.4.9 zusammenkommen. Dann die Prüfung aus dem Backlog: Rückfrage offen lassen, Dokument hochladen, `handoffs` zeigt zwei getrennte Einträge.
+   - UI-Tests: `ComposeTests.test13_ShareLandsAtJarvis` prüft `upload: true` am `ask` des Mocks, `TabTests.test02_HeuteFragtJarvis` prüft, dass eine getippte Frage das Feld nicht hat.
+
+2. Supertonic M2 (iPhone und PC): Aussprache einzelner Wörter verbessern. Offen, in diesem Lauf nichts gebaut.
+   - Stand unverändert seit dem Lauf vom 25.11., 23:30 (Version 0.4.8): Die Ausspracheliste ist in der App, „Chief“ wird als „Tschief“ gesprochen. Was fehlt, kann der Nachtbau nicht liefern: Martins Hörprobe zu „Zion“ und zur Länge des i in „Chief“ (`/home/martin/.local/state/agents/relay-nachtbau/hoerprobe-2026-11-25/hoerprobe.html`) und das Einspielen des Gateway-Patches (`gateway-ausspracheliste.patch` im selben Ordner). Eine Schreibweise für „Zion“ zu raten wäre keine Verbesserung, die sich belegen lässt.
+
+3. Slash-Menü der Sitzung: „/exit“ schließt die Sitzung ganz. Erledigt.
+   - Neuer Eintrag im Befehlsmenü („/“ links neben dem Eingabefeld): „/exit · Sitzung schließen“, bei Codex „/quit · Sitzung schließen“. Er steht unter der Trennlinie direkt über „Esc senden“, nicht in der Liste der Befehle, weil er nichts ins Feld legt. Nach dem Tipp fragt die App „Sitzung ganz schließen?“ mit „Ganz schließen“ und „Abbrechen“; arbeitet die Sitzung gerade, steht das im Text. „Ganz schließen“ nimmt denselben Weg wie „Sitzung schließen“ im Sitzungsmenü (`model.close`, Gateway `close {key, stop: true}`): Agent sauber beenden, tmux-Sitzung weg, Gespräch bleibt, „Wieder öffnen“ möglich. Getippt wird der Befehl nicht.
+   - Den Eintrag gibt es nur bei laufenden Sitzungen (dieselbe Bedingung wie „Sitzung schließen“). Eine beendete, geschlossene oder ruhende Sitzung zeigt ihn nicht.
+   - „/exit“ oder „/quit“ von Hand gesendet (auch aus den Vorschlägen beim Tippen von „/“): dieselbe Nachfrage statt Tippen ins Terminal. Läuft die Sitzung nicht mehr, kommt der Hinweis „Die Sitzung läuft nicht mehr, es gibt nichts zu schließen.“ Nur der Befehl allein zählt, „/exit jetzt“ ist eine normale Nachricht.
+   - „/exit“ und „/quit“ stehen nicht mehr in den Listen des Befehlsmenüs (bei Codex stand „/quit“ unter „Weitere Befehle“ und wäre nur ins Feld gelegt worden).
+   - Logik in RelayCore: `SessionExit` (C: Compose.swift; Befehl je Werkzeug, Erkennung, Bedingung, Texte) und der Filter in `CommandMenu.items`, Tests `CommandMenuTests.testExitCommandHasItsOwnEntry` und `testExitTextAndAvailability`. Ansicht: A: ChatView.swift (`confirmExit`, `exitSession`, `canExit`).
+   - UI-Test: `ComposeTests.test12_CommandMenu` öffnet das Menü, tippt den Eintrag, erwartet die Nachfrage, prüft, dass vorher kein `close` ging, tippt „Ganz schließen“ und prüft `close` mit `stop: true` am Mock sowie, dass „/exit“ nicht gesendet wurde.
+
+Entscheidungen:
+- Kennzeichen statt Texterkennung: Das Gateway soll einen Upload nicht am Wortlaut „Martin gibt dir …“ erkennen. Der Wortlaut ändert sich (Bilder, mehrere Dateien), ein eigenes Feld nicht.
+- Auch ein Upload mit Text dazu ist ein neuer Vorgang. So steht es im Backlog („Ein Upload ist immer ein neuer Handoff“). Wer die Rückfrage beantworten will, schreibt oder spricht ohne Anhang.
+- Titel und Knopf der Nachfrage heißen „Sitzung ganz schließen?“ und „Ganz schließen“, nicht „Sitzung schließen“. So unterscheiden sie sich vom Eintrag im Sitzungsmenü, auch für die UI-Tests (`test11_CloseFromChat` tippt „Sitzung schließen“).
+- „Sitzung schließen“ im Sitzungsmenü bleibt ohne Nachfrage wie bisher. Danach war nicht gefragt.
+- Der neue Eintrag steht nicht am Ende des Menüs, „Esc senden“ bleibt der letzte.
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert und die UI-Tests nicht gelaufen, das prüft die CI.
+- Der Dialog nach einem Tipp im Menü öffnet 0,35 s verzögert (wie beim Anhang-Menü, sonst geht er auf dem iPhone verloren). Auf einem iPhone ist das nicht geprüft.
+- Antigravity: Als Befehl wird „/exit“ gezeigt. Ob das Werkzeug ihn so nennt, ist nicht geprüft. Für das Schließen ist es egal, weil der Befehl nicht getippt wird.
+- Der Upload-Fehler besteht weiter, bis der Gateway-Patch eingespielt ist. Der Patch ist nur an einer Kopie mit den Tests geprüft, nicht mit einem echten Upload vom iPhone.
+
+Offen für Martin:
+- Gateway-Patch zum Upload einspielen lassen (eigene Sitzung in `~/relay`, Pfad oben), zusammen mit dem Patch zur Ausspracheliste vom 25.11.
+- Hörprobe zu „Chief“ und „Zion“ (siehe Lauf vom 25.11.).
+- Am iPhone mit 0.4.9: eine alte Sitzung über „/“ → „/exit · Sitzung schließen“ schließen, danach ist sie in `tmux ls` weg und in der Liste als geschlossen.
+
+Version: `project.yml` 0.4.8 auf 0.4.9. Nicht gepusht, kein Tag. Das übernimmt das Skript.
