@@ -101,6 +101,7 @@ public enum VoiceModel {
         Float(1.05 * min(max(tempo, 0.5), 1.5))
     }
 
-    /// Der Satz, wie Supertonic ihn bekommt: Zahlen, Daten und Uhrzeiten als deutsche Wörter.
-    public static func spoken(_ text: String) -> String { SpokenNumbers.german(text) }
+    /// Der Satz, wie Supertonic ihn bekommt: Wörter der Ausspracheliste in der Schreibweise für die Stimme, Zahlen,
+    /// Daten und Uhrzeiten als deutsche Wörter.
+    public static func spoken(_ text: String) -> String { SpokenNumbers.german(SpokenWords.respell(text)) }
 }
