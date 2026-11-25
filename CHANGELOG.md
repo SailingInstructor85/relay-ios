@@ -2,6 +2,13 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.8 (2026-11-25)
+
+**Neu**
+- Jarvis' Stimme Supertonic hat eine Ausspracheliste. Wörter, die die Stimme falsch liest, bekommt sie vor dem Sprechen in einer Schreibweise, die sie richtig ausspricht. Am Text auf dem Bildschirm ändert sich nichts. Der erste Eintrag ist „Chief“: Bisher las die Stimme den Anfang deutsch, sodass es wie „Schief“ oder „Tief“ klang, jetzt spricht sie „Tschief“. Die Liste wächst, wenn du weitere Wörter meldest. Für die Apple-Stimme gilt sie nicht, die spricht wie bisher.
+
+Hinweis: „Zion“ ist noch nicht dabei. Welche Schreibweise natürlich klingt, lässt sich nur mit den Ohren entscheiden, dafür liegen Hörproben am PC bereit. Am PC („Hey Jarvis“) gilt die Liste erst, wenn sie auch dort eingebaut ist. Geprüft ist „Chief“ am PC mit derselben Stimme, auf dem iPhone ist es noch nicht gehört.
+
 ## 0.4.7 (2026-11-24)
 
 **Neu**

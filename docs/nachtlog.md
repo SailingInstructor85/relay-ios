@@ -771,3 +771,30 @@ Offen für Martin:
 - App auf 0.4.7 aktualisieren und im Jarvis-Chat einen Screenshot über die Büroklammer anhängen, mit einem Satz dazu, wohin er soll.
 
 Version: `project.yml` 0.4.6 auf 0.4.7. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 25. November 2026, 23:30 (Version 0.4.8)
+
+Ein Eintrag aus dem Backlog. Der App-Teil ist gebaut, der Eintrag bleibt trotzdem offen: Der Gateway-Teil liegt nur als Patch bereit, und „Zion“ wartet auf Martins Hörprobe. Am Gateway (`~/relay`) wurde nichts geändert.
+
+1. Supertonic M2 (iPhone und PC): Aussprache einzelner Wörter verbessern. Teilweise erledigt.
+   - App: neue Liste `SpokenWords` (C: SpokenWords.swift, Tests `SpokenWordsTests`), Wort → Schreibweise für die Stimme. Angeschlossen in `VoiceModel.spoken`, also genau an der Stelle, an der Supertonic seinen Satz bekommt (vor der Zahlenwandlung). Die Apple-Stimme und der angezeigte Text bleiben unberührt. Regeln: nur ganze Wörter („Chief-Sitzung“ ja, „Chiefsache“ und „Mischief“ nein), Groß- und Kleinschreibung egal, ein angehängtes „s“ bleibt („des Chiefs“), längere Einträge zuerst. Ein neues Wort ist eine Zeile in der Liste plus ein Satz im Test.
+   - Hörprobe am PC mit dem ONNX-Modell des Gateways (Supertonic 3, M2, dieselben Einstellungen wie „Hey Jarvis“), je Schreibweise zwei Sätze, zurückgelesen mit faster-whisper (small). Ablage: `/home/martin/.local/state/agents/relay-nachtbau/hoerprobe-2026-11-25/` (`hoerprobe.html` zum Anhören im Browser, 28 WAV-Dateien, die beiden Skripte).
+     - „Chief“ unverändert: zurückgelesen als „Der Tief ist bereit“ und „den Schief“. Die Stimme liest das „Ch“ deutsch, das englische „Tsch“ fehlt. Mit „Tschief“, „Tschiif“, „Tschihf“, „Tschiehf“ und „Tschi-f“ kam in beiden Sätzen „Chief“ zurück. Eingetragen ist „Tschief“ (die schlichteste Schreibweise). Ob das i damit lang genug klingt, zeigt die Messung nicht: Whisper misst das Wort bei allen Schreibweisen mit 0,20 bis 0,28 s, der Unterschied liegt unter der Messgenauigkeit. Der ganze Satz wird mit „Tschief“ 0,13 s länger als mit „Chief“.
+     - „Zion“: nicht eingetragen. Whisper liest „Zion“ schon in der unveränderten Schreibweise richtig zurück, auch bei „Zieon“, „Ziohn“, „Zíon“ und „Tsi-on“. „Zihon“ kam als „Zihon“ zurück, „Zi-on“ in einem Satz als „zieht und“ (beide eher schlechter). Was Martin an „Zion“ unnatürlich findet (Betonung, Länge, Übergang zwischen i und o), sagt die Messung nicht. Eine Schreibweise zu raten und als Verbesserung auszugeben wäre nicht ehrlich, also entscheidet das Ohr.
+   - Gateway: Der Nachtbau der App ändert `~/relay` nicht. Der Teil für `speech_out.py` liegt fertig als Patch in `/home/martin/.local/state/agents/relay-nachtbau/hoerprobe-2026-11-25/gateway-ausspracheliste.patch`: neues Modul `spoken_words.py` mit derselben Liste und denselben Regeln, Aufruf in `_supertonic` vor `spoken_numbers.german`, Tests mit denselben Fällen wie in der App. Geprüft an einer Kopie des Gateways: 45 Tests bestanden (`test_speech_out`, `test_spoken_numbers`, `test_spoken_words`), `git apply --check` gegen `lokal-clear-beendet` (3926df9) läuft durch. Einspielen in `~/relay`: `git apply <Patch>`, Tests, committen, danach `systemctl --user restart notifyd`.
+
+Entscheidungen:
+- Die Liste steht im Code (App und Gateway je eine Fassung mit gleichen Tests), nicht in einer Einstellung. Martin meldet Wörter, eingetragen werden sie nach einer Hörprobe.
+- Keine eigene Datei, die beide Seiten laden: App und Gateway sind getrennte Ablagen, eine gemeinsame Datei bräuchte einen Abgleich, der mehr kostet als die zweite Zeile.
+- Kein UI, keine neuen Texte oder Kennungen in der App, deshalb keine Änderung an den UI-Tests.
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert. Die Regeln sind über die Python-Fassung mit denselben Testfällen geprüft, der Swift-Code selbst erst in der CI.
+- Gehört hat die Proben niemand. Whisper belegt nur, dass der Anlaut von „Chief“ jetzt stimmt, nicht, dass es gut klingt.
+- Das iPhone rechnet mit der umgewandelten CoreML-Fassung des Modells, die Hörprobe lief mit der ONNX-Fassung. Die Aussprache kann leicht abweichen.
+
+Offen für Martin:
+- `/home/martin/.local/state/agents/relay-nachtbau/hoerprobe-2026-11-25/hoerprobe.html` im Browser öffnen und je Wort sagen, welche Schreibweise am besten klingt (bei „Chief“ zum Beispiel, ob „Tschiehf“ das i länger macht, bei „Zion“ überhaupt eine).
+- Der Gateway-Patch braucht eine Sitzung in `~/relay`.
+
+Version: `project.yml` 0.4.7 auf 0.4.8. Nicht gepusht, kein Tag. Das übernimmt das Skript.

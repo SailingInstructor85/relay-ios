@@ -21,6 +21,12 @@ Die Apple-Stimme bleibt voreingestellt („Beste vorhandene“), bis du Superton
   berechnet die App schon, während der laufende spielt.
 - Vor der Ausgabe werden Zahlen, Daten und Uhrzeiten in Wörter gewandelt (`SpokenNumbers`: „1081“ wird
   „eintausendeinundachtzig“, „14:30 Uhr“ wird „vierzehn Uhr dreißig“). Markdown, Code und Links fallen wie bisher weg.
+- Seit 0.4.8 gibt es dazu eine Ausspracheliste (`SpokenWords` in RelayCore): Wörter, die Supertonic falsch liest,
+  bekommt die Stimme in einer Schreibweise, die sie richtig spricht. Erster Eintrag: „Chief“ wird als „Tschief“
+  gesprochen (ohne Eintrag liest die Stimme das „Ch“ deutsch). Nur ganze Wörter, Groß- und Kleinschreibung egal, ein
+  angehängtes „s“ bleibt. Ein neues Wort ist eine Zeile in der Liste und ein Satz in `SpokenWordsTests`. Eingetragen
+  wird nur, was eine Hörprobe bestanden hat. „Zion“ steht noch aus (Hörprobe durch Martin, siehe `docs/nachtlog.md`,
+  Nachtbau vom 25.11.2026).
 - Das Modell liegt nicht in der App. Es wird erst auf deinen Knopfdruck geladen und erst in den Speicher geholt, wenn
   Jarvis sprechen soll (beim Start der Aufnahme und beim Beginn einer Antwort). Bis es bereit ist, spricht die
   Apple-Stimme, ebenso wenn Supertonic bei einem Satz scheitert. Nach zwei Fehlern in Folge ruht Supertonic bis zum
@@ -70,3 +76,8 @@ Gateway nicht. Zu tun dort:
 - Zahlen vor der Ausgabe in Wörter wandeln, nach denselben Regeln wie `SpokenNumbers` (die Testfälle in
   `RelayCore/Tests/RelayCoreTests/SpokenNumbersTests.swift` taugen als Vorlage).
 - Prüfen: Testsatz als WAV erzeugen, per Whisper zurücklesen, Echtzeitfaktor messen.
+
+Stand 25.11.2026: Supertonic 3 M2 und die Zahlenwandlung laufen am PC inzwischen (Gateway, `supertonic.py`,
+`spoken_numbers.py`). Es fehlt dort die Ausspracheliste. Sie gehört mit derselben Liste und denselben Regeln wie
+`SpokenWords` in ein Modul `spoken_words.py`, aufgerufen vor `spoken_numbers.german`. Ein fertiger, an einer Kopie
+getesteter Patch liegt am Bau-PC neben den Hörproben (Ort im Nachtlog).
