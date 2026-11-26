@@ -2,6 +2,17 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.14 (2026-11-26)
+
+**Neu**
+- Relay zeigt, wann die eigene Signatur abläuft: unter „Mehr“ ganz unten bei der Version und in den Einstellungen im neuen Abschnitt „App und Signatur“, zum Beispiel „Signatur gültig bis Mi, 02.12., noch 6 Tage“. Mit kostenloser Apple-ID gilt die Signatur sieben Tage, danach startet die App nicht mehr.
+- Ab drei Tagen Rest steht ein Hinweis oben in der App, auf jeder Seite, mit Tag und Uhrzeit des Ablaufs und dem Knopf „SideStore öffnen“. Der Hinweis sagt auch, was zum Erneuern nötig ist: ein WLAN (irgendeines, nicht nur das Heimnetz) und LocalDevVPN. Über Mobilfunk geht es nicht.
+- Erinnerungen als Mitteilung 72, 48 und 24 Stunden vor Ablauf. Sie kommen auch, wenn Relay geschlossen ist und der PC nicht erreichbar ist. Relay plant sie bei jedem Öffnen neu, nach einer Erneuerung verschieben sie sich also von selbst.
+- Liegt in der SideStore-Quelle eine neuere Version, steht oben in „Mehr“ die Zeile „Update x.y.z verfügbar“ mit „SideStore öffnen“ und dem Satz „Aktualisieren geht nur im WLAN mit LocalDevVPN.“ Dieselbe Angabe steht in den Einstellungen. Relay sieht beim Öffnen nach, höchstens alle sechs Stunden. Ohne Netz bleibt die App still.
+- Das Ablaufdatum geht mit dem Nutzungsprotokoll an deinen PC, damit auch dort jemand rechtzeitig warnen kann.
+
+Hinweis: Auf einem iPhone ist diese Version noch nicht ausprobiert. Ob SideStore das Ablaufdatum so in die App legt, dass Relay es lesen kann, zeigt erst der erste Start am Gerät. Fehlt es, zeigt Relay nichts an und vermerkt das im Nutzungsprotokoll. Bitte das Datum einmal mit „My Apps“ in SideStore vergleichen. Relay zeigt nur die eigene Signatur, die von SideStore selbst siehst du weiter nur dort. Aktualisieren von unterwegs über Mobilfunk bleibt unmöglich, das ist eine Grenze von SideStore und LocalDevVPN. Drucken über Jarvis („druck das“) und die feste Ablösung des Chiefs um 4 Uhr sind PC-Sache und liegen als geprüfte Ergänzungen bereit, in der App ändert sich dafür nichts.
+
 ## 0.4.13 (2026-11-26)
 
 **Neu**

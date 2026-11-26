@@ -1044,3 +1044,55 @@ Offen für Martin:
 - Soll der Fehler beim Diktat nach dem Hintergrund (OSStatus 560557684) als eigener Eintrag ins Backlog?
 
 Version: `project.yml` 0.4.12 auf 0.4.13. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 26. November 2026, 20:30 (Version 0.4.14)
+
+Drei Einträge aus dem Backlog. Eintrag 3 ist in der App umgesetzt. Die Einträge 1 und 2 sind reiner Gateway-Code (`~/relay`), den der Nachtbau nicht ändert: Für beide liegen an einer Kopie geprüfte Patches bereit, sie bleiben offen. Swift läuft am Bau-PC nicht, kompiliert und getestet hat erst die CI. Auf einem iPhone ist nichts davon gesehen.
+
+1. Chief-Ablösung fest um 04:00 statt träge. Offen, unverändert.
+   - Stand wie im Abschnitt von 15:53: In der App ist nichts zu bauen. Der Patch liegt bereit (`/home/martin/.local/state/agents/relay-nachtbau/gateway-abloesung-0400-2026-11-26/gateway-abloesung-0400-und-ask-once.patch`). `~/relay` steht weiter auf 3926df9, eingespielt ist also noch nichts.
+   - Braucht eine eigene Sitzung in `~/relay` (Patches in der Reihenfolge Upload, Chief, Ablösung, jetzt zusätzlich Drucken) und einen Neustart von notifyd.
+
+2. Jarvis druckt: Datei an Jarvis geben und „druck das“ sagen. Offen, Gateway-Patch gebaut.
+   - In der App fehlt dafür nichts: Dateien kommen über „An Jarvis geben“ und die Büroklammer schon mit Pfad beim Chief an, der Text beim Teilen geht mit. Was fehlt, ist das feste Druckwerkzeug am PC.
+   - Patch: `/home/martin/.local/state/agents/relay-nachtbau/gateway-drucken-2026-11-26/gateway-drucken-print-file.patch`, vierter in der Reihe (baut auf Upload, Chief und Ablösung auf). Inhalt: `printing.py` (neu), RPC `print_file` in `daemon.py`, MCP-Werkzeug `print_file(path, copies=1, pages="")` in `mcp_server.py` (bekommen der Chief und der Overview-Agent, die Manager nicht), Konfig-Block `printing: {queue, max_copies}` in `config.py`, PROTOCOL.md, Tests `test_printing.py` (35).
+   - Was das Werkzeug tut: Es nimmt nur Dateien unter dem Upload-Ordner an (der Pfad wird zuerst aufgelöst, ein Symlink nach draußen oder `..` kommt nicht durch), druckt nur auf die Warteschlange aus der Konfiguration und ruft `lp -d <Warteschlange> -n <Kopien> -- <Pfad>` ohne Shell auf. Druckbar sind PDF, JPG, PNG, GIF und TXT. HEIC-Fotos wandelt es vorher mit `heif-convert` in JPG um (am PC vorhanden). Kopien höchstens 5 (einstellbar), Seitenangaben wie `1-3` nur auf Ansage. Danach beobachtet es den Auftrag 20 Sekunden: Steht er unter den erledigten, meldet es „Gedruckt: … (Auftrag …)“, sonst „liegt in der Warteschlange, ist aber noch nicht gedruckt“ mit dem Zustand des Druckers aus `lpstat -p` (aus, nicht erreichbar). Scheitert `lp`, steht dessen Meldung im Text. Die Beschreibung des Werkzeugs sagt dem Chief, dass er bei „druck das“ ohne Rückfrage druckt und das Ergebnis in einem Satz meldet.
+   - Geprüft an einer Kopie (ohne den laufenden Dienst, `~/relay` unverändert): Alle vier Patches lassen sich nacheinander auf einen frischen Stand von 3926df9 anwenden. Ganze Testsuite an der Kopie: 1531 bestanden, 10 übersprungen (vorher 1496 und 10, dazu die 35 neuen). Ausgabe: `testlauf-ganz.txt` im selben Ordner. Die Tests drucken nichts, sie nutzen nachgebaute `lp` und `lpstat`. Das Format der echten Ausgaben habe ich lesend an der Warteschlange `EPSON_ET_2870_Series` abgeglichen (`lpstat -W completed -o`, `lpstat -p`).
+   - Nicht geprüft: ein echter Ausdruck. Unbeaufsichtigt Papier zu bedrucken habe ich gelassen. Ebenso ungeprüft ist, ob der Chief das Werkzeug bei „druck das“ zuverlässig von selbst wählt, und wie der Drucker „kein Papier“ meldet (der Text kommt unverändert aus CUPS).
+   - Einspielen: die vier Patches in `~/relay` mit `git apply`, Tests, committen, in `~/.config/notifyd/config.yaml` den Block `printing: {queue: EPSON_ET_2870_Series}` ergänzen, danach `systemctl --user restart notifyd`. Ohne den Block lehnt das Werkzeug mit „Am PC ist kein Drucker eingerichtet“ ab. Prüfweg aus dem Eintrag danach: PDF und Foto vom iPhone teilen, „druck das“, Auftrag in `lpstat -W completed`.
+
+3. App zeigt, wann die Signatur abläuft und ob ein Update bereitliegt. Erledigt (in der App, am Gerät ungeprüft).
+   - Logik (C: Signing.swift): `Provisioning.expiration` sucht in `embedded.mobileprovision` den Klartext zwischen `<?xml` und `</plist>` und liest darin `ExpirationDate`. Bewusst ohne Plist-Parser: Die Datei ist ein signierter Umschlag, gebraucht wird ein einziges Datum. `SigningStatus` liefert die Texte („Signatur gültig bis Mi, 02.12., noch 6 Tage“, Hinweis ab drei Tagen Rest, abgelaufen), `SigningReminders` den Plan für die Mitteilungen 72, 48 und 24 Stunden vorher, `AppUpdate` den Versionsvergleich (zahlenweise, 0.4.10 ist neuer als 0.4.9), das Lesen von `apps[0].versions[0].version` und den Abstand von sechs Stunden.
+   - App (A: AppHealth.swift): Beim Start liest `AppHealth` das Datum aus dem Bundle. Fehlt die Datei oder ist sie unlesbar (Simulator, CI), bleibt alles leer: kein Hinweis, kein Abschnitt, keine Zeile, kein Absturz. Anzeige an drei Stellen: unter „Mehr“ ganz unten bei der Version, in den Einstellungen im Abschnitt „App und Signatur“ direkt unter „Status“ (mit „SideStore öffnen“ und der Erklärung zum WLAN), und ab drei Tagen Rest als Hinweis oben in der App über allen Tabs (`SigningBanner` neben `TopNotices`, Kennung `signBanner`).
+   - Mitteilungen: lokal geplant (`UNTimeIntervalNotificationTrigger`), bei jedem Start und jedem Öffnen der App neu. Sie hängen nicht am Schalter für Sitzungs-Mitteilungen, wohl aber an der iOS-Erlaubnis für Mitteilungen.
+   - Nutzungsprotokoll: einmal je Start das Ereignis `app`/`signatur`, im Feld `detail` steht `signatur_bis=<ISO-Zeit in UTC>`. Ein eigenes Feld `signatur_bis` hätte das Gateway heute verworfen (`nutzung.py` lässt nur feste Felder durch, im Code von 3926df9 nachgesehen), `detail` kommt ohne Änderung am PC an. Fehlt das Profil, steht im selben Ereignis „kein Ablaufdatum: embedded.mobileprovision fehlt oder ist nicht lesbar“. So ist nach dem ersten Start am Gerät am PC ablesbar, ob SideStore die Datei ins Bundle legt.
+   - Update: beim Start und bei jedem Öffnen, höchstens alle sechs Stunden, lädt die App `source.json` des neuesten Release und vergleicht mit `CFBundleShortVersionString`. Ist die Quelle neuer, steht oben in „Mehr“ die Zeile „Update x.y.z verfügbar“ (Kennung `updateRow`) mit „SideStore öffnen“ und darunter „Aktualisieren geht nur im WLAN mit LocalDevVPN.“, dazu dieselbe Angabe in den Einstellungen. Die gefundene Version merkt sich die App, die Zeile bleibt also auch ohne Netz stehen, bis die eigene Version nachgezogen hat. Kein Netz, Fehler oder unlesbare Antwort: nichts passiert, der nächste Versuch kommt beim nächsten Öffnen.
+   - URL-Schema: SideStore registriert `sidestore` (Info.plist im Zweig develop des SideStore-Repos, am 26.11.2026 gelesen). Der Knopf öffnet `sidestore://`. Ob SideStore darauf am Gerät wirklich nach vorn kommt, ist nicht belegt. Scheitert das Öffnen, steht „SideStore ließ sich von hier nicht öffnen. Öffne es bitte von Hand.“ Pfade wie „direkt zur App-Seite“ sind nicht dokumentiert und deshalb nicht benutzt.
+   - Tests: `SigningTests` (Parser mit gültigem, abgelaufenem, fehlendem und kaputtem Profil, Texte samt Zeitzone, Schwelle drei Tage, Mitteilungsplan, Versionsvergleich 0.4.9 gegen 0.4.10, kaputte Quelle, Prüfabstand). UI-Tests `TabTests.test12_SignaturHinweisUndUpdate` (künstliches Datum 2,5 Tage, künstliche Version 9.9.9: Hinweis mit WLAN-Satz, Update-Zeile in „Mehr“, Datum in den Einstellungen, `signatur_bis` kommt per `usage_put` am Mock an) und `test13_SignaturOhneHinweis` (6,5 Tage: kein Hinweis, keine Update-Zeile, Datum steht in den Einstellungen). Dafür gibt es im Testmodus `RELAY_UI_SIGN_DAYS` und `RELAY_UI_UPDATE`, im Testmodus lädt die App nie aus dem Netz. Der Mock kürzt lange `usage_put`-Zeilen jetzt so, dass sie lesbares JSON bleiben.
+   - Doku: README Punkt 5 um die WLAN-Pflicht ergänzt, neuer Punkt 6. Vault-Notiz „SideStore automatisch erneuern“ um die WLAN-Pflicht ergänzt.
+
+Entscheidungen:
+- Abschnitt in den Einstellungen und Update-Zeile erscheinen nur, wenn es etwas zu zeigen gibt. Im Simulator ändert sich damit an keiner bestehenden Seite etwas, die vorhandenen UI-Tests sehen dieselben Listen wie bisher.
+- Der Hinweis oben lässt sich nicht wegtippen. Er verschwindet mit der Erneuerung. Drei Tage vor dem Aus soll er nicht übersehen werden.
+- Kein Hinweis oben für ein Update, nur die Zeile in „Mehr“ und den Einstellungen. Ein Update ist nicht dringend, ein Ablauf schon.
+- Die Mitteilungen kommen auch, wenn Sitzungs-Mitteilungen in Relay ausgeschaltet sind.
+- Drucken: ganze Datei und eine Kopie als Standard, Seitenbereich und Kopien nur auf Ansage. So habe ich „Mehrere Seiten oder Kopien nur auf Ansage“ gelesen (siehe Frage unten).
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert. Neu sind Signing.swift und AppHealth.swift, geändert RelayApp.swift, SetupView.swift, MoreView.swift und UITestMode.swift.
+- Ob SideStore `embedded.mobileprovision` ins Bundle legt, ist ungeprüft. Fehlt sie, zeigt die App nichts, und das Nutzungsprotokoll sagt es.
+- Relay kennt nur die eigene Signatur. Wann SideStore selbst abläuft, steht weiter nur in SideStore unter „My Apps“. Läuft SideStore ab, hilft auch eine gültige Relay-Signatur beim Erneuern nicht.
+- Nach einer Erneuerung plant Relay die Mitteilungen erst beim nächsten Öffnen neu. Bis dahin können noch Erinnerungen zum alten Datum kommen (Fehlalarm zur sicheren Seite).
+- Die Restzeit im Hinweis zählt angefangene Tage nicht mit („noch 2 Tage“ heißt zwischen 48 und 72 Stunden).
+- Der Chief-Teil (aus `signatur_bis` am PC eine Meldung machen) ist nicht gebaut, er liegt im Gateway oder beim Betriebsprüfer.
+- Aktualisieren über Mobilfunk bleibt unmöglich. Die Entscheidung dazu (Cellular Refresh oder Developer-Konto) steht unter „Wartet auf Martin“.
+- Gateway-Patch Drucken: nur mit Tests an der Kopie geprüft, kein echter Ausdruck.
+
+Offen für Martin:
+- Am iPhone mit 0.4.14: „Mehr“ ganz nach unten, dort die Zeile „Signatur gültig bis …“ mit „My Apps“ in SideStore vergleichen. Steht dort nichts, legt SideStore das Profil nicht lesbar ab, dann bitte Bescheid geben.
+- Öffnet „SideStore öffnen“ wirklich SideStore?
+- Gateway-Patches einspielen lassen (Reihenfolge: Upload, Chief, Ablösung 04:00, Drucken) und `printing: {queue: EPSON_ET_2870_Series}` in die Konfiguration. Danach am iPhone: PDF und Foto teilen, „druck das“.
+- Frage zum Drucken: Soll bei „druck das“ ein mehrseitiges Dokument ganz gedruckt werden (so ist es gebaut), oder nur die erste Seite, solange du nichts anderes sagst?
+- Soll der Chief oder der Betriebsprüfer aus `signatur_bis` warnen, wenn weniger als drei Tage bleiben? Das braucht eine eigene Sitzung am PC.
+
+Version: `project.yml` 0.4.13 auf 0.4.14. Nicht gepusht, kein Tag. Das übernimmt das Skript.
