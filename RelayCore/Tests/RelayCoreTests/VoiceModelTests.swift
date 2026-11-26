@@ -74,4 +74,65 @@ final class VoiceModelTests: XCTestCase {
     func testSpokenTurnsNumbersIntoWords() {
         XCTAssertEqual(VoiceModel.spoken("Es sind 1081 Dateien."), "Es sind eintausendeinundachtzig Dateien.")
     }
+
+    // MARK: Rechenweg (Messung vom 25.11.2026: im Hintergrund verweigert iOS den Grafikchip)
+
+    private let denied = "Error Domain=com.apple.CoreML Code=0 \"Unable to compute the prediction using ML Program. It can be an invalid input data or broken/unsupported model.\" UserInfo={NSUnderlyingError=0x11c227000 {Error Domain=com.apple.CoreML Code=0 \"E5RT: GPU sync execute failed: Insufficient Permission (to submit GPU work from background) (00000006:kIOGPUCommandBufferCallbackErrorBackgroundExecutionNotPermitted) (11)\"}}"
+
+    func testComputeUnitsFollowForeground() {
+        let c = VoiceCompute()
+        XCTAssertEqual(c.units(foreground: true), .all)
+        XCTAssertEqual(c.units(foreground: false), .cpu)
+    }
+
+    func testBackgroundDeniedIsRecognised() {
+        XCTAssertTrue(VoiceCompute.backgroundDenied(denied))
+        XCTAssertFalse(VoiceCompute.backgroundDenied("Supertonic: inference failed — missing output 'wav'"))
+        XCTAssertFalse(VoiceCompute.backgroundDenied(""))
+    }
+
+    func testRetryAfterBackgroundDenialKeepsGraphicsChipForLater() {
+        // der Bildschirm ging während der Berechnung aus: zweiter Versuch auf dem Prozessor, vorn wieder alles
+        var c = VoiceCompute()
+        c.succeeded(with: .all, firstError: denied)
+        XCTAssertFalse(c.cpuOnly)
+        XCTAssertEqual(c.units(foreground: true), .all)
+        XCTAssertEqual(c.failures, 0)
+    }
+
+    func testOtherFailureInForegroundStaysOnProcessor() {
+        var c = VoiceCompute()
+        c.succeeded(with: .all, firstError: "Unable to compute the prediction using ML Program.")
+        XCTAssertTrue(c.cpuOnly)
+        XCTAssertEqual(c.units(foreground: true), .cpu)
+        c.reset()
+        XCTAssertEqual(c.units(foreground: true), .all)
+    }
+
+    func testSuccessWithoutRetryChangesNothing() {
+        var c = VoiceCompute()
+        c.succeeded(with: .all, firstError: nil)
+        c.succeeded(with: .cpu, firstError: nil)
+        // ein zweiter Versuch auf dem Prozessor nach einem Fehler auf dem Prozessor sagt nichts über den Grafikchip
+        c.succeeded(with: .cpu, firstError: "kaputt")
+        XCTAssertFalse(c.cpuOnly)
+    }
+
+    func testTwoFailedSentencesInARowRest() {
+        var c = VoiceCompute()
+        XCTAssertFalse(c.failed())
+        c.succeeded(with: .cpu, firstError: nil)
+        XCTAssertFalse(c.failed())
+        XCTAssertTrue(c.failed())
+        c.reset()
+        XCTAssertEqual(c.failures, 0)
+    }
+
+    func testBriefShortensLongErrors() {
+        XCTAssertEqual(VoiceCompute.brief("kurz"), "kurz")
+        XCTAssertEqual(VoiceCompute.brief("a\nb"), "a b")
+        let long = VoiceCompute.brief(String(repeating: "x", count: 900))
+        XCTAssertEqual(long.count, 301)
+        XCTAssertTrue(long.hasSuffix("…"))
+    }
 }

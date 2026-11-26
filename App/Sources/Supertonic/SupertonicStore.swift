@@ -6,23 +6,60 @@ import RelayCore
 
 /// Rechnet mit dem geladenen Modell, außerhalb des Hauptthreads und immer nur ein Satz zur Zeit.
 actor SupertonicWorker {
-    private var model: SupertonicTTSModel?
-
-    var loaded: Bool { model != nil }
-
-    /// Lädt das Modell (beim ersten Mal übersetzt iOS die vier Teile, das dauert).
-    func load(_ dir: URL) throws {
-        if model == nil { model = try SupertonicTTSModel(directory: dir, computeUnits: .all) }
+    /// Ton eines Satzes. `firstError`: Der erste Versuch ist gescheitert, der Ton stammt vom zweiten (Prozessor).
+    struct Spoken: Sendable {
+        let pcm: [Float]
+        let firstError: String?
     }
 
-    func synthesize(_ text: String, dir: URL, speed: Float) throws -> [Float] {
-        try load(dir)
+    private var model: SupertonicTTSModel?
+    private var units: VoiceCompute.Units?
+    private var primed = false
+
+    /// Lädt das Modell (beim ersten Mal übersetzt iOS die vier Teile, das dauert). Liegt es schon für einen anderen
+    /// Rechenweg im Speicher, wird es für den verlangten neu geladen.
+    func load(_ dir: URL, units wanted: VoiceCompute.Units) throws {
+        if model != nil, units == wanted { return }
+        model = nil
+        units = nil
+        primed = false
+        model = try SupertonicTTSModel(directory: dir, computeUnits: wanted == .cpu ? .cpuOnly : .all)
+        units = wanted
+    }
+
+    /// Lädt das Modell und rechnet einmal einen kurzen Satz, ohne ihn abzuspielen. Der erste Satz nach dem Laden
+    /// braucht ein Vielfaches (gemessen 7,35 s für 37 Zeichen, danach 0,5 s), weil iOS die Rechenwege erst dann
+    /// einrichtet. So fällt diese Wartezeit nicht auf den ersten Satz einer Antwort. Scheitert das Aufwärmen, zeigt
+    /// sich der Fehler beim ersten echten Satz, dort mit zweitem Versuch.
+    func warm(_ dir: URL, units wanted: VoiceCompute.Units) throws {
+        try load(dir, units: wanted)
+        guard !primed, let model else { return }
+        primed = true
+        _ = try? model.synthesize(text: "Hallo.", voice: VoiceModel.voice, language: VoiceModel.language,
+                                  options: SupertonicOptions())
+    }
+
+    /// Scheitert der Satz, kommt ein zweiter Versuch auf dem Prozessor mit frisch geladenem Modell. Das hilft, wenn
+    /// iOS den Grafikchip verweigert, weil die App inzwischen im Hintergrund ist. Wirft erst, wenn auch der scheitert.
+    func synthesize(_ text: String, dir: URL, speed: Float, units wanted: VoiceCompute.Units) throws -> Spoken {
+        do {
+            return Spoken(pcm: try run(text, dir: dir, speed: speed, units: wanted), firstError: nil)
+        } catch {
+            let first = "\(error)"
+            model = nil
+            units = nil
+            return Spoken(pcm: try run(text, dir: dir, speed: speed, units: .cpu), firstError: first)
+        }
+    }
+
+    private func run(_ text: String, dir: URL, speed: Float, units wanted: VoiceCompute.Units) throws -> [Float] {
+        try load(dir, units: wanted)
         guard let model else { return [] }
         return try model.synthesize(text: text, voice: VoiceModel.voice, language: VoiceModel.language,
                                     options: SupertonicOptions(speed: speed))
     }
 
-    func unload() { model = nil }
+    func unload() { model = nil; units = nil; primed = false }
 }
 
 /// Jarvis' Stimme Supertonic 3 (M2) auf dem iPhone: Modell laden (einmalig von Hugging Face, nur auf Knopfdruck),
@@ -50,9 +87,13 @@ final class SupertonicStore: ObservableObject {
     private var download: Task<Void, Never>?
     private var warmTask: Task<Void, Never>?
     private var memoryObserver: NSObjectProtocol?
+    private var activeObserver: NSObjectProtocol?
     /// Nur die ersten Sätze nach dem Start gehen mit ihrer Rechenzeit ins Protokoll (Echtzeitfaktor prüfen).
     private var timed = 0
-    private var failures = 0
+    /// Rechenweg (Grafikchip oder nur Prozessor) und Fehler in Folge, siehe `VoiceCompute`.
+    private var compute = VoiceCompute()
+    /// Der zweite Versuch auf dem Prozessor steht nur einmal je App-Start im Protokoll.
+    private var retryLogged = false
 
     private static let marker = "relay-vollstaendig.json"
 
@@ -69,6 +110,11 @@ final class SupertonicStore: ObservableObject {
             forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.release() }
+        }
+        activeObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.cameToFront() }
         }
     }
 
@@ -96,6 +142,7 @@ final class SupertonicStore: ObservableObject {
             self.download = nil
             self.phase = result
             if result == .installed {
+                self.compute.reset()
                 self.bytes = Self.storedBytes()
                 AppLog.shared.log("info", "supertonic", "geladen, \(VoiceModel.sizeText(self.bytes))")
                 self.warmUp()
@@ -114,6 +161,7 @@ final class SupertonicStore: ObservableObject {
         warmTask?.cancel()
         warm = false
         warming = false
+        compute.reset()
         let worker = self.worker
         Task { await worker.unload() }
         try? FileManager.default.removeItem(at: Self.dir)
@@ -257,10 +305,11 @@ final class SupertonicStore: ObservableObject {
         guard active, !warm, warmTask == nil else { return }
         warming = true
         let worker = self.worker, dir = Self.dir
+        let units = compute.units(foreground: Self.foreground)
         let started = Date()
         warmTask = Task { [weak self] in
             var failure: String?
-            do { try await worker.load(dir) } catch { failure = "\(error)" }
+            do { try await worker.warm(dir, units: units) } catch { failure = "\(error)" }
             guard let self else { return }
             self.warmTask = nil
             self.warming = false
@@ -270,7 +319,7 @@ final class SupertonicStore: ObservableObject {
                 self.phase = .failed("Das Modell ließ sich nicht starten. Die Apple-Stimme spricht weiter. (\(failure))")
             } else {
                 self.warm = true
-                AppLog.shared.log("info", "supertonic", String(format: "Modell im Speicher nach %.1f s", Date().timeIntervalSince(started)))
+                AppLog.shared.log("info", "supertonic", String(format: "Modell im Speicher und aufgewärmt nach %.1f s", Date().timeIntervalSince(started)))
             }
         }
     }
@@ -281,28 +330,50 @@ final class SupertonicStore: ObservableObject {
         let worker = self.worker, dir = Self.dir
         let speed = VoiceModel.speed(tempo: SpeechPrefs.tempo)
         let spoken = VoiceModel.spoken(text)
+        let units = compute.units(foreground: Self.foreground)
         let started = Date()
-        let pcm: [Float]
+        let result: SupertonicWorker.Spoken
         do {
-            pcm = try await worker.synthesize(spoken, dir: dir, speed: speed)
+            result = try await worker.synthesize(spoken, dir: dir, speed: speed, units: units)
         } catch {
-            // Zwei Fehler in Folge: Supertonic ruht, bis das Modell neu geladen oder die App neu gestartet wird.
-            failures += 1
-            AppLog.shared.log("info", "supertonic", "Satz gescheitert: \(error)")
-            if failures >= 2 {
-                phase = .failed("Supertonic konnte nicht sprechen. Die Apple-Stimme spricht weiter. (\(error))")
+            // Auch der zweite Versuch auf dem Prozessor ist gescheitert. Nach zwei solchen Sätzen in Folge ruht
+            // Supertonic, bis das Modell neu geladen oder die App neu gestartet wird.
+            warm = false
+            let why = "\(error)"
+            AppLog.shared.log("info", "supertonic", "Satz gescheitert, auch beim zweiten Versuch: " + VoiceCompute.brief(why))
+            if compute.failed() {
+                phase = .failed("Supertonic konnte nicht sprechen. Die Apple-Stimme spricht weiter. (" + VoiceCompute.brief(why, limit: 160) + ")")
             }
             throw error
         }
-        failures = 0
+        let pcm = result.pcm
+        compute.succeeded(with: units, firstError: result.firstError)
+        if let first = result.firstError, !retryLogged {
+            retryLogged = true
+            let place = Self.foreground ? "vorn" : "im Hintergrund"
+            AppLog.shared.log("info", "supertonic", "Satz beim zweiten Versuch auf dem Prozessor gesprochen (App \(place)). Erster Fehler: " + VoiceCompute.brief(first))
+        }
         if !warm { warm = true }
         let took = Date().timeIntervalSince(started)
         let length = Double(pcm.count) / Double(VoiceModel.sampleRate)
         if length > 0, timed < 5 {
             timed += 1
-            AppLog.shared.log("info", "supertonic", String(format: "Satz %d Zeichen, %.1f s Ton in %.2f s (Faktor %.2f)", spoken.count, length, took, took / length))
+            let how = result.firstError != nil || units == .cpu ? ", Prozessor" : ""
+            AppLog.shared.log("info", "supertonic", String(format: "Satz %d Zeichen, %.1f s Ton in %.2f s (Faktor %.2f)", spoken.count, length, took, took / length) + how)
         }
         return pcm
+    }
+
+    /// Die App ist nicht im Hintergrund. Dort verbietet iOS Arbeit auf dem Grafikchip, es rechnet nur der Prozessor.
+    private static var foreground: Bool { UIApplication.shared.applicationState != .background }
+
+    /// Die App ist wieder vorn. Hat das Modell im Hintergrund auf dem Prozessor gerechnet, lädt es jetzt schon für den
+    /// schnellen Weg, damit der nächste Satz nicht darauf warten muss.
+    private func cameToFront() {
+        guard active, warm, warmTask == nil else { return }
+        let worker = self.worker, dir = Self.dir
+        let units = compute.units(foreground: true)
+        Task { try? await worker.warm(dir, units: units) }
     }
 
     /// Gibt den Speicher des Modells frei (Speicherwarnung). Der nächste Satz lädt es wieder.

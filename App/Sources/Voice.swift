@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Speech
+import UIKit
 import RelayCore
 
 /// Speech in and out for Jarvis: on-device recognition (SFSpeechRecognizer) with the gateway's vocabulary, and
@@ -47,6 +48,9 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private var appleWaiting: (id: ObjectIdentifier, c: CheckedContinuation<Void, Never>)?
     private var splitter = SentenceSplitter()
     private var speakWaiters: [CheckedContinuation<Void, Never>] = []
+    /// Sätze, die im Hintergrund ohne Tonausgabe geblieben wären; sie kommen, sobald die App wieder vorn ist.
+    private var held = HeldSpeech()
+    nonisolated(unsafe) private var activeObserver: NSObjectProtocol?
 
     /// Name of this voice in `AudioFocus` (Chat, Jarvis and Sprachmodus each have their own `VoiceIO`).
     private let holder = "voice-" + UUID().uuidString
@@ -54,6 +58,15 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     override init() {
         super.init()
         synth.delegate = self
+        activeObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.speakHeld() }
+        }
+    }
+
+    deinit {
+        if let o = activeObserver { NotificationCenter.default.removeObserver(o) }
     }
 
     /// Recording or reading is over: the audio goes back to other apps, Spotify resumes. Does nothing while this voice
@@ -280,6 +293,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     func stopSpeaking() {
         splitter.reset()
         queue.stop()
+        held.clear()
         chainRound += 1
         chain.removeAll()
         prepared.values.forEach { $0.cancel() }
@@ -302,16 +316,49 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     private func say(_ raw: String) {
         let text = Self.speakable(raw)
-        guard text.rangeOfCharacter(from: .alphanumerics) != nil else { return }
+        guard text.rangeOfCharacter(from: .alphanumerics) != nil, !queue.stopped else { return }
+        // Im Hintergrund (Bildschirm gesperrt) gibt iOS die Tonausgabe nicht her, wenn sie nicht schon läuft. Der Satz
+        // liefe dann stumm durch. Er wartet stattdessen, bis die App wieder vorn ist (`speakHeld`).
+        if !held.isEmpty || !audioReady() {
+            if held.hold(text, now: Date()) {
+                UsageRecorder.shared.record("audio", "vorlesen zurückgehalten", kind: "vorlesen", detail: "app im hintergrund")
+            }
+            update()
+            return
+        }
         if SupertonicStore.shared.active || chainTask != nil {
             sayInOrder(text)
             return
         }
         let u = Self.utterance(text)
         guard queue.enqueue(AnyHashable(ObjectIdentifier(u))) else { return }
-        try? AudioFocus.takeForRecording(holder)
         synth.speak(u)
         update()
+    }
+
+    /// Nimmt die Tonausgabe. false nur, wenn das scheitert und die App im Hintergrund ist: Dann wäre nichts zu hören.
+    /// Scheitert es im Vordergrund, wird wie bisher trotzdem gesprochen.
+    private func audioReady() -> Bool {
+        do {
+            try AudioFocus.takeForRecording(holder)
+            return true
+        } catch {
+            return UIApplication.shared.applicationState != .background
+        }
+    }
+
+    /// Die App ist wieder vorn: zurückgehaltene Sätze jetzt sprechen. Zu alte verfallen (`HeldSpeech.limit`), ebenso
+    /// alles, wenn inzwischen eine Aufnahme läuft.
+    private func speakHeld() {
+        guard !held.isEmpty else { return }
+        let texts = held.take(now: Date())
+        guard !texts.isEmpty, !listening, !queue.stopped else {
+            UsageRecorder.shared.record("audio", "vorlesen verfallen", kind: "vorlesen")
+            update()
+            return
+        }
+        UsageRecorder.shared.record("audio", "vorlesen nachgeholt", kind: "vorlesen", length: texts.count)
+        texts.forEach { say($0) }
     }
 
     // MARK: Supertonic (Jarvis' Stimme auf dem Gerät)
@@ -324,7 +371,6 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         chainSerial += 1
         let item = Spoken(id: chainSerial, text: text, lang: Voices.langFor(text, setting: SpeechPrefs.outputLang))
         guard queue.enqueue(AnyHashable(item.id)) else { return }
-        try? AudioFocus.takeForRecording(holder)
         chain.append(item)
         update()
         prepareNext()

@@ -602,6 +602,11 @@ struct JarvisView: View {
         let tid = turn.id
         turns.append(turn)
         let speak = byVoice && speakAnswers
+        // Soll die Antwort vorgelesen werden, bleibt der Bildschirm an, bis sie da ist: Sperrt sich das iPhone beim
+        // Warten, gibt iOS der App die Tonausgabe nicht mehr und die Antwort bliebe stumm.
+        let awaiting = "jarvis-antwort-" + tid.uuidString
+        if speak { ScreenAwake.shared.answerAwaited(awaiting) }
+        defer { if speak { ScreenAwake.shared.answerArrived(awaiting) } }
         if speak { voice.beginReply() }
         let streamed = Flag()
         let stamp = Stamp()

@@ -577,3 +577,38 @@ public struct SpeechQueue<ID: Hashable> {
     /// (die Pause zwischen zwei gestreamten Sätzen zählt mit, damit der Stopp-Knopf nicht flackert).
     public var active: Bool { !live.isEmpty || (open && spoke) }
 }
+
+/// Sätze, die gerade nicht zu hören wären: Die App ist im Hintergrund (Bildschirm gesperrt) und iOS gibt ihr die
+/// Tonausgabe nicht. Statt sie stumm „vorzulesen“, hält die App sie zurück und holt sie nach, sobald sie wieder vorn
+/// ist. Liegt das Zurückhalten zu lange zurück, verfällt es: Jarvis soll nicht losreden, wenn das iPhone eine Stunde
+/// später entsperrt wird (der Text steht dann ohnehin im Chat).
+public struct HeldSpeech: Equatable, Sendable {
+    /// So lange nach dem ersten zurückgehaltenen Satz wird noch nachgeholt (Sekunden).
+    public static let limit: TimeInterval = 120
+
+    public private(set) var texts: [String] = []
+    private var since: Date?
+
+    public init() {}
+
+    public var isEmpty: Bool { texts.isEmpty }
+
+    /// Ein Satz kann gerade nicht gesprochen werden. true beim ersten Satz einer Reihe (fürs Protokoll).
+    @discardableResult
+    public mutating func hold(_ text: String, now: Date) -> Bool {
+        let first = texts.isEmpty
+        if first { since = now }
+        texts.append(text)
+        return first
+    }
+
+    /// Die App ist wieder vorn: die Sätze in ihrer Reihenfolge, oder nichts, wenn es zu lange her ist. Danach leer.
+    public mutating func take(now: Date) -> [String] {
+        defer { clear() }
+        guard let since, now.timeIntervalSince(since) <= Self.limit else { return [] }
+        return texts
+    }
+
+    /// Gestoppt oder verfallen.
+    public mutating func clear() { texts = []; since = nil }
+}

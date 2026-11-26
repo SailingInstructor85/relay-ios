@@ -105,3 +105,58 @@ public enum VoiceModel {
     /// Daten und Uhrzeiten als deutsche Wörter.
     public static func spoken(_ text: String) -> String { SpokenNumbers.german(SpokenWords.respell(text)) }
 }
+
+/// Wo Supertonic rechnet. Im Vordergrund nimmt iOS, was am schnellsten ist (auch den Grafikchip). Im Hintergrund
+/// (Bildschirm gesperrt, andere App vorn) verbietet iOS Arbeit auf dem Grafikchip, die Berechnung scheitert dann mit
+/// „Unable to compute the prediction using ML Program“ (Messung vom 25.11.2026). Dort rechnet nur der Prozessor.
+/// Scheitert ein Satz, kommt ein zweiter Versuch auf dem Prozessor mit frisch geladenem Modell, erst danach spricht
+/// die Apple-Stimme. Reine Entscheidung, die App lädt das Modell passend.
+public struct VoiceCompute: Equatable, Sendable {
+    public enum Units: String, Equatable, Sendable {
+        /// Alles, was das Gerät hat (Grafikchip, Neural Engine, Prozessor). Nur im Vordergrund erlaubt.
+        case all
+        /// Nur der Prozessor. Langsamer, geht aber auch im Hintergrund.
+        case cpu
+    }
+
+    /// So viele Sätze in Folge dürfen ganz scheitern (beide Versuche), dann ruht Supertonic.
+    public static let failureLimit = 2
+
+    /// Der Grafikchip hat im Vordergrund versagt: Bis zum Neuladen rechnet nur noch der Prozessor.
+    public private(set) var cpuOnly = false
+    /// Sätze in Folge, bei denen auch der zweite Versuch gescheitert ist.
+    public private(set) var failures = 0
+
+    public init() {}
+
+    /// Womit der nächste Satz gerechnet wird.
+    public func units(foreground: Bool) -> Units { cpuOnly || !foreground ? .cpu : .all }
+
+    /// Die Fehlermeldung von iOS, wenn die App im Hintergrund auf den Grafikchip wollte.
+    public static func backgroundDenied(_ error: String) -> Bool {
+        let e = error.lowercased()
+        return e.contains("backgroundexecutionnotpermitted") || e.contains("gpu work from background")
+    }
+
+    /// Ein Satz ist gesprochen. `firstError`: Der erste Versuch war gescheitert, erst der zweite auf dem Prozessor
+    /// hat geklappt. Lag das nicht am Hintergrund, bleibt es beim Prozessor (sonst scheiterte jeder Satz erst einmal).
+    public mutating func succeeded(with units: Units, firstError: String?) {
+        failures = 0
+        if let firstError, units == .all, !Self.backgroundDenied(firstError) { cpuOnly = true }
+    }
+
+    /// Beide Versuche sind gescheitert. true: Supertonic soll ruhen, die Apple-Stimme spricht weiter.
+    public mutating func failed() -> Bool {
+        failures += 1
+        return failures >= Self.failureLimit
+    }
+
+    /// Das Modell wird neu geladen: alles wieder wie am Anfang.
+    public mutating func reset() { self = VoiceCompute() }
+
+    /// Kurzer Text fürs Protokoll (Fehlermeldungen von iOS sind sehr lang).
+    public static func brief(_ error: String, limit: Int = 300) -> String {
+        let one = error.split(whereSeparator: \.isNewline).joined(separator: " ")
+        return one.count > limit ? String(one.prefix(limit)) + "…" : one
+    }
+}

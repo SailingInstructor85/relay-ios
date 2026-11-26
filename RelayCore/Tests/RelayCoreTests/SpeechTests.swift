@@ -274,4 +274,39 @@ final class JarvisDictationTests: XCTestCase {
         XCTAssertFalse(q.active)
         XCTAssertFalse(q.stopped)
     }
+
+    // MARK: zurückgehaltene Sätze (App im Hintergrund, keine Tonausgabe)
+
+    func testHeldSpeechComesBackInOrder() {
+        var h = HeldSpeech()
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        XCTAssertTrue(h.isEmpty)
+        XCTAssertTrue(h.hold("Erster Satz.", now: t0))
+        XCTAssertFalse(h.hold("Zweiter Satz.", now: t0.addingTimeInterval(1)))
+        XCTAssertFalse(h.isEmpty)
+        XCTAssertEqual(h.take(now: t0.addingTimeInterval(9)), ["Erster Satz.", "Zweiter Satz."])
+        XCTAssertTrue(h.isEmpty)
+        XCTAssertEqual(h.take(now: t0.addingTimeInterval(10)), [])
+    }
+
+    func testHeldSpeechExpires() {
+        var h = HeldSpeech()
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        h.hold("Alt.", now: t0)
+        // die Frist zählt ab dem ersten Satz, spätere Sätze verlängern sie nicht
+        h.hold("Auch alt.", now: t0.addingTimeInterval(100))
+        XCTAssertEqual(h.take(now: t0.addingTimeInterval(HeldSpeech.limit + 1)), [])
+        XCTAssertTrue(h.isEmpty)
+        // danach beginnt eine neue Reihe mit neuer Frist
+        XCTAssertTrue(h.hold("Neu.", now: t0.addingTimeInterval(500)))
+        XCTAssertEqual(h.take(now: t0.addingTimeInterval(500 + HeldSpeech.limit)), ["Neu."])
+    }
+
+    func testHeldSpeechClear() {
+        var h = HeldSpeech()
+        h.hold("Weg.", now: Date(timeIntervalSince1970: 1))
+        h.clear()
+        XCTAssertTrue(h.isEmpty)
+        XCTAssertEqual(h.take(now: Date(timeIntervalSince1970: 2)), [])
+    }
 }
