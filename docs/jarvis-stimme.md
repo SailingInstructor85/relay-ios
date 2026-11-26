@@ -1,6 +1,6 @@
 # Jarvis' Stimme: Supertonic 3, Stimme M2
 
-Stand: 2026-11-26, Version 0.4.11. Entschieden von Martin am 24.11.2026 nach den Hörproben: Supertonic 3 mit der Stimme
+Stand: 2026-11-26, Version 0.4.12. Entschieden von Martin am 24.11.2026 nach den Hörproben: Supertonic 3 mit der Stimme
 M2 wird Jarvis' Stimme, auf dem Gerät, ohne Cloud. Am iPhone ist das seit 0.4.6 gebaut, am PC („Hey Jarvis“) fehlt es
 noch. Auf dem iPhone gehört ist die Stimme noch nicht: Swift läuft am Bau-PC nicht, geprüft hat nur die CI.
 
@@ -32,7 +32,8 @@ Die Apple-Stimme bleibt voreingestellt („Beste vorhandene“), bis du Superton
   Apple-Stimme. Bei einer Speicherwarnung von iOS gibt die App das Modell frei.
 - Seit 0.4.11: Scheitert Supertonic bei einem Satz, lädt die App das Modell frisch für den Prozessor und versucht
   den Satz noch einmal. Erst wenn auch das scheitert, spricht die Apple-Stimme ihn. Nach zwei Sätzen in Folge, bei
-  denen beide Versuche scheitern, ruht Supertonic bis zum nächsten Start der App oder bis zu „Erneut laden“.
+  denen beide Versuche scheitern, ruht Supertonic. Bis 0.4.11 galt das bis zum nächsten Start der App oder bis zu
+  „Erneut laden“. Seit 0.4.12 ruht es nur für den Rest der Antwort, siehe unten.
 - Seit 0.4.11: Im Vordergrund rechnet Supertonic mit allem, was das iPhone hat (auch Grafikchip). Im Hintergrund
   (Bildschirm gesperrt, andere App vorn) verbietet iOS den Grafikchip, dort rechnet nur der Prozessor. Kommt die
   App wieder nach vorn, lädt das Modell gleich wieder für den schnellen Weg (`VoiceCompute` in RelayCore).
@@ -42,11 +43,30 @@ Die Apple-Stimme bleibt voreingestellt („Beste vorhandene“), bis du Superton
   durchlaufen zu lassen, und spricht sie, sobald sie wieder vorn ist (höchstens zwei Minuten später, `HeldSpeech`
   in RelayCore, gilt für beide Stimmen). Damit es dazu selten kommt, bleibt der Bildschirm an, solange eine
   gesprochene Frage in Jarvis auf ihre Antwort wartet, die vorgelesen werden soll.
+- Seit 0.4.12: Supertonic schaltet sich nicht mehr dauerhaft ab. Nach zwei ganz gescheiterten Sätzen spricht die
+  Apple-Stimme den Rest der Antwort. Die nächste Antwort, die nächste Aufnahme, „Testen“, ein „Vorlesen“ oder die
+  Rückkehr der App in den Vordergrund lädt das Modell frisch und beginnt von vorn (`VoiceCompute.revive`,
+  `SupertonicStore.wake`). Die Stimmenauswahl zeigt die Pause an. Einen Fehler zeigt sie erst, wenn auch das
+  Neuladen scheitert, und selbst dann versucht es die nächste Antwort wieder.
+- Seit 0.4.12: Die App berechnet den Ton aller schon bekannten Sätze einer Antwort voraus (bis 30 Sätze), nicht
+  nur den des nächsten. Sperrt sich das iPhone mitten in der Antwort, liegt der Rest meist schon fertig da. Womit
+  gerechnet wird (Grafikchip oder Prozessor), entscheidet sich erst, wenn ein Satz an der Reihe ist. So scheitert
+  ein vorausgeplanter Satz nicht erst auf dem Grafikchip, wenn die App inzwischen im Hintergrund ist.
+- Seit 0.4.12: Während Jarvis eine Antwort vorliest, bleibt der Bildschirm an (höchstens zehn Minuten, wie bei einer
+  Aufnahme). Das gilt nur in Jarvis, im Fahrmodus bleibt er ohnehin an. Drückst du die Seitentaste, spricht
+  Jarvis im Hintergrund weiter.
 - „Tempo“ gilt auch für Supertonic.
-- Es gilt für Jarvis, den Sprachmodus und überall, wo die App Antworten satzweise vorliest. „Vorlesen auf
-  Knopfdruck“ (Lautsprecher unter einer Nachricht, mit Pause) bleibt bei der Apple-Stimme.
+- Es gilt für Jarvis, den Sprachmodus und überall, wo die App Antworten satzweise vorliest. Seit 0.4.12 auch für
+  „Vorlesen auf Knopfdruck“ (`SpeechOut`: Lautsprecher unter einer Nachricht, „Frage vorlesen“, Rückfragen,
+  Meldungen), mit Pause und Weiter. Dort wartet der erste Satz, bis das Modell geladen ist, statt mit der
+  Apple-Stimme zu beginnen. Ohne Supertonic liest dort wie bisher die Apple-Stimme den Text am Stück.
 - Im Protokoll der App (am PC `notifyd phone log`) stehen für die ersten Sätze nach dem Start Länge, Rechenzeit und
-  Echtzeitfaktor, dazu die Ladezeit des Modells. Sätze selbst stehen dort nicht.
+  Echtzeitfaktor, dazu die Ladezeit des Modells. Seit 0.4.12 getrennt gezählt für den schnellen Weg und den Prozessor
+  (Zusatz „, Prozessor“, im Hintergrund „, App im Hintergrund“, nach einem ersten Fehlversuch „, mit Neuladen“).
+- Seit 0.4.12 steht jeder Rückfall im Protokoll: „Apple-Stimme statt Supertonic (App vorn oder im Hintergrund)“,
+  die ersten 40 Zeichen des Satzes und der Grund (bei „Vorlesen“ mit dem Vorsatz „Vorlesen:“). Diese Einträge
+  warten ohne Verbindung in einer Datei auf dem iPhone (`kept-log.json`, höchstens 60) und gehen bei der nächsten
+  Verbindung an den PC. Damit stehen erstmals Satzanfänge im Protokoll, sonst weiter keine Sätze.
 
 ## iPhone: was dahinter steckt
 
@@ -80,7 +100,23 @@ Messung aus den Protokollen der App am PC (`notifyd phone log` und Nutzungsproto
 Was 0.4.11 dagegen tut, steht oben unter „wie es arbeitet“. Nicht behebbar ist, dass eine App im Hintergrund keine
 Tonausgabe neu beginnen darf. Läuft das Vorlesen schon, wenn sich das iPhone sperrt, spielt es weiter.
 
+## Stimmwechsel mitten in der Antwort am 26.11.2026
+
+Martin meldete mit 0.4.7: Ab „Beides kommt ins Relay-Backlog“ sprach die Apple-Stimme, danach dauerhaft. Beleg im
+Protokoll: 11:37:21 App im Hintergrund, direkt danach zwei „Satz gescheitert“ mit dem Grafikchip-Fehler, die Antworten
+danach ohne Supertonic. Dasselbe um 11:50. Ursachen: Rechnen auf dem Grafikchip im Hintergrund (seit 0.4.11 behoben)
+und das dauerhafte Ruhen nach zwei Fehlern (seit 0.4.12 behoben). Martins Ziel (26.11.): Eine begonnene Antwort wird
+immer mit Supertonic zu Ende gesprochen, auch wenn sich der Bildschirm sperrt.
+
 ## iPhone: was noch zu prüfen ist
+
+- Seit 0.4.12: Prüftext aus dem Backlog als Jarvis-Antwort, nach dem zweiten Satz den Bildschirm sperren. Erwartet:
+  alle Sätze in M2, im Protokoll kein „Satz gescheitert“ und keine Zeile „Apple-Stimme statt Supertonic“. Danach
+  eine weitere Frage: wieder M2. Dazu der Echtzeitfaktor in den Zeilen mit „, Prozessor“: Liegt er über 1,
+  entstehen im Hintergrund Pausen zwischen Sätzen, die beim Sperren noch nicht berechnet waren.
+- Seit 0.4.12: Pause und Weiter beim „Vorlesen“ mit Supertonic (der erzeugte Ton hält an der Stelle an).
+- Offen: Solange das Modell nach dem Start der App noch lädt, sprechen in Jarvis die ersten Sätze mit der
+  Apple-Stimme (steht dann als Rückfall im Protokoll). Nach einer Speicherwarnung von iOS ebenso.
 
 - Hörprobe am Gerät: Klang der umgewandelten Fassung (die Hörproben vom 24.11. entstanden am PC mit der ONNX-Fassung),
   Pausen zwischen den Sätzen, Wechsel zwischen deutscher und englischer Stimme.

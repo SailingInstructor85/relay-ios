@@ -26,6 +26,9 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Anhänge:** Fotos und Dateien hochladen, der Pfad landet in der Nachricht. Aus der Mediathek gehen mehrere Fotos
   und Videos auf einmal: Sie stehen erst als Vorschau über der Eingabe und gehen mit „N Fotos hochladen“ (oder Senden)
   gemeinsam hoch.
+- **Kalender:** Karte auf „Heute“ mit den Terminen von heute und morgen, ein Tipp öffnet die Wochenliste (nur zur
+  Ansicht, die Termine kommen vom Gateway). Seit 0.4.12 merkt sich Relay den zuletzt geladenen Stand und zeigt ihn auch
+  ohne Verbindung zum PC, mit dem Hinweis „Stand von …“.
 - **Nutzung & Limits** pro Konto, **RAM-Monitor** mit Schließen und Wiederöffnen
 - **Jarvis per Sprache:** Jarvis ist der eingebaute Sprachassistent von Relay für Fragen an das Gateway (kein Agent
   von Christopher). Mikrofon antippen und sprechen. Nach einer kurzen Pause fragt Jarvis von selbst; der rote Knopf
@@ -38,7 +41,10 @@ iPhone 16 Pro (iOS 17 oder neuer).
   eigener Schreibweise (zuerst „Chief“). Seit 0.4.11 bleibt der Bildschirm an, solange eine gesprochene Frage auf
   ihre Antwort wartet. Sperrt sich das iPhone trotzdem, rechnet Supertonic auf dem Prozessor weiter, und eine
   Antwort, die im Hintergrund nicht zu hören wäre, liest Jarvis vor, sobald Relay wieder offen ist (bis zu zwei
-  Minuten später). Im Gesprächsmodus hört Jarvis danach wieder zu. In den Antworten lässt sich per langem Drücken Text
+  Minuten später). Seit 0.4.12 berechnet Relay den Ton der ganzen Antwort voraus und hält den Bildschirm an, solange
+  Jarvis vorliest, damit eine begonnene Antwort in derselben Stimme zu Ende läuft. Nach Fehlern pausiert Supertonic
+  nur für den Rest der Antwort, die nächste beginnt wieder damit. Auch „Vorlesen“ bei Rückfragen, Meldungen und
+  Chat-Nachrichten spricht seitdem mit Supertonic. Im Gesprächsmodus hört Jarvis danach wieder zu. In den Antworten lässt sich per langem Drücken Text
   markieren und in Teilen kopieren. Der Kurzbefehl „Jarvis in Relay“ funktioniert per Siri
   oder über die Aktionstaste. Eine Trennlinie im Verlauf zeigt, wo am PC ein neues Gespräch begonnen hat (jeden Tag um
   4 Uhr): Was davor steht, weiß Jarvis nicht mehr. Details und der geplante Knopf „Neues Gespräch beginnen“:

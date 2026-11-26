@@ -929,3 +929,53 @@ Offen für Martin:
 - Sind zwei Minuten für das Nachholen richtig, oder soll es kürzer oder länger sein?
 
 Version: `project.yml` 0.4.10 auf 0.4.11. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 26. November 2026, 13:16 (Version 0.4.12)
+
+Drei Einträge aus dem Backlog, alle drei umgesetzt. Swift läuft am Bau-PC nicht, kompiliert und getestet hat erst die CI. Auf einem iPhone ist nichts davon gehört oder gesehen.
+
+1. VORRANG: Supertonic fällt nach zwei Fehlern für den Rest der App-Sitzung auf die Apple-Stimme zurück. Erledigt.
+   - Kein dauerhaftes Abschalten (C: `VoiceCompute.resting`, `revive`; A: SupertonicStore.swift `wake`, `revive`, `resting`): Zwei ganz gescheiterte Sätze in Folge setzen nicht mehr `phase = .failed`, sondern lassen Supertonic ruhen. `wake()` beendet die Ruhe, lädt das Modell frisch und wärmt es auf. Aufgerufen wird es bei `beginReply` (jede Antwort), beim Start einer Aufnahme (Jarvis, Fahrmodus), bei „Testen“, bei jedem „Vorlesen“ und bei `didBecomeActive`. Scheitert schon der Start des Modells, steht der Fehler in der Stimmenauswahl (`startFailed`), der nächste Anlauf versucht es trotzdem wieder. „Erneut laden“ und der Neustart der App sind dafür nicht mehr nötig.
+   - Ganze Antwort vorausberechnen (A: Voice.swift `prepareAhead`): Für alle deutschen Sätze der Kette entsteht sofort eine Berechnung, höchstens `VoiceCompute.ahead` (30) gleichzeitig vorgemerkt. Vorher nur für den nächsten Satz. Bei einer Antwort ohne Streaming sind damit alle Sätze eingereiht, sobald die Antwort da ist. Abgebrochene Berechnungen (Stopp) rechnet der Worker nicht mehr (`Task.checkCancellation`) und sie zählen nicht als Fehler.
+   - Rechenweg erst beim Rechnen (A: `SupertonicWorker.background`, `setBackground`): Bisher legte der Aufrufer Grafikchip oder Prozessor fest, wenn er den Satz einreihte. Mit vielen vorgemerkten Sätzen hätte jeder nach dem Sperren erst auf dem Grafikchip scheitern müssen, mit zweimaligem Umladen des Modells je Satz. Jetzt weiß der Worker selbst, ob die App im Hintergrund ist (`didEnterBackground`, `didBecomeActive`, dazu lernt er es aus dem Fehlertext von iOS) und wählt, wenn der Satz an der Reihe ist.
+   - Bildschirm (A: Voice.swift `keepsScreenOnWhileSpeaking`, ScreenAwake.swift `readingStarted`): Solange Jarvis eine Antwort vorliest, bleibt der Bildschirm an, mit der Obergrenze der Aufnahme (10 Minuten). Nur in Jarvis eingeschaltet, nicht im Chat (dort liest die App mit Kopfhörern, das iPhone steckt oft in der Tasche).
+   - Protokoll (C: `VoiceCompute.fallbackLine`, `timingNote`, `KeptLog`; A: AppLog.swift `keep`, `KeptFile`): Jeder Satz, den die Apple-Stimme statt Supertonic spricht, steht mit den ersten 40 Zeichen, dem Grund und „App vorn“ oder „App im Hintergrund“ im Protokoll. Einträge mit `keep` warten ohne Verbindung in `kept-log.json` (höchstens 60) und gehen nach dem nächsten `hello_ok` raus, wie die Absturzberichte. Die Rechenzeit wird für Prozessor-Sätze eigens gezählt (die ersten fünf), damit der Echtzeitfaktor im Hintergrund im Protokoll steht. Gemessen wird ab Beginn der Berechnung, nicht ab dem Einreihen.
+   - Tests: `VoiceModelTests` (sechs neue: Ruhe endet mit der nächsten Antwort, `revive` ohne Ruhe ändert nichts, Protokollzeilen, `KeptLog`).
+
+2. Neue Stimme überall: Rückfragen, Meldungen und „Vorlesen“-Knöpfe mit Supertonic M2. Erledigt.
+   - `SpeechOut` (A: MessageMenu.swift) liest deutsche Sätze mit Supertonic, wenn die Stimme gewählt und geladen ist: Stücke der Reihe nach, Ton der folgenden Sätze vorausberechnet, englische Stücke und gescheiterte Sätze mit der Apple-Stimme. Das trifft alle Aufrufer ohne Änderung dort: Meldungen und „Frage vorlesen“ (NoticeView), Rückfragen-Fenster (QuestionForm), Chat (Lautsprecher unter Antworten, Fragen- und Antwortkarten, Nachrichtenmenü).
+   - Aufteilung des Textes: `ReadAloud.parts` (C: Speech.swift, mit Test). Deutsche Sätze einzeln, aufeinanderfolgende englische als ein Stück.
+   - Pause und Weiter: `PCMPlayer.pause` und `resume` halten den erzeugten Ton an der Stelle an. Die Sicherung, die einen Satz ohne Rückmeldung der Ausgabe beendet, zählt die Pause nicht mit.
+   - Jedes Vorlesen ruft `wake()`. Meldungen erben die Sperre aus Eintrag 1 also nicht. Rückfälle stehen mit dem Vorsatz „Vorlesen:“ im Protokoll.
+   - Ohne Supertonic (nicht gewählt, Modell fehlt) bleibt der alte Weg: ein Stück mit der Apple-Stimme, Pause an der Wortgrenze.
+
+3. Kalender offline: letzten Stand zeigen. Erledigt.
+   - Geprüft im Code von v0.4.10 und v0.4.11: Der Fehler bestand dort unverändert (`CalendarStore` hielt die Termine nur im Arbeitsspeicher).
+   - Zwischenspeicher (C: `CalendarCache` in Agenda.swift; A: CalendarView.swift `CalendarStore`): Jede gelungene Antwort von `calendar` landet mit dem Zeitpunkt des Abrufs in `calendar-cache.json` (Application Support). Beim Start liest der Store sie, sofern ihr Zeitraum heute noch nicht abgelaufen ist.
+   - Hinweis: „Stand von 11:35“, von einem anderen Tag „Stand von Di., 24. November, 11:35“. Er steht unten auf der Karte und unter dem Wochenstreifen (Kennung `calendarStale`), solange der Stand aus dem Zwischenspeicher stammt, der letzte Abruf gescheitert ist oder keine Verbindung besteht. Nach dem nächsten gelungenen Abruf ist er weg. Die Wochenliste lädt jetzt auch selbst neu, wenn die Verbindung wiederkommt.
+   - Tage außerhalb des gespeicherten Zeitraums: „Noch nicht geladen“ statt „Keine Termine“ (`Agenda.Day.loaded`). Vergangene Tage fallen von selbst weg, die Ansichten rechnen ab heute.
+   - Ohne Stand und ohne Verbindung: Abschnitt „Kalender“ mit „Kalender erscheint, sobald der PC erreichbar ist.“ (Kennung `calendarOffline`), in der Wochenliste derselbe Satz statt des rohen Verbindungsfehlers. Kennt das Gateway keinen Kalender, bleibt der Abschnitt wie bisher weg.
+   - Tests: `AgendaTests` (sechs neue: Speichern und Laden, kaputte Dateien, Hinweistext, Tage außerhalb des Zeitraums). UI-Test `InboxTests.test07_KalenderOhneVerbindung`: laden, App beenden, Mock-Gateway offline, Neustart mit `RELAY_UI_KEEP=1` (neu in `UITestMode`: Einstellungen und Dateien des vorigen Starts bleiben), Karte mit Terminen und „Stand von“, Wochenliste mit `calendarStale`.
+
+Entscheidungen:
+- Supertonic ruht weiter nach zwei ganz gescheiterten Sätzen, aber nur bis zum nächsten Anlauf. Ohne die Pause würde jeder weitere Satz einer kaputten Antwort erst zweimal das Modell laden, bevor die Apple-Stimme spricht.
+- Vorausberechnet wird immer, nicht erst wenn der Prozessor langsamer als Echtzeit ist (so stand es als Bedingung im Eintrag). Der Echtzeitfaktor des Prozessors ist noch nie gemessen, und Martins Ziel ist, dass eine begonnene Antwort in M2 zu Ende läuft. Speicher: rund 0,2 MB je Sekunde Ton.
+- Der Bildschirm bleibt beim Vorlesen nur in Jarvis an. Das ist die Lesart des Chiefs aus dem Eintrag, von Martin nicht bestätigt.
+- Satzanfänge im Protokoll: Der Eintrag verlangt sie. Sie landen nur am eigenen PC (`notifyd phone log`), aber bisher standen dort bewusst keine Sätze.
+- „Vorlesen“ wartet auf das Laden des Modells, statt mit der Apple-Stimme zu beginnen. In Jarvis bleibt es wie bisher (Apple-Stimme, bis das Modell im Speicher ist).
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert. Der Umbau in SupertonicStore.swift, Voice.swift und MessageMenu.swift ist groß für einen Lauf ohne Compiler.
+- Ob die Tonausgabe nach dem Sperren weiterläuft, während der Prozessor rechnet, ist am Gerät nicht geprüft (Hintergrundmodus `audio` ist gesetzt). Rechnet der Prozessor langsamer als Echtzeit, entstehen Pausen bei Sätzen, die beim Sperren noch nicht fertig waren.
+- Nicht behoben: Solange das Modell nach dem Start der App noch lädt, oder nach einer Speicherwarnung von iOS, sprechen in Jarvis die ersten Sätze mit der Apple-Stimme. Das steht jetzt als Rückfall im Protokoll. Ein Warten auf das Modell wäre möglich, kostet aber beim ersten Laden viele Sekunden Stille.
+- Pause beim „Vorlesen“ mit Supertonic ist ungehört (`AVAudioPlayerNode.pause`).
+- Der UI-Test zum Kalender ist der erste, der die App mitten im Test neu startet. Scheitert er an der Umgebung statt an der App, liegt es am ehesten dort.
+
+Offen für Martin:
+- Am iPhone mit 0.4.12 den Prüftext aus dem Backlog als Jarvis-Antwort hören und nach dem zweiten Satz sperren. Danach `notifyd phone log` ansehen: Zeilen mit „Apple-Stimme statt Supertonic“ und mit „, Prozessor“.
+- Rückfrage öffnen und vorlesen lassen, eine Meldung und eine Chat-Nachricht ebenso: alle in M2?
+- App schließen, Flugmodus, App öffnen: Kalender mit „Stand von …“ da?
+- Soll der Bildschirm beim Vorlesen in Jarvis anbleiben, oder stört das?
+- Sollen in Jarvis die ersten Sätze auf das Modell warten, statt mit der Apple-Stimme zu beginnen?
+
+Version: `project.yml` 0.4.11 auf 0.4.12. Nicht gepusht, kein Tag. Das übernimmt das Skript.

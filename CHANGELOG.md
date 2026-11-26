@@ -2,6 +2,21 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.12 (2026-11-26)
+
+**Behoben**
+- Jarvis wechselte mitten in einer Antwort auf die blecherne Apple-Stimme und blieb danach dabei, bis du die App ganz geschlossen hast. Auslöser war das Sperren des iPhones (oder der Wechsel in eine andere App), während Jarvis sprach. Dagegen hilft jetzt dreierlei. Erstens berechnet Relay den Ton der ganzen Antwort sofort im Voraus, nicht mehr nur den nächsten Satz. Sperrt sich das iPhone mittendrin, liegt der Rest meist schon fertig da, und was noch fehlt, rechnet der Prozessor im Hintergrund. Zweitens bleibt der Bildschirm an, solange Jarvis eine Antwort vorliest (höchstens zehn Minuten). Drittens schaltet sich die Stimme Supertonic nicht mehr dauerhaft ab: Scheitern doch einmal zwei Sätze nacheinander, spricht die Apple-Stimme nur den Rest dieser Antwort. Die nächste Antwort beginnt wieder mit Supertonic.
+- Der Kalender verschwand von „Heute“, wenn beim Öffnen der App keine Verbindung zum PC bestand (kein Netz, PC aus). Relay merkt sich jetzt den zuletzt geladenen Kalender und zeigt ihn auch ohne Verbindung, auf der Karte und in der Wochenliste, mit dem Hinweis „Stand von 11:35“ (bei einem älteren Stand mit Tag). Tage, die der gemerkte Stand nicht abdeckt, heißen „Noch nicht geladen“. Sobald die Verbindung steht, lädt Relay neu und der Hinweis verschwindet. Gab es noch nie einen Stand, steht dort „Kalender erscheint, sobald der PC erreichbar ist.“
+
+**Neu**
+- Die neue Stimme liest jetzt überall: Auch „Vorlesen“ und „Frage vorlesen“ bei Rückfragen, Meldungen und Chat-Nachrichten sprechen Deutsch mit Supertonic (M2), wenn du die Stimme gewählt hast. Pause, Weiter und Stopp funktionieren wie bisher. Englische Abschnitte liest weiter die Apple-Stimme.
+
+**Geändert**
+- Spricht doch einmal die Apple-Stimme, obwohl Supertonic gewählt ist, hält Relay das für die Fehlersuche fest: den Anfang des Satzes (rund 40 Zeichen), den Grund und ob die App gerade offen war. Der Eintrag geht an deinen PC, ohne Verbindung beim nächsten Mal. Bisher standen keine Satzanfänge im Protokoll.
+- In der Stimmenauswahl steht, wenn Supertonic nach Fehlern pausiert. „Testen“ startet die Stimme dann neu.
+
+Hinweis: Auf einem iPhone ist diese Version noch nicht ausprobiert. Ob der Prozessor im Hintergrund schnell genug rechnet, zeigt erst das Protokoll nach dem ersten Versuch. Solange das Modell nach dem Start der App noch lädt, spricht weiter kurz die Apple-Stimme.
+
 ## 0.4.11 (2026-11-26)
 
 **Behoben**
