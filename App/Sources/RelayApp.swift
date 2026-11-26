@@ -15,12 +15,13 @@ struct RelayApp: App {
                 .preferredColorScheme(UITestMode.colorScheme) // nur im UI-Testmodus gesetzt, sonst nil (System)
                 .onOpenURL { model.receive($0) }
                 .onAppear {
-                    UsageRecorder.shared.appStarted(); model.start(); Outbox.shared.start(); model.requestNotificationPermission()
+                    UsageRecorder.shared.appStarted(); AppHealth.shared.start(); model.start(); Outbox.shared.start(); model.requestNotificationPermission()
                     if let u = UITestMode.shareFile() { model.receive(u) }
                 }
                 .onChange(of: phase) { _, p in
                     model.setForeground(p == .active)
                     UsageRecorder.shared.phase(p)
+                    if p == .active { AppHealth.shared.refresh() }
                     if p == .background {
                         model.questionPromptDue = true  // beim nächsten Öffnen das Blatt „Rückfrage jetzt“ prüfen
                         BackgroundRefresh.schedule()
@@ -104,7 +105,7 @@ struct RootView: View {
     @ObservedObject private var approvals = Approvals.shared
     var body: some View {
         VStack(spacing: 0) {
-            if model.configured && !model.locked { TopNotices() }
+            if model.configured && !model.locked { TopNotices(); SigningBanner() }
             ZStack {
                 if model.configured { RootTabs() } else { NavigationStack { SetupView(firstRun: true) } }
                 if model.locked { LockView() }

@@ -5,6 +5,7 @@ import SwiftUI
 /// Umgebung: RELAY_UI_HOST, RELAY_UI_PORT, RELAY_UI_USER, RELAY_UI_SEED, RELAY_UI_PREFILL (1: Einstellungen vorbelegen),
 /// RELAY_UI_SHARE (1: eine geteilte Testdatei liegt an, das Teilen-Blatt öffnet sich),
 /// RELAY_UI_SCHEME (dark oder light: erzwingt das Farbschema für Bilder, sonst gilt das des Simulators),
+/// RELAY_UI_SIGN_DAYS und RELAY_UI_UPDATE (künstliches Ablaufdatum der Signatur, künstliche Version in der Quelle),
 /// RELAY_UI_KEEP (1: Einstellungen und Dateien des vorigen Starts bleiben, für Tests über einen Neustart der App hinweg).
 enum UITestMode {
     static let active = ProcessInfo.processInfo.arguments.contains("-relayUITest")
@@ -33,6 +34,14 @@ enum UITestMode {
         default: return nil
         }
     }
+
+    /// RELAY_UI_SIGN_DAYS (Zahl, auch 2.5): künstliches Ablaufdatum der Signatur, so viele Tage ab jetzt.
+    /// Ohne die Angabe verhält sich die App wie im Simulator üblich: kein Profil, keine Anzeige.
+    static var signDays: Double? { active ? env["RELAY_UI_SIGN_DAYS"].flatMap { Double($0) } : nil }
+
+    /// RELAY_UI_UPDATE (Version wie 9.9.9): so, als läge diese Version in der SideStore-Quelle. Im Testmodus lädt die
+    /// App die Quelle nie aus dem Netz.
+    static var updateVersion: String? { active ? env["RELAY_UI_UPDATE"] : nil }
 
     /// RELAY_UI_SHARE=1: a small text file as if another app had shared it ("In Relay öffnen"), so the share sheet opens.
     static func shareFile() -> URL? {

@@ -210,7 +210,17 @@ Tests unter Linux: `cd RelayCore && swift test`. Ende-zu-Ende-Test gegen ein Gat
    `https://github.com/SailingInstructor85/relay-ios/releases/latest/download/source.json`.
    Jede neue Version (Git-Tag `v*`) erscheint dann in SideStore als Update.
 5. Mit einer kostenlosen Apple-ID läuft die Signatur nach **7 Tagen** ab. SideStore erneuert sie auf dem iPhone
-   selbst (Refresh), dafür muss das VPN bzw. der Pairing-Mechanismus von SideStore aktiv sein.
+   selbst (Refresh). Dafür muss LocalDevVPN eingeschaltet sein **und das iPhone in einem WLAN eingebucht sein**
+   (irgendeines, es muss nicht das Heimnetz sein). Über Mobilfunk geht weder Installieren noch Aktualisieren noch
+   Erneuern, auch nicht mit eingeschaltetem VPN. Das ist eine Grenze von SideStore und LocalDevVPN, nicht von Relay
+   (SideStore-Doku „Prerequisites“, LocalDevVPN Issue 31, Stand 26.11.2026). Vor mehreren Tagen ohne WLAN also vorher
+   in SideStore erneuern.
+6. **Ablauf und Updates im Blick (seit 0.4.14):** Relay liest das Ablaufdatum der eigenen Signatur und zeigt es unter
+   „Mehr“ (ganz unten bei der Version) und in den Einstellungen im Abschnitt „App und Signatur“. Ab drei Tagen Rest
+   steht ein Hinweis oben in der App, dazu kommen Mitteilungen 72, 48 und 24 Stunden vor Ablauf. Liegt in der Quelle
+   aus Punkt 4 eine neuere Version, steht oben in „Mehr“ die Zeile „Update x.y.z verfügbar“ mit „SideStore öffnen“.
+   Relay prüft das beim Öffnen, höchstens alle sechs Stunden. Das Ablaufdatum geht außerdem mit dem Nutzungsprotokoll
+   an den PC (Ereignis `app`/`signatur`, im Feld `detail` steht `signatur_bis=<Zeitpunkt in UTC>`).
 
 ## Versionshinweise und Dokumentation
 

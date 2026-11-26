@@ -223,4 +223,51 @@ final class TabTests: RelayTestCase {
         expect("Umgeschaltet auf HDMI 2", 6)
         shot("smarthome-ergebnis")
     }
+
+    /// Signatur läuft in zweieinhalb Tagen ab (künstliches Datum): Der Hinweis steht oben in der App und nennt das WLAN.
+    /// Dazu liegt in der Quelle eine neuere Version: „Mehr“ zeigt die Zeile mit „SideStore öffnen“ und den Satz zum WLAN.
+    /// In den Einstellungen steht das Ablaufdatum, und es geht mit dem Nutzungsprotokoll an den PC.
+    func test12_SignaturHinweisUndUpdate() {
+        launchConnected(extraEnv: ["RELAY_UI_SIGN_DAYS": "2.5", "RELAY_UI_UPDATE": "9.9.9"])
+        let banner = id("signBanner")
+        XCTAssertTrue(banner.waitForExistence(timeout: 5), "Hinweis zur Signatur fehlt bei 2,5 Tagen Rest")
+        XCTAssertTrue(banner.label.contains("läuft in 2 Tagen ab"), "Hinweistext: \(banner.label)")
+        XCTAssertTrue(banner.label.contains("WLAN"), "Hinweis nennt das WLAN nicht: \(banner.label)")
+        XCTAssertTrue(id("signBannerStore").exists, "Knopf „SideStore öffnen“ fehlt im Hinweis")
+        shot("signatur-hinweis")
+        showTab(Self.tabMore)
+        XCTAssertTrue(id("updateRow").waitForExistence(timeout: 5), "Zeile zum Update fehlt in „Mehr“")
+        expect("Update 9.9.9 verfügbar", 3)
+        expect("Aktualisieren geht nur im WLAN mit LocalDevVPN", 3)
+        expect("Einstellungen", 3)
+        shot("mehr-update")
+        mainMenu("Einstellungen")
+        settle(1)
+        XCTAssertTrue(reveal("Signatur gültig bis"), "Ablaufdatum fehlt in den Einstellungen")
+        XCTAssertTrue(id("signLine").label.contains("noch 2 Tage"), "Zeile: \(id("signLine").label)")
+        expect("Update 9.9.9 verfügbar", 3)
+        shot("einstellungen-signatur")
+        reveal("Protokoll jetzt senden")
+        tapID("usageSend")
+        XCTAssertTrue(mockReceived("usage_put", where: { p in
+            ((p["items"] as? [[String: Any]]) ?? []).contains { ($0["action"] as? String) == "signatur" && (($0["detail"] as? String) ?? "").hasPrefix("signatur_bis=20") }
+        }, timeout: 10), "Ablaufdatum nicht im Nutzungsprotokoll")
+    }
+
+    /// Mehr als drei Tage Rest und kein Update: kein Hinweis oben, keine Update-Zeile. Das Datum steht trotzdem in den
+    /// Einstellungen.
+    func test13_SignaturOhneHinweis() {
+        launchConnected(extraEnv: ["RELAY_UI_SIGN_DAYS": "6.5"])
+        settle(1)
+        XCTAssertFalse(id("signBanner").exists, "Hinweis zur Signatur schon bei 6,5 Tagen Rest")
+        showTab(Self.tabMore)
+        expect("Einstellungen", 4)
+        XCTAssertFalse(id("updateRow").exists, "Update-Zeile ohne neuere Version")
+        mainMenu("Einstellungen")
+        settle(1)
+        XCTAssertTrue(reveal("Signatur gültig bis"), "Ablaufdatum fehlt in den Einstellungen")
+        XCTAssertTrue(id("signLine").label.contains("noch 6 Tage"), "Zeile: \(id("signLine").label)")
+        XCTAssertFalse(id("updateLine").exists, "Update-Zeile in den Einstellungen ohne neuere Version")
+        shot("einstellungen-signatur-6-tage")
+    }
 }

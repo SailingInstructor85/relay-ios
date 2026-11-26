@@ -29,7 +29,8 @@ class RelayTestCase: XCTestCase {
 
     /// `scheme`: "dark" oder "light" erzwingt das Farbschema der App (UITestMode.colorScheme), nil lässt das des Simulators.
     /// `keep`: Einstellungen und Dateien des vorigen Starts bleiben (Neustart der App mitten im Test).
-    func launch(prefill: Bool = true, share: Bool = false, scheme: String? = nil, keep: Bool = false) {
+    /// `extraEnv`: weitere Startumgebung für die App, etwa RELAY_UI_SIGN_DAYS (UITestMode).
+    func launch(prefill: Bool = true, share: Bool = false, scheme: String? = nil, keep: Bool = false, extraEnv: [String: String] = [:]) {
         app = XCUIApplication()
         app.launchArguments += ["-relayUITest", "-AppleLanguages", "(de)", "-AppleLocale", "de_DE"]
         app.launchEnvironment["RELAY_UI_HOST"] = "127.0.0.1"
@@ -40,6 +41,7 @@ class RelayTestCase: XCTestCase {
         if share { app.launchEnvironment["RELAY_UI_SHARE"] = "1" }
         if let scheme { app.launchEnvironment["RELAY_UI_SCHEME"] = scheme }
         if keep { app.launchEnvironment["RELAY_UI_KEEP"] = "1" }
+        for (k, v) in extraEnv { app.launchEnvironment[k] = v }
         app.launch()
         dismissSystemAlerts()
     }
@@ -56,8 +58,8 @@ class RelayTestCase: XCTestCase {
     }
 
     /// Startet und wartet, bis der Startbildschirm mit Daten da ist.
-    func launchConnected(scheme: String? = nil) {
-        launch(scheme: scheme)
+    func launchConnected(scheme: String? = nil, extraEnv: [String: String] = [:]) {
+        launch(scheme: scheme, extraEnv: extraEnv)
         XCTAssertTrue(waitHome(60), "Startbildschirm nicht geladen")
         settle(1)
         // Die App startet im Tab „Heute“. Die bestehenden Tests erwarten die Sitzungsliste vorn.

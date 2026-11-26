@@ -1289,7 +1289,17 @@ METHODS = {k[4:]: v for k, v in list(globals().items()) if k.startswith("rpc_") 
 def handle_rpc(o):
     rid, method, params = o.get("id"), o.get("method", ""), o.get("params") or {}
     try:
-        line = json.dumps({"ts": time.time(), "method": method, "params": params}, ensure_ascii=False)[:4000] + "\n"
+        logged = params
+        if method == "usage_put" and len(json.dumps(params, ensure_ascii=False)) > 3500:
+            # a long batch would be cut mid-JSON and vanish from rpcLog(): keep the first items that fit
+            kept, size = [], 0
+            for it in params.get("items") or []:
+                size += len(json.dumps(it, ensure_ascii=False)) + 2
+                if size > 3000:
+                    break
+                kept.append(it)
+            logged = {"items": kept, "truncated": True}
+        line = json.dumps({"ts": time.time(), "method": method, "params": logged}, ensure_ascii=False)[:4000] + "\n"
         for fn in ("rpc.jsonl", "rpc-all.jsonl"):
             with open(os.path.join(DIR, fn), "a") as f:
                 f.write(line)

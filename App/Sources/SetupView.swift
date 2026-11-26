@@ -67,6 +67,7 @@ struct SetupView: View {
                 }
             }
             if !firstRun {
+                AppHealthSection()
                 UsageSettingsSection()
                 NotifySettingsSection()
                 ChatSettingsSection()

@@ -7,6 +7,7 @@ struct MoreView: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject private var router = AppRouter.shared
     @ObservedObject private var notices = NoticeStore.shared
+    @ObservedObject private var health = AppHealth.shared
     @State private var showPower = false
     @State private var showWindDown = false
 
@@ -17,6 +18,7 @@ struct MoreView: View {
         let openQuestions = DriveQueue.open(notices.items).count
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                UpdateCard()
                 // Einstellungen bewusst weit oben: am Ende einer langen Seite liegt der Eintrag unter dem Rand.
                 MoreGroup {
                     MoreRow(title: "Jarvis fragen", symbol: "waveform") { push(.jarvis) }
@@ -64,8 +66,12 @@ struct MoreView: View {
                         .disabled(!connected)
                 }
 
-                Text("Relay \(AppModel.appVersion)").font(RelayFont.labelSmall).foregroundStyle(RelayColor.outline)
-                    .frame(maxWidth: .infinity).padding(.top, 20).padding(.bottom, 24)
+                VStack(spacing: 2) {
+                    Text("Relay \(AppModel.appVersion)")
+                    if let st = health.status() { Text(st.line()).accessibilityIdentifier("moreSignLine") }
+                }
+                .font(RelayFont.labelSmall).foregroundStyle(RelayColor.outline)
+                .frame(maxWidth: .infinity).padding(.top, 20).padding(.bottom, 24)
             }
         }
         .relayRootTitle(AppTab.more.title)
