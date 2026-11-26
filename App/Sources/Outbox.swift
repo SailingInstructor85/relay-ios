@@ -252,9 +252,10 @@ final class Outbox: ObservableObject {
         UsageRecorder.shared.record("jarvis", "postausgang gescheitert", kind: "text", error: why)
         let model = AppModel.shared
         if !(model.isForeground && JarvisInbox.shared.visible) {
+            let now = items.first(where: { $0.id == id }) ?? item
+            let line = JarvisOutbox.status(now, connected: true, network: true)
             Notifier.post(id: "jarvis-\(id)", title: "Nachricht an Jarvis nicht gesendet",
-                          body: "\(JarvisOutbox.status(items.first { $0.id == id } ?? item, connected: true, network: true)) \(JarvisOutbox.shownText(item))",
-                          thread: "jarvis")
+                          body: line + " " + JarvisOutbox.shownText(item), thread: "jarvis")
         }
     }
 

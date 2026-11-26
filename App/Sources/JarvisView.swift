@@ -345,7 +345,13 @@ struct JarvisView: View {
     private func submit(_ text: String, byVoice: Bool, trigger: String? = nil, t0: Date? = nil) async -> Bool {
         guard !docs.isEmpty else { return await ask(text, byVoice: byVoice, trigger: trigger, t0: t0) }
         let batch = docs
-        if model.state != .connected {
+        // eine stille Verbindung kann tot sein (Flugmodus, PC schläft): erst prüfen, dann hochladen
+        asking = true
+        uploading = "Prüfe die Verbindung…"
+        let alive = await model.ensureAlive()
+        uploading = ""
+        asking = false
+        if !alive {
             var stored: [String] = []
             for d in batch {
                 guard let data = d.bytes(), data.count <= JarvisDocs.maxBytes, let name = Outbox.storeFile(name: d.name, data: data) else {
@@ -693,6 +699,15 @@ struct JarvisView: View {
         if speak {
             voice.keepsScreenOnWhileSpeaking = true  // auch während des Vorlesens, nicht nur beim Warten
             voice.beginReply()
+        }
+        // Eine Verbindung, die länger still war, kann tot sein (Flugmodus, PC schläft), auch wenn sie noch als
+        // verbunden gilt: kurz prüfen. Ohne Antwort wartet die Frage in der Outbox, sie ging sicher nicht hinaus.
+        if !(await model.ensureAlive()) {
+            turns.removeAll { $0.id == tid }
+            Outbox.shared.add(id: tid.uuidString, key: JarvisOutbox.key, text: q, voice: byVoice, shown: shown, upload: upload)
+            UsageRecorder.shared.record("jarvis", "in postausgang", kind: byVoice ? "diktat" : "text", length: q.count)
+            if speak { voice.speakUnlessStopped(JarvisOutbox.spokenQueued) }
+            return false
         }
         let streamed = Flag()
         let stamp = Stamp()
