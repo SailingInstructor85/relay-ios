@@ -142,4 +142,77 @@ final class AgendaTests: XCTestCase {
                        "Kalender nicht geladen: from must be YYYY-MM-DD and days a number")
         XCTAssertNotNil(Agenda.failureLine(message: "Zeitüberschreitung", remote: false))
     }
+
+    // MARK: Zwischenspeicher (Kalender ohne Verbindung)
+
+    private var berlin: TimeZone { TimeZone(identifier: "Europe/Berlin")! }
+    /// 26.11.2026 11:35 in Berlin (MEZ, UTC+1).
+    private let fetched: Double = 1795689300
+
+    func testCacheRoundTrip() throws {
+        let response = try XCTUnwrap(JSON.parse(json))
+        let data = try XCTUnwrap(CalendarCache.encode(response, at: fetched))
+        let snap = try XCTUnwrap(CalendarCache.decode(data))
+        XCTAssertEqual(snap.at, fetched)
+        XCTAssertEqual(snap.feed, CalendarFeed.from(response))
+        XCTAssertEqual(snap.feed.events.count, 6)
+        XCTAssertEqual(snap.feed.sources.first?.colorHex, 0x1E88E5)
+        XCTAssertEqual(Agenda.card(snap.feed, today: "2026-11-22").map { $0.entries.count }, [4, 3])
+    }
+
+    func testCacheRejectsBrokenFiles() {
+        XCTAssertNil(CalendarCache.decode(Data()))
+        XCTAssertNil(CalendarCache.decode(Data("kein json".utf8)))
+        XCTAssertNil(CalendarCache.decode(Data(#"{"at": 5}"#.utf8)))
+        XCTAssertNil(CalendarCache.decode(Data(#"{"at": 0, "feed": {"from": "2026-11-22", "to": "2026-11-29", "events": []}}"#.utf8)))
+        XCTAssertNil(CalendarCache.decode(Data(#"{"at": 5, "feed": {"events": []}}"#.utf8)), "ohne Zeitraum")
+        XCTAssertNil(CalendarCache.encode(.null, at: fetched))
+        XCTAssertNotNil(CalendarCache.decode(Data(#"{"at": 5, "feed": {"from": "2026-11-22", "to": "2026-11-29", "events": []}}"#.utf8)))
+    }
+
+    func testCacheUsableUntilItsLastDay() {
+        let feed = CalendarFeed.from(JSON.parse(json)!)
+        XCTAssertTrue(CalendarCache.usable(feed, today: "2026-11-22"))
+        XCTAssertTrue(CalendarCache.usable(feed, today: "2026-11-29"))
+        XCTAssertFalse(CalendarCache.usable(feed, today: "2026-11-30"))
+        XCTAssertFalse(CalendarCache.usable(CalendarFeed(from: "", to: "", events: []), today: "2026-11-22"))
+    }
+
+    func testCacheNote() {
+        XCTAssertEqual(DayText.key(ts: fetched, timeZone: berlin), "2026-11-26")
+        // am selben Tag nur die Uhrzeit
+        XCTAssertEqual(CalendarCache.note(at: fetched, now: fetched + 3600, timeZone: berlin), "Stand von 11:35")
+        // älter als heute: mit dem Tag
+        XCTAssertEqual(CalendarCache.note(at: fetched, now: fetched + 2 * 86400, timeZone: berlin), "Stand von Do., 26. November, 11:35")
+        // aus dem Vorjahr: mit Jahreszahl
+        XCTAssertEqual(CalendarCache.note(at: fetched, now: fetched + 60 * 86400, timeZone: berlin), "Stand von Do., 26. November 2026, 11:35")
+    }
+
+    func testStaleNoteOnlyWhenNotFresh() {
+        let now = fetched + 600
+        // frisch geladen und verbunden: kein Hinweis
+        XCTAssertNil(CalendarCache.staleNote(at: fetched, stale: false, connected: true, now: now, timeZone: berlin))
+        // aus dem Zwischenspeicher, auch wenn die Verbindung schon steht (bis der neue Abruf da ist)
+        XCTAssertEqual(CalendarCache.staleNote(at: fetched, stale: true, connected: true, now: now, timeZone: berlin), "Stand von 11:35")
+        // Verbindung verloren, der Stand im Speicher altert
+        XCTAssertEqual(CalendarCache.staleNote(at: fetched, stale: false, connected: false, now: now, timeZone: berlin), "Stand von 11:35")
+        // gar kein Stand
+        XCTAssertNil(CalendarCache.staleNote(at: 0, stale: true, connected: false, now: now, timeZone: berlin))
+    }
+
+    func testDaysOutsideTheCachedRangeAreNotLoaded() {
+        // Stand vom 22. bis 29.11., geöffnet am 28.11.: Die Woche reicht bis zum 4.12., bekannt ist sie bis zum 29.
+        let feed = CalendarFeed.from(JSON.parse(json)!)
+        let week = Agenda.days(feed, from: "2026-11-28", count: 7, today: "2026-11-28")
+        XCTAssertEqual(week.map(\.loaded), [true, true, false, false, false, false, false])
+        XCTAssertEqual(week[0].emptyText, "Keine Termine")
+        XCTAssertEqual(week[2].emptyText, "Noch nicht geladen")
+        // am letzten Tag des Stands: heute bekannt, morgen nicht
+        XCTAssertEqual(Agenda.card(feed, today: "2026-11-29").map(\.loaded), [true, false])
+        // frisch geladen (heute der erste Tag): alles bekannt
+        XCTAssertTrue(Agenda.days(feed, from: "2026-11-22", count: 7, today: "2026-11-22").allSatisfy(\.loaded))
+        // ein Gateway ohne Zeitraum in der Antwort: wie bisher „Keine Termine“
+        let open = CalendarFeed(from: "", to: "", events: [])
+        XCTAssertTrue(Agenda.card(open, today: "2026-11-22").allSatisfy(\.loaded))
+    }
 }

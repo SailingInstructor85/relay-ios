@@ -230,20 +230,29 @@ struct TodayView: View {
 
     // MARK: Kalender
 
-    /// Kalenderkarte: Termine von heute und morgen, ein Tipp öffnet die Wochenliste. Ohne Antwort des Gateways
-    /// entfällt der Abschnitt; scheitert der Abruf bei bestehender Verbindung, steht dort der Grund.
+    /// Kalenderkarte: Termine von heute und morgen, ein Tipp öffnet die Wochenliste. Ohne Verbindung zeigt sie den
+    /// zuletzt geladenen Stand mit „Stand von …“; gibt es keinen, steht dort, dass der Kalender mit dem PC kommt.
+    /// Kennt das Gateway keinen Kalender, entfällt der Abschnitt; scheitert der Abruf bei bestehender Verbindung,
+    /// steht dort der Grund.
     @ViewBuilder private func calendarSection(_ now: Date) -> some View {
+        let connected = model.state == .connected
         if let feed = calendar.feed {
             SectionLabel(title: "Kalender")
             Button {
                 UsageRecorder.shared.record("heute", "kalender geöffnet")
                 push(.calendar)
             } label: {
-                AgendaCard(days: Agenda.card(feed, today: DayText.key(now)), now: now)
+                AgendaCard(days: Agenda.card(feed, today: DayText.key(now)), now: now,
+                           note: calendar.staleNote(connected: connected, now: now))
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("calendarCard")
-        } else if let failure = calendar.failure, model.state == .connected {
+        } else if !connected {
+            if !calendar.missing {
+                SectionLabel(title: "Kalender")
+                QuietLine(text: Agenda.offlineEmpty).accessibilityIdentifier("calendarOffline")
+            }
+        } else if let failure = calendar.failure {
             SectionLabel(title: "Kalender")
             QuietLine(text: failure)
         }

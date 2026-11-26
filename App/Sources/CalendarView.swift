@@ -2,7 +2,8 @@ import SwiftUI
 import RelayCore
 
 /// Der Kalender des Gateways (rpc `calendar`), einmal geladen für die Karte auf „Heute“ und die Wochenliste. Nur
-/// lesend. Geladen werden acht Tage ab heute; die Termine bleiben im Arbeitsspeicher.
+/// lesend. Geladen werden acht Tage ab heute. Jede Antwort wird auf dem iPhone gespeichert (`calendar-cache.json`):
+/// Beim Start und ohne Verbindung zum PC zeigt die App diesen Stand mit dem Hinweis „Stand von …“ (`CalendarCache`).
 @MainActor
 final class CalendarStore: ObservableObject {
     static let shared = CalendarStore()
@@ -15,12 +16,37 @@ final class CalendarStore: ObservableObject {
     /// Das Gateway kennt den RPC `calendar` nicht.
     @Published private(set) var missing = false
     @Published private(set) var loading = false
+    /// Zeitpunkt des Abrufs von `feed` (Unix-Sekunden), auch bei einem Stand aus dem Zwischenspeicher.
+    @Published private(set) var fetchedAt: Double = 0
+    /// `feed` stammt aus dem Zwischenspeicher, oder der letzte Abruf ist gescheitert.
+    @Published private(set) var stale = false
+    /// Letzter gelungener Abruf in diesem Lauf der App (für „älter als fünf Minuten“).
     private var loadedAt: Double = 0
 
-    private init() {}
+    private init() {
+        _ = AppModel.shared  // im UI-Test räumt dessen Start die Ablage der App erst leer
+        guard let u = Self.cacheURL, let d = try? Data(contentsOf: u), let snap = CalendarCache.decode(d),
+              CalendarCache.usable(snap.feed, today: DayText.key(Date())) else { return }
+        feed = snap.feed
+        fetchedAt = snap.at
+        stale = true
+    }
+
+    private static var cacheURL: URL? {
+        try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent("calendar-cache.json")
+    }
+
+    /// „Stand von …“, wenn der gezeigte Stand nicht frisch ist (Zwischenspeicher, gescheiterter Abruf, keine
+    /// Verbindung). nil: frisch geladen, oder es gibt keinen Stand.
+    func staleNote(connected: Bool, now: Date) -> String? {
+        guard feed != nil else { return nil }
+        return CalendarCache.staleNote(at: fetchedAt, stale: stale, connected: connected, now: now.timeIntervalSince1970)
+    }
 
     /// Lädt neu, wenn noch nichts da ist, der Stand älter als fünf Minuten ist oder der Tag gewechselt hat.
     /// `force`: sofort laden. `sync`: Das Gateway holt die Kalender vorher frisch ab (dauert etwa zehn Sekunden).
+    /// Scheitert der Abruf, bleibt der bisherige Stand stehen.
     func refresh(_ model: AppModel, force: Bool = false, sync: Bool = false) async {
         let today = DayText.key(Date())
         let now = Date().timeIntervalSince1970
@@ -30,15 +56,20 @@ final class CalendarStore: ObservableObject {
         defer { loading = false }
         do {
             let params: JSON = ["from": .string(today), "days": .number(Double(Self.days)), "refresh": .bool(sync)]
-            feed = CalendarFeed.from(try await model.rpc("calendar", params, timeout: sync ? 90 : 45))
+            let response = try await model.rpc("calendar", params, timeout: sync ? 90 : 45)
+            feed = CalendarFeed.from(response)
             failure = nil
             missing = false
             loadedAt = now
+            fetchedAt = now
+            stale = false
+            if let u = Self.cacheURL, let d = CalendarCache.encode(response, at: now) { try? d.write(to: u, options: .atomic) }
         } catch {
             let e = error as? RelayError
             let message = e?.message ?? error.localizedDescription
             missing = (e?.remote ?? false) && InboxText.isUnknownRpc(message)
             failure = Agenda.failureLine(message: message, remote: e?.remote ?? false)
+            if feed != nil { stale = true }
         }
     }
 }
@@ -90,10 +121,12 @@ struct AgendaRow: View {
 }
 
 /// Kalenderkarte auf „Heute“: die Termine von heute und morgen mit der Farbe ihres Kalenders. Je Tag höchstens fünf,
-/// der Rest als „n weitere“. Der Tipp auf die Karte (Knopf in TodayView) öffnet die Wochenliste.
+/// der Rest als „n weitere“. Der Tipp auf die Karte (Knopf in TodayView) öffnet die Wochenliste. `note`: Hinweis
+/// „Stand von …“ unter den Terminen, wenn der Stand nicht frisch ist (ohne Verbindung).
 struct AgendaCard: View {
     let days: [Agenda.Day]
     var now = Date()
+    var note: String?
     static let limit = 5
 
     var body: some View {
@@ -111,7 +144,7 @@ struct AgendaCard: View {
                         }
                     }
                     if day.entries.isEmpty {
-                        Text(Agenda.emptyDay).font(RelayFont.bodyMedium).foregroundStyle(RelayColor.onSurfaceVariant)
+                        Text(day.emptyText).font(RelayFont.bodyMedium).foregroundStyle(RelayColor.onSurfaceVariant)
                     } else {
                         ForEach(day.entries.prefix(Self.limit)) { e in
                             AgendaRow(entry: e, past: e.isPast(today: today, clock: clock), compact: true)
@@ -122,6 +155,9 @@ struct AgendaCard: View {
                         }
                     }
                 }
+            }
+            if let note {
+                Text(verbatim: note).font(RelayFont.labelSmall).foregroundStyle(RelayColor.onSurfaceVariant)
             }
         }
         .padding(12)
@@ -134,6 +170,7 @@ struct AgendaCard: View {
 
 /// Wochenliste des Kalenders: oben ein Streifen mit den sieben Tagen ab heute (Tipp springt zum Tag), darunter je Tag
 /// die Termine. Unten die Kalender mit ihrer Farbe und Hinweise des Gateways. Ziehen holt die Kalender frisch ab.
+/// Ohne Verbindung zeigt sie den gespeicherten Stand mit „Stand von …“; Tage, die er nicht abdeckt, als „Noch nicht geladen“.
 struct CalendarWeekView: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject private var store = CalendarStore.shared
@@ -149,7 +186,12 @@ struct CalendarWeekView: View {
                         if let feed = store.feed {
                             let days = Agenda.days(feed, from: today, count: Self.count, today: today)
                             strip(days) { day in withAnimation { proxy.scrollTo(day, anchor: .top) } }
-                            if let f = store.failure { note(f, error: true) }
+                            let connected = model.state == .connected
+                            if let stand = store.staleNote(connected: connected, now: ctx.date) {
+                                note(stand, error: false).accessibilityIdentifier("calendarStale")
+                            }
+                            // Ohne Verbindung sagt „Stand von …“ schon alles, der Fehlertext käme nur dazu.
+                            if connected, let f = store.failure { note(f, error: true) }
                             ForEach(days) { day in
                                 dayBlock(day, today: today, clock: clock).id(day.date)
                             }
@@ -160,6 +202,9 @@ struct CalendarWeekView: View {
                                 .padding(.top, 72)
                                 .accessibilityElement(children: .contain)
                                 .accessibilityIdentifier("calendarMissing")
+                        } else if model.state != .connected {
+                            TabEmptyState(symbol: "calendar.badge.exclamationmark", title: "Kalender nicht geladen", text: Agenda.offlineEmpty)
+                                .padding(.top, 72)
                         } else if let f = store.failure {
                             TabEmptyState(symbol: "calendar.badge.exclamationmark", title: "Kalender nicht geladen", text: f)
                                 .padding(.top, 72)
@@ -176,6 +221,10 @@ struct CalendarWeekView: View {
         .navigationBarTitleDisplayMode(.inline)
         .relayPage()
         .task { await store.refresh(model) }
+        .onChange(of: model.state) { _, s in
+            // Die Verbindung steht wieder: frisch laden, der Hinweis „Stand von …“ verschwindet.
+            if s == .connected { Task { await store.refresh(model) } }
+        }
         .onAppear { UsageRecorder.shared.screen("kalender") }
     }
 
@@ -213,7 +262,7 @@ struct CalendarWeekView: View {
             let long = DayText.long(day.date, today: today)
             SectionLabel(title: day.label == long ? long : "\(day.label) · \(long)")
             if day.entries.isEmpty {
-                QuietLine(text: Agenda.emptyDay)
+                QuietLine(text: day.emptyText)
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(day.entries) { e in

@@ -4,7 +4,8 @@ import SwiftUI
 /// Benutzer und den SSH-Seed (32 Byte, hex) aus der Startumgebung und schaltet die Face-ID-Sperre ab.
 /// Umgebung: RELAY_UI_HOST, RELAY_UI_PORT, RELAY_UI_USER, RELAY_UI_SEED, RELAY_UI_PREFILL (1: Einstellungen vorbelegen),
 /// RELAY_UI_SHARE (1: eine geteilte Testdatei liegt an, das Teilen-Blatt öffnet sich),
-/// RELAY_UI_SCHEME (dark oder light: erzwingt das Farbschema für Bilder, sonst gilt das des Simulators).
+/// RELAY_UI_SCHEME (dark oder light: erzwingt das Farbschema für Bilder, sonst gilt das des Simulators),
+/// RELAY_UI_KEEP (1: Einstellungen und Dateien des vorigen Starts bleiben, für Tests über einen Neustart der App hinweg).
 enum UITestMode {
     static let active = ProcessInfo.processInfo.arguments.contains("-relayUITest")
     private static var env: [String: String] { ProcessInfo.processInfo.environment }
@@ -43,7 +44,7 @@ enum UITestMode {
 
     /// Vor dem ersten Zugriff auf Einstellungen und Dateien aufrufen.
     static func prepare() {
-        guard active else { return }
+        guard active, env["RELAY_UI_KEEP"] != "1" else { return }
         if let id = Bundle.main.bundleIdentifier { UserDefaults.standard.removePersistentDomain(forName: id) }
         let fm = FileManager.default
         for dir in [FileManager.SearchPathDirectory.applicationSupportDirectory, .cachesDirectory, .documentDirectory] {

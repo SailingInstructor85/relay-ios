@@ -28,7 +28,8 @@ class RelayTestCase: XCTestCase {
     var env: [String: String] { ProcessInfo.processInfo.environment }
 
     /// `scheme`: "dark" oder "light" erzwingt das Farbschema der App (UITestMode.colorScheme), nil lässt das des Simulators.
-    func launch(prefill: Bool = true, share: Bool = false, scheme: String? = nil) {
+    /// `keep`: Einstellungen und Dateien des vorigen Starts bleiben (Neustart der App mitten im Test).
+    func launch(prefill: Bool = true, share: Bool = false, scheme: String? = nil, keep: Bool = false) {
         app = XCUIApplication()
         app.launchArguments += ["-relayUITest", "-AppleLanguages", "(de)", "-AppleLocale", "de_DE"]
         app.launchEnvironment["RELAY_UI_HOST"] = "127.0.0.1"
@@ -38,6 +39,7 @@ class RelayTestCase: XCTestCase {
         app.launchEnvironment["RELAY_UI_PREFILL"] = prefill ? "1" : "0"
         if share { app.launchEnvironment["RELAY_UI_SHARE"] = "1" }
         if let scheme { app.launchEnvironment["RELAY_UI_SCHEME"] = scheme }
+        if keep { app.launchEnvironment["RELAY_UI_KEEP"] = "1" }
         app.launch()
         dismissSystemAlerts()
     }

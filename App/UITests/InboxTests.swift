@@ -148,4 +148,28 @@ final class InboxTests: RelayTestCase {
         back()
         XCTAssertTrue(id("assistantCard").waitForExistence(timeout: 5), "nach der Wochenliste nicht zurück auf Heute")
     }
+
+    /// Der Kalender ohne Verbindung: einmal geladen, App beendet, ohne Gateway neu gestartet. Karte und Wochenliste
+    /// zeigen den gespeicherten Stand mit „Stand von …“.
+    func test07_KalenderOhneVerbindung() {
+        launchConnected()
+        showTab(Self.tabToday)
+        XCTAssertTrue(id("calendarCard").waitForExistence(timeout: 10), "Kalenderkarte fehlt auf Heute")
+        expect("Zahnarzt", 5)
+        ctl("offline")
+        app.terminate()
+        launch(keep: true)
+        // Die App startet im Tab „Heute“, das Gateway nimmt keine Verbindung an.
+        XCTAssertTrue(id("calendarCard").waitForExistence(timeout: 20), "Kalenderkarte fehlt ohne Verbindung")
+        XCTAssertTrue(revealInPage("Zahnarzt"), "gespeicherte Termine fehlen auf der Karte")
+        expect("Werkstatt, Reifenwechsel", 4)
+        expect("Stand von", 5)
+        shot("heute-kalender-ohne-verbindung")
+        tapID("calendarCard")
+        XCTAssertTrue(id("calendarStrip").waitForExistence(timeout: 8), "Wochenliste ohne Verbindung nicht geöffnet")
+        XCTAssertTrue(id("calendarStale").waitForExistence(timeout: 5), "Hinweis „Stand von …“ fehlt in der Wochenliste")
+        expect("Abendessen mit Ben", 5)
+        shot("kalender-woche-ohne-verbindung")
+        ctlRemove("offline")
+    }
 }

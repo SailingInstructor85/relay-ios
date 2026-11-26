@@ -122,6 +122,12 @@ public struct CalendarFeed: Sendable, Equatable {
     /// Farbe des Kalenders, aus dem der Termin stammt.
     public func colorHex(_ e: CalendarEvent) -> UInt32? { sources.first { $0.key == e.source }?.colorHex }
 
+    /// Der Tag liegt im Zeitraum des Abrufs. Nennt das Gateway keinen Zeitraum, gilt jeder Tag als geladen.
+    public func loaded(_ day: String) -> Bool {
+        if from.isEmpty || to.isEmpty { return true }
+        return from <= day && day <= to
+    }
+
     /// Der Zeitraum reicht für `days` Tage ab `day` (sonst muss neu geladen werden).
     public func covers(_ day: String, days: Int) -> Bool {
         !from.isEmpty && !to.isEmpty && from <= day && DayText.add(day, max(days, 1) - 1) <= to
@@ -133,6 +139,10 @@ public enum Agenda {
     public static let allDay = "ganztägig"
     public static let emptyDay = "Keine Termine"
     public static let missingTitle = "Gateway liefert keinen Kalender"
+    /// Ein Tag, den der gezeigte Stand nicht abdeckt (Stand aus dem Zwischenspeicher, der nicht so weit reicht).
+    public static let notLoaded = "Noch nicht geladen"
+    /// Ohne Verbindung und ohne gespeicherten Stand.
+    public static let offlineEmpty = "Kalender erscheint, sobald der PC erreichbar ist."
 
     /// Ein Termin an einem bestimmten Tag.
     public struct Entry: Sendable, Equatable, Identifiable {
@@ -162,7 +172,13 @@ public enum Agenda {
         public let date: String
         public let label: String
         public let entries: [Entry]
+        /// Der Tag liegt im Zeitraum des Abrufs. false: Über ihn ist nichts bekannt („Noch nicht geladen“ statt
+        /// „Keine Termine“).
+        public let loaded: Bool
         public var id: String { date }
+
+        /// Text eines Tages ohne Termine.
+        public var emptyText: String { loaded ? Agenda.emptyDay : Agenda.notLoaded }
     }
 
     /// Die Termine eines Tages: ganztägige zuerst, dann nach Uhrzeit.
@@ -194,7 +210,7 @@ public enum Agenda {
     public static func days(_ feed: CalendarFeed, from: String, count: Int, today: String) -> [Day] {
         (0..<max(count, 0)).map { i in
             let d = DayText.add(from, i)
-            return Day(date: d, label: DayText.label(d, today: today), entries: entries(feed, day: d))
+            return Day(date: d, label: DayText.label(d, today: today), entries: entries(feed, day: d), loaded: feed.loaded(d))
         }
     }
 
@@ -223,5 +239,48 @@ public enum Agenda {
     public static func failureLine(message: String, remote: Bool) -> String? {
         if remote && InboxText.isUnknownRpc(message) { return nil }
         return "Kalender nicht geladen: \(message)"
+    }
+}
+
+/// Der zuletzt geladene Kalender auf dem iPhone: Ohne Verbindung zum PC (kein Netz, PC aus) zeigt die App diesen
+/// Stand mit dem Hinweis „Stand von …“, statt Karte und Wochenliste auszublenden. Gespeichert wird die Antwort von
+/// `calendar`, wie sie kam, mit dem Zeitpunkt des Abrufs. Die Datei schreibt und liest die App.
+public enum CalendarCache {
+    public struct Snapshot: Equatable, Sendable {
+        public let feed: CalendarFeed
+        /// Zeitpunkt des Abrufs (Unix-Sekunden).
+        public let at: Double
+    }
+
+    /// Inhalt der Datei: die Antwort des Gateways und der Zeitpunkt des Abrufs.
+    public static func encode(_ response: JSON, at: Double) -> Data? {
+        guard response.object != nil else { return nil }
+        return JSON.object(["at": .number(at), "feed": response]).serialized().data(using: .utf8)
+    }
+
+    /// Liest die Datei. nil, wenn sie nicht lesbar ist oder Zeitpunkt oder Zeitraum fehlen.
+    public static func decode(_ data: Data) -> Snapshot? {
+        guard let o = JSON.parse(data), let at = o["at"].double, at > 0, o["feed"].object != nil else { return nil }
+        let feed = CalendarFeed.from(o["feed"])
+        guard DayText.parts(feed.from) != nil, DayText.parts(feed.to) != nil else { return nil }
+        return Snapshot(feed: feed, at: at)
+    }
+
+    /// Lohnt es noch, den Stand zu zeigen? Nur wenn sein Zeitraum heute oder später endet. Vergangene Tage zeigt
+    /// die App ohnehin nicht, sie rechnet immer ab heute.
+    public static func usable(_ feed: CalendarFeed, today: String) -> Bool { !feed.to.isEmpty && feed.to >= today }
+
+    /// Hinweis am gespeicherten Stand: „Stand von 11:35“, von einem anderen Tag „Stand von Di., 24. November, 11:35“.
+    public static func note(at: Double, now: Double, timeZone: TimeZone = .current) -> String {
+        let day = DayText.key(ts: at, timeZone: timeZone), today = DayText.key(ts: now, timeZone: timeZone)
+        let clock = DayText.clock(ts: at, timeZone: timeZone)
+        return day == today ? "Stand von \(clock)" : "Stand von \(DayText.long(day, today: today)), \(clock)"
+    }
+
+    /// Der Hinweis, wenn der gezeigte Stand nicht frisch ist: aus dem Zwischenspeicher, nach einem gescheiterten
+    /// Abruf oder ohne Verbindung. nil: frisch geladen und verbunden, oder gar kein Stand.
+    public static func staleNote(at: Double, stale: Bool, connected: Bool, now: Double, timeZone: TimeZone = .current) -> String? {
+        guard at > 0, stale || !connected else { return nil }
+        return note(at: at, now: now, timeZone: timeZone)
     }
 }
