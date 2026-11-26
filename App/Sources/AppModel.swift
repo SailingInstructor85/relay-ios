@@ -438,13 +438,14 @@ final class AppModel: ObservableObject {
 
     // MARK: rpc
 
-    func rpc(_ method: String, _ params: JSON = [:], timeout: Double = 30, onProgress: (@Sendable (String) -> Void)? = nil) async throws -> JSON {
+    func rpc(_ method: String, _ params: JSON = [:], timeout: Double = 30, onProgress: (@Sendable (String) -> Void)? = nil,
+             onStatus: (@Sendable (JSON) -> Void)? = nil) async throws -> JSON {
         if link?.isOpen != true {
             // wait briefly while connecting
             for _ in 0..<40 where state == .connecting { try await Task.sleep(nanoseconds: 250_000_000) }
         }
         guard let l = link, l.isOpen else { throw RelayError("Nicht verbunden: \(connLabel)") }
-        let r = try await l.rpc(method, params, timeout: timeout, onProgress: onProgress)
+        let r = try await l.rpc(method, params, timeout: timeout, onProgress: onProgress, onStatus: onStatus)
         lastTraffic = Date()
         return r
     }
@@ -533,6 +534,17 @@ final class AppModel: ObservableObject {
             let n = Notice.from(event: ev, now: now)
             NoticeStore.shared.add(n)
             let answered = NoticeStore.shared.get(n.ref)?.answer != nil  // a replayed question already answered
+            // eine Rückmeldung des Chiefs für den Jarvis-Chat (`jarvis_say`): mit Thema in den Verlauf. Ist der Chat
+            // gerade offen, steht sie dort und wird vorgelesen, eine Mitteilung obendrauf wäre doppelt. Eine
+            // wiederholte (Replay) meldet sich nicht noch einmal.
+            let say = JarvisSay.turn(from: ev, now: now)
+            let sayIsNew = say.map { JarvisInbox.shared.receive($0) } ?? false
+            if say != nil, !sayIsNew || (foreground && JarvisInbox.shared.visible) { break }
+            if let say, NoticeLogic.show(ts: ev.num("ts"), now: now) {
+                Notifier.post(id: NoticeLogic.slot(tag: n.tag, seq: seq), title: say.topic ?? JarvisSay.noTopic, body: say.a,
+                              userInfo: ["jarvisSay": n.ref])
+                break
+            }
             if NoticeLogic.show(ts: ev.num("ts"), now: now), !answered {
                 // an agent's question: the notification carries the question and an "Antworten" field
                 let q = Rueckfrage.question(n)

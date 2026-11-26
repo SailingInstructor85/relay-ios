@@ -65,7 +65,7 @@ public final class GatewayLink: @unchecked Sendable {
     private var writer: TTYStdinWriter?
     private var client: SSHClient?
     private var pending: [String: CheckedContinuation<JSON, Error>] = [:]
-    private var progress: [String: @Sendable (String) -> Void] = [:]
+    private var progress: [String: @Sendable (JSON) -> Void] = [:]
     private var closed = false
     public private(set) var lastHeard = Date.distantPast
 
@@ -145,7 +145,7 @@ public final class GatewayLink: @unchecked Sendable {
             else { c?.resume(throwing: RelayError(o.str("error", "rpc failed"), remote: true)) }
         case "rpc_progress":
             let cb = lock.withLock { progress[o.str("id")] }
-            cb?(o.str("delta"))
+            cb?(o)
         default:
             onEvent(o)
         }
@@ -159,8 +159,11 @@ public final class GatewayLink: @unchecked Sendable {
     }
 
     /// Calls an RPC (`{"type":"rpc","id","method","params"}`) and waits for its `rpc_result`.
+    /// `onProgress`: Textstücke einer gestreamten Antwort (`rpc_progress` mit `delta`). `onStatus`: Statuszeilen
+    /// (`rpc_progress` mit `status`, zum Beispiel „taken“: Der Chief hat die Nachricht), siehe `RpcProgress`.
     public func rpc(_ method: String, _ params: JSON = [:], timeout: Double = 30,
-                    onProgress: (@Sendable (String) -> Void)? = nil) async throws -> JSON {
+                    onProgress: (@Sendable (String) -> Void)? = nil,
+                    onStatus: (@Sendable (JSON) -> Void)? = nil) async throws -> JSON {
         guard isOpen else { throw RelayError("Nicht verbunden") }
         let id = String(UUID().uuidString.prefix(12))
         let timer = Task { [weak self] in
@@ -174,7 +177,14 @@ public final class GatewayLink: @unchecked Sendable {
             let ok = lock.withLock { () -> Bool in
                 if closed { return false }
                 pending[id] = c
-                if let p = onProgress { progress[id] = p }
+                if onProgress != nil || onStatus != nil {
+                    progress[id] = { o in
+                        switch RpcProgress.kind(o) {
+                        case .status: onStatus?(o)
+                        case .delta(let d): onProgress?(d)
+                        }
+                    }
+                }
                 return true
             }
             guard ok else { c.resume(throwing: RelayError("Nicht verbunden")); return }

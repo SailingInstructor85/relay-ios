@@ -61,6 +61,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             }
             return
         }
+        if info["jarvisSay"] != nil {  // eine Rückmeldung des Chiefs: Sie steht im Jarvis-Chat
+            if tapped { await MainActor.run { AppModel.shared.openJarvis = true } }
+            return
+        }
         if let ref = info["notice"] as? String {
             if r.actionIdentifier == "answer" || r.actionIdentifier == "yes" {
                 let typed = (r as? UNTextInputNotificationResponse)?.userText.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

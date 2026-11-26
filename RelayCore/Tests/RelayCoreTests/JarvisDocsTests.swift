@@ -29,7 +29,10 @@ final class JarvisDocsTests: XCTestCase {
         // getippter oder gesprochener Text ohne Anhang: kein Feld, er darf eine offene Rückfrage beantworten
         let typed = JarvisDocs.askParams(text: "Ja, wie bei 533", byVoice: false, upload: false)
         XCTAssertNil(typed["upload"])
-        XCTAssertEqual(Set(typed.keys), ["text", "stream", "source"])
+        XCTAssertEqual(Set(typed.keys), ["text", "stream", "status", "source"])
+        // jede Frage verlangt die Statuszeile „Chief hat es“
+        XCTAssertEqual(typed["status"], JSON.bool(true))
+        XCTAssertEqual(up["status"], JSON.bool(true))
         XCTAssertNil(JarvisDocs.askParams(text: "Ja", byVoice: true, upload: false)["upload"])
     }
 

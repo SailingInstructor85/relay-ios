@@ -376,6 +376,34 @@ final class InfoTests: RelayTestCase {
         shot("jarvis-abloesung-erbeten")
     }
 
+    /// Das Jarvis-Feld bleibt frei, während eine Antwort aussteht: „Chief hat es“ steht unter der Frage, die zweite
+    /// Nachricht geht sofort raus, und eine spätere Rückmeldung des Chiefs steht mit ihrem Thema im Chat.
+    func test29_JarvisParallel() {
+        launchConnected()
+        mainMenu("Jarvis fragen")
+        XCTAssertTrue(id("jarvisInput").waitForExistence(timeout: 8), "Jarvis nicht geöffnet")
+        typeInto("jarvisInput", "Bitte langsam antworten")  // der Mock lässt sich damit 10 s Zeit
+        tapID("jarvisSend")
+        XCTAssertTrue(mockReceived("ask", where: { ($0["text"] as? String) == "Bitte langsam antworten" && ($0["status"] as? Bool) == true }),
+                      "ask mit status: true fehlt")
+        XCTAssertTrue(id("jarvisTaken").waitForExistence(timeout: 5), "„Chief hat es“ steht nicht unter der Frage")
+        shot("jarvis-chief-hat-es")
+        // die Antwort steht noch aus, das Feld nimmt trotzdem die nächste Nachricht
+        typeInto("jarvisInput", "Zweite Frage")
+        tapID("jarvisSend")
+        XCTAssertTrue(mockReceived("ask", where: { ($0["text"] as? String) == "Zweite Frage" }, timeout: 5),
+                      "die zweite Nachricht ging nicht raus, solange die erste Antwort aussteht")
+        shot("jarvis-zwei-offen")
+        XCTAssertTrue(hasSelectableText("Du hast gefragt: Zweite Frage", 8) || has("Du hast gefragt: Zweite Frage", 2), "Antwort auf die zweite Frage fehlt")
+        XCTAssertTrue(hasSelectableText("Du hast gefragt: Bitte langsam antworten", 15) || has("Du hast gefragt: Bitte langsam antworten", 2),
+                      "Antwort auf die erste Frage fehlt")
+        // der Chief meldet später ein Ergebnis von sich aus: Thema als Überschrift im Chat
+        ctl("trigger_jarvis_say")
+        XCTAssertTrue(id("jarvisSayTopic").waitForExistence(timeout: 10), "Rückmeldung des Chiefs steht nicht im Jarvis-Chat")
+        expect("Zugverbindung Hamburg", 3, soft: true)
+        shot("jarvis-rueckmeldung")
+    }
+
     func test12_Settings() {
         launchConnected()
         mainMenu("Einstellungen")

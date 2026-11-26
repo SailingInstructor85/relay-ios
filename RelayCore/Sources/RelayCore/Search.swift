@@ -64,7 +64,7 @@ public enum AppSearch {
 
     /// Jarvis turns of this phone, newest first.
     public static func jarvis(_ turns: [JarvisTurn], query: String) -> [JarvisTurn] {
-        Array(turns.reversed().filter { matches($0.q + "\n" + $0.a, query) }.prefix(max))
+        Array(turns.reversed().filter { matches($0.q + "\n" + ($0.topic ?? "") + "\n" + $0.a, query) }.prefix(max))
     }
 
     /// A short piece of `text` around the first occurrence of the first query word.

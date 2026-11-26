@@ -72,7 +72,7 @@ struct SearchExtras: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack {
                                     Image(systemName: "waveform").foregroundStyle(.secondary)
-                                    Text(t.q).lineLimit(1).font(.body)
+                                    Text(t.topic ?? t.q).lineLimit(1).font(.body)  // Rückmeldung des Chiefs: ihr Thema
                                     Spacer(minLength: 4)
                                     Text(TermText.ago(t.ts)).font(.caption2).foregroundStyle(.secondary)
                                 }

@@ -9,7 +9,8 @@ Environment:
 Control files in $MOCK_DIR/control (the UI tests or the CI script create them):
   offline        new connections end at once with an error; running ones are cut
   kick           running connections end (the file is removed by the first one)
-  trigger_<n>    emit a live event once: finish_busy, new_input, notice, rueckfrage, rueckfrage_pc (R1 answered at the
+  trigger_<n>    emit a live event once: finish_busy, new_input, notice, jarvis_say (a notice with kind jarvis_say: the
+                 chief's later result for the Jarvis chat), rueckfrage, rueckfrage_pc (R1 answered at the
                  PC: rueckfrage_resolved), send_request, pc_detach, pc_attach,
                  cloud, desktop_sleep, location, end_session, routine_run,
                  phone_command, phone_command_2, late_reply (an answer in "API Refactoring"; left in the control
@@ -789,6 +790,9 @@ def rpc_session_tokens(p):
 def rpc_ask(p, rid=None):
     q = str(p.get("text", ""))
     reply = f"Gern. Du hast gefragt: {q}\n\nIm Moment laufen vier Sitzungen: eine arbeitet, eine wartet auf dich. Soll ich etwas starten?"
+    if p.get("status") and rid:  # the lead has the message (only when asked for: older apps read `delta` from every line)
+        out({"type": "rpc_progress", "id": rid, "status": "taken", "handoff": "H-7", "name": "Chief"})
+        time.sleep(10 if "langsam" in q else 1.0)  # "langsam": a long answer, the field must stay free meanwhile
     if p.get("stream") and rid:
         for chunk in re.findall(r".{1,14}", reply, re.S):
             out({"type": "rpc_progress", "id": rid, "delta": chunk})
@@ -1322,6 +1326,9 @@ def trigger(name):
                                      "message": "Darf ich die alte Route loeschen?"})
     elif name == "notice":
         add_event("notice", {"title": "Backup braucht neuen Login", "text": "Der naechtliche Backup-Job meldet: Anmeldung abgelaufen. Mehr Infos unter https://example.com/backup", "source": "backup", "tag": "backup"})
+    elif name == "jarvis_say":  # the chief writes a result into the Jarvis chat on its own (team MCP jarvis_say)
+        add_event("notice", {"kind": "jarvis_say", "title": "Zugverbindung Hamburg", "source": "chief", "tag": "jarvis-say-1",
+                             "text": "Der ICE um 9:28 ab München passt, Ankunft 15:31. Soll ich buchen?"})
     elif name == "rueckfrage":  # an agent's question while the user is away (~/.agents/bin/rueckfrage neu)
         add_event("notice", {"title": "Rückfrage R1 · relay-ios",
                              "text": "Soll ich die alte Route löschen?\nKontext: Die Route wird seit 2024 nicht mehr genutzt.\nEmpfehlung: ja",

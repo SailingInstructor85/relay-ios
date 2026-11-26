@@ -295,8 +295,13 @@ public struct JarvisTurn: Codable, Identifiable, Equatable, Sendable {
     public var a: String
     public var voice: Bool
     public var ts: Double
-    public init(id: UUID = UUID(), q: String, a: String, voice: Bool, ts: Double = Date().timeIntervalSince1970) {
-        self.id = id; self.q = q; self.a = a; self.voice = voice; self.ts = ts
+    /// Nur bei Rückmeldungen, die der Chief von sich aus schreibt (`JarvisSay`): das Thema als Überschrift; `q` ist leer.
+    public var topic: String?
+    /// Kennung einer Rückmeldung (der `tag` ihres Hinweises), an der Dubletten auffallen.
+    public var ref: String?
+    public init(id: UUID = UUID(), q: String, a: String, voice: Bool, ts: Double = Date().timeIntervalSince1970,
+                topic: String? = nil, ref: String? = nil) {
+        self.id = id; self.q = q; self.a = a; self.voice = voice; self.ts = ts; self.topic = topic; self.ref = ref
     }
 }
 
@@ -316,7 +321,7 @@ public enum JarvisHistory {
         let ws = query.lowercased().split(separator: " ").map(String.init)
         guard !ws.isEmpty else { return [] }
         return turns.reversed().filter { t in
-            let hay = (t.q + "\n" + t.a).lowercased()
+            let hay = (t.q + "\n" + (t.topic ?? "") + "\n" + t.a).lowercased()
             return ws.allSatisfy { hay.contains($0) }
         }
     }
@@ -516,7 +521,8 @@ public enum JarvisDictation {
         }
     }
 
-    /// Senden geht, wenn etwas im Feld steht oder während der Aufnahme schon etwas erkannt ist.
+    /// Senden geht, wenn etwas im Feld steht oder während der Aufnahme schon etwas erkannt ist. `asking`: Gerade werden
+    /// Dokumente hochgeladen. Eine Frage, deren Antwort noch aussteht, sperrt das Senden nicht (`JarvisAsk`).
     public static func canSend(typed: String, listening: Bool, partial: String, asking: Bool) -> Bool {
         guard !asking else { return false }
         if !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }

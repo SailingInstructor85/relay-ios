@@ -35,8 +35,10 @@ public enum JarvisDocs {
     /// als Antwort auf die offene Rückfrage R13 verbucht, die Rückfrage galt als beantwortet, das Dokument hatte keine
     /// eigene Kennung). Eine offene Rückfrage beantwortet nur, was Martin ohne Anhang tippt oder spricht: Dort fehlt
     /// das Feld. Ein Gateway, das das Feld nicht kennt, übergeht es.
+    /// `status: true` verlangt die Statuszeile „taken“, sobald der Chief die Nachricht hat (`JarvisAsk.statusLabel`).
     public static func askParams(text: String, byVoice: Bool, upload: Bool) -> [String: JSON] {
-        var p: [String: JSON] = ["text": .string(text), "stream": .bool(true), "source": .string(byVoice ? "voice" : "text")]
+        var p: [String: JSON] = ["text": .string(text), "stream": .bool(true), "status": .bool(true),
+                                 "source": .string(byVoice ? "voice" : "text")]
         if upload { p["upload"] = .bool(true) }
         return p
     }
@@ -74,7 +76,7 @@ public enum JarvisDocs {
         return files.isEmpty ? m : "\(m)\n\(files)"
     }
 
-    /// Senden geht auch ohne Text, sobald ein Dokument angehängt ist.
+    /// Senden geht auch ohne Text, sobald ein Dokument angehängt ist. `asking`: Gerade läuft ein Upload.
     public static func canSend(docs: Int, asking: Bool) -> Bool { docs > 0 && !asking }
 
     public static func progress(index: Int, count: Int, name: String) -> String {

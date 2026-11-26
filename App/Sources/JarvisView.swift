@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
@@ -33,10 +34,23 @@ struct JarvisView: View {
     var initialShown: String?
     @State private var askedInitial = false
 
-    struct Turn: Identifiable { var id = UUID(); let q: String; var a: String; var done: Bool; let voice: Bool; var ts = Date().timeIntervalSince1970 }
+    /// Ein Zug im Verlauf. `topic` und `ref` nur bei Rückmeldungen, die der Chief von sich aus schreibt (`JarvisSay`);
+    /// `status`: was unter der Frage steht, solange die Antwort aussteht („Chief hat es“).
+    struct Turn: Identifiable {
+        var id = UUID(); let q: String; var a: String; var done: Bool; let voice: Bool; var ts = Date().timeIntervalSince1970
+        var topic: String? = nil; var ref: String? = nil; var status = ""
+
+        static func from(_ t: JarvisTurn) -> Turn { Turn(id: t.id, q: t.q, a: t.a, done: true, voice: t.voice, ts: t.ts, topic: t.topic, ref: t.ref) }
+        var stored: JarvisTurn { JarvisTurn(id: id, q: q, a: a, voice: voice, ts: ts, topic: topic, ref: ref) }
+    }
     @State private var turns: [Turn] = []
     @State private var input = ""
+    /// Fragen, deren Antwort noch aussteht. Sie sperren das Feld nicht: Die nächste Nachricht geht sofort raus.
+    @State private var pending = 0
+    /// Gerade werden angehängte Dokumente hochgeladen: Bis sie am PC sind, geht nichts Neues raus.
     @State private var asking = false
+    /// Rückmeldungen, die noch vorzulesen sind, sobald weder gesprochen noch zugehört wird.
+    @State private var toSpeak: [String] = []
     @State private var error: String?
     @State private var voiceTask: Task<Void, Never>?
     /// How the running recording is to end: a pause (ask right away), the stop button (into the field), send.
@@ -84,16 +98,31 @@ struct JarvisView: View {
                             // hier hat am PC ein neues Gespräch begonnen (neuer Tag ab 4 Uhr oder zurückgesetzt)
                             if breaks.contains(i) { contextBreak(JarvisContext.breakLabel) }
                             VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Spacer()
-                                    if t.voice { Image(systemName: "waveform").font(.caption).foregroundStyle(.secondary) }
-                                    Text(t.q).textSelection(.enabled).padding(10).background(Color.accentColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 14))
+                                if let topic = t.topic {
+                                    // eine Rückmeldung, die der Chief von sich aus schreibt: das Thema als Überschrift
+                                    Label(topic, systemImage: "text.bubble").font(.headline)
+                                        .accessibilityIdentifier("jarvisSayTopic")
+                                } else {
+                                    HStack {
+                                        Spacer()
+                                        if t.voice { Image(systemName: "waveform").font(.caption).foregroundStyle(.secondary) }
+                                        Text(t.q).textSelection(.enabled).padding(10).background(Color.accentColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 14))
+                                    }
                                 }
                                 // Antwort mit markierbarem Text: langes Drücken setzt die Griffe, Teile lassen sich einzeln kopieren
-                                if t.a.isEmpty && !t.done { ProgressView() } else { MarkdownText(text: t.a, marking: true).font(RelayFont.reply).lineSpacing(3) }
+                                if t.a.isEmpty && !t.done {
+                                    HStack(spacing: 8) {
+                                        ProgressView()
+                                        // der Chief hat die Nachricht, die Antwort kommt noch
+                                        if !t.status.isEmpty {
+                                            Text(t.status).font(.footnote).foregroundStyle(.secondary)
+                                                .accessibilityIdentifier("jarvisTaken")
+                                        }
+                                    }
+                                } else { MarkdownText(text: t.a, marking: true).font(RelayFont.reply).lineSpacing(3) }
                             }.padding(.horizontal).id(t.id)
                         }
-                        if !asking, JarvisContext.breakPending(last: turns.last?.ts, now: Date().timeIntervalSince1970, resets: resets) {
+                        if pending == 0, JarvisContext.breakPending(last: turns.last?.ts, now: Date().timeIntervalSince1970, resets: resets) {
                             contextBreak(JarvisContext.nextBreakLabel)
                         }
                         if voice.listening {
@@ -103,12 +132,17 @@ struct JarvisView: View {
                     }.padding(.vertical)
                 }
                 .onChange(of: turns.last?.a) { _, _ in if let id = turns.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
+                .onChange(of: turns.count) { _, _ in if let id = turns.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
                 .onChange(of: voice.partial) { _, _ in proxy.scrollTo("partial", anchor: .bottom) }
             }
             if let e = error { ErrorBanner(text: Binding(get: { e }, set: { error = $0 })).padding(.vertical, 4) }
             if let n = notice {
                 Text(n).font(.footnote).foregroundStyle(.secondary).padding(.horizontal).padding(.vertical, 4)
                     .accessibilityIdentifier("jarvisNotice")
+            }
+            if let p = JarvisAsk.pendingLabel(pending) {
+                Text(p).font(.footnote).foregroundStyle(.secondary).padding(.horizontal).padding(.vertical, 2)
+                    .accessibilityIdentifier("jarvisPending")
             }
             micBar
             if !uploading.isEmpty { Text(uploading).font(.caption).foregroundStyle(.secondary).padding(.bottom, 4) }
@@ -154,7 +188,7 @@ struct JarvisView: View {
                     if let c = context {
                         Section(JarvisContext.fillLabel(c)) {
                             Button { Task { await resetContext() } } label: { Label(JarvisContext.resetLabel, systemImage: "arrow.counterclockwise") }
-                                .disabled(asking)
+                                .disabled(asking || pending > 0)
                         }
                     }
                     // der Chief führt das Gespräch: Ablösung auf Zuruf (er schreibt seine Notizen, dann beginnt eine frische Sitzung)
@@ -170,7 +204,7 @@ struct JarvisView: View {
             }
         }
         .task {
-            turns = JarvisStore.load().map { Turn(id: $0.id, q: $0.q, a: $0.a, done: true, voice: $0.voice, ts: $0.ts) }
+            turns = JarvisStore.load().map(Turn.from)
             model.warmJarvis()
             if let q = initialQuestion, !askedInitial {
                 askedInitial = true
@@ -183,8 +217,12 @@ struct JarvisView: View {
             await loadContext()
         }
         .onChange(of: inputFocused) { _, focused in if focused { model.warmJarvis() } }
-        .onDisappear { stopVoice() }
-        .onChange(of: voice.speaking) { _, s in if !s { releaseIfDone() } }
+        .onAppear { JarvisInbox.shared.visible = true }
+        .onDisappear { JarvisInbox.shared.visible = false; stopVoice() }
+        .onChange(of: voice.speaking) { _, s in if !s { if toSpeak.isEmpty { releaseIfDone() } else { speakPending() } } }
+        .onChange(of: voice.listening) { _, l in if !l { speakPending() } }
+        // eine Rückmeldung des Chiefs ist eingetroffen (`jarvis_say`): in den Verlauf und vorlesen
+        .onReceive(JarvisInbox.shared.$tick.dropFirst()) { _ in takeSays() }
         .sheet(isPresented: $teaching) { TeachRecognitionView(voice: voice) }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { addFiles(urls) }
@@ -357,6 +395,7 @@ struct JarvisView: View {
             return
         }
         uploading = ""
+        asking = false
         batch.forEach { $0.discard() }
         docs.removeAll { d in batch.contains { $0.id == d.id } }
         UsageRecorder.shared.record("jarvis", "dokument gesendet", kind: "datei", length: batch.count)
@@ -439,7 +478,8 @@ struct JarvisView: View {
     private func startVoice(trigger: String) {
         guard voiceTask == nil else { return }
         voiceTask = Task {
-            defer { voiceTask = nil; model.conversationActive = false; releaseIfDone() }
+            // nach dem Gespräch: wartende Rückmeldungen des Chiefs lesen, sonst das Audio freigeben
+            defer { voiceTask = nil; model.conversationActive = false; if toSpeak.isEmpty { releaseIfDone() } else { speakPending() } }
             if let msg = await voice.authorize() { error = msg; return }
             var silent = 0
             var kind = trigger
@@ -494,6 +534,7 @@ struct JarvisView: View {
 
     private func stopVoice() {
         voiceTask?.cancel()
+        toSpeak = []
         voice.stopListening()
         voice.stopSpeaking()
         voiceTask = nil
@@ -510,6 +551,42 @@ struct JarvisView: View {
 
     private func loadVocab() async { await model.loadVocab(into: voice) }
 
+    // MARK: Rückmeldungen des Chiefs
+
+    /// Rückmeldungen, die im Speicher liegen und hier noch fehlen, ans Ende des Verlaufs; mit „Antworten vorlesen“
+    /// liest die Stimme sie, das Thema zuerst.
+    private func takeSays() {
+        let new = JarvisSay.missing(in: turns.map(\.stored), stored: JarvisStore.load())
+        guard !new.isEmpty else { return }
+        turns += new.map(Turn.from)
+        UsageRecorder.shared.record("jarvis", "rückmeldung", kind: "text", length: new.count)
+        if speakAnswers {
+            toSpeak += new.map(JarvisSay.spoken)
+            speakPending()
+        }
+    }
+
+    /// Liest wartende Rückmeldungen, sobald die Stimme frei ist: nicht in eine laufende Antwort, nicht in eine Aufnahme
+    /// und nicht mitten in ein Gespräch hinein (dort erst danach).
+    private func speakPending() {
+        guard !toSpeak.isEmpty, voiceTask == nil, !voice.speaking, !voice.listening else { return }
+        let text = toSpeak.joined(separator: " ")
+        toSpeak = []
+        voice.speak(text)
+    }
+
+    /// Den Verlauf sichern. Rückmeldungen, die inzwischen im Speicher gelandet sind, bleiben dabei erhalten.
+    private func persist() {
+        JarvisStore.save(JarvisSay.merge(turns.map(\.stored), stored: JarvisStore.load()))
+    }
+
+    /// Ändert den Zug mit dieser Kennung. Mehrere Fragen können gleichzeitig offen sein, und „Chat löschen“ kann den
+    /// Verlauf leeren, während eine Antwort noch aussteht: Dann geschieht nichts.
+    private func edit(_ id: UUID, _ change: (inout Turn) -> Void) {
+        guard let i = turns.firstIndex(where: { $0.id == id }) else { return }
+        change(&turns[i])
+    }
+
     // MARK: ask
 
     /// `shown`: was statt der Frage im Verlauf steht (Dokumente: Nachricht und Dateinamen statt des Auftrags mit Pfaden).
@@ -518,42 +595,68 @@ struct JarvisView: View {
     private func ask(_ raw: String, byVoice: Bool, trigger: String? = nil, t0: Date? = nil, shown: String? = nil, upload: Bool = false) async {
         let q = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
-        asking = true; defer { asking = false }
+        // die Frage sperrt das Feld nicht: Während die Antwort aussteht, geht die nächste Nachricht sofort raus
+        pending += 1; defer { pending -= 1 }
         notice = nil
-        turns.append(Turn(q: shown ?? q, a: "", done: false, voice: byVoice))
-        let idx = turns.count - 1
+        let turn = Turn(q: shown ?? q, a: "", done: false, voice: byVoice)
+        let tid = turn.id
+        turns.append(turn)
         let speak = byVoice && speakAnswers
         if speak { voice.beginReply() }
         let streamed = Flag()
         let stamp = Stamp()
         let sent = Date()
         do {
-            let r = try await model.rpc("ask", .object(JarvisDocs.askParams(text: q, byVoice: byVoice, upload: upload)), timeout: 300) { delta in
+            let r = try await model.rpc("ask", .object(JarvisDocs.askParams(text: q, byVoice: byVoice, upload: upload)), timeout: 300, onProgress: { delta in
                 Task { @MainActor in
-                    turns[idx].a += delta
+                    edit(tid) { $0.a += delta }
                     if !streamed.value { stamp.first = Date() }
                     streamed.value = true
                     if speak { voice.feed(delta) }
                 }
-            }
-            let final = r.str("text", turns[idx].a)
+            }, onStatus: { o in
+                // „Chief hat es“: Die Nachricht ist in seiner Sitzung, die Antwort kommt noch
+                Task { @MainActor in
+                    if let label = JarvisAsk.statusLabel(o) { edit(tid) { $0.status = label } }
+                }
+            })
+            let final = r.str("text", turns.first(where: { $0.id == tid })?.a ?? "")
             if speak {
                 await Task.yield()
                 if streamed.value { voice.flush() } else { voice.speakUnlessStopped(final) }
             }
-            turns[idx].a = final
+            edit(tid) { $0.a = final }
         } catch {
-            turns[idx].a = "Fehler: \(error.localizedDescription)"
+            edit(tid) { $0.a = "Fehler: \(error.localizedDescription)" }
             if speak { voice.speakUnlessStopped("Das hat nicht geklappt.") }
         }
-        turns[idx].done = true
-        JarvisStore.save(turns.map { JarvisTurn(id: $0.id, q: $0.q, a: $0.a, voice: $0.voice, ts: $0.ts) })
+        edit(tid) { $0.done = true }
+        persist()
         if let trigger, let t0, byVoice {
             func ms(_ d: Date) -> Int { Int(d.timeIntervalSince(t0) * 1000) }
             var stages = ["heard": ms(sent), "answer": ms(Date())]
             if let f = stamp.first { stages["first_text"] = ms(f) }
             model.sendVoiceTiming(trigger: trigger, stages: stages)
         }
+    }
+}
+
+/// Rückmeldungen des Chiefs für den Jarvis-Chat (`jarvis_say`), wie sie das Modell aus dem Ereignisstrom bekommt: Sie
+/// landen sofort im gespeicherten Verlauf, auch wenn der Chat nicht offen ist. `tick` sagt der offenen Ansicht, dass
+/// etwas dazugekommen ist.
+@MainActor
+final class JarvisInbox: ObservableObject {
+    static let shared = JarvisInbox()
+    @Published var tick = 0
+    /// Der Jarvis-Chat ist gerade zu sehen.
+    var visible = false
+
+    /// true, wenn die Rückmeldung neu ist (keine Wiederholung nach einer Verbindungspause).
+    func receive(_ say: JarvisTurn) -> Bool {
+        guard let all = JarvisSay.adding(say, to: JarvisStore.load()) else { return false }
+        JarvisStore.save(all)
+        tick += 1
+        return true
     }
 }
 
