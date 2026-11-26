@@ -52,6 +52,21 @@ Zuruf:
 Technik: RelayCore `JarvisContext.lead`, `leadLabel`, `handOverNotice`, App `JarvisView.swift` (`handOver`),
 `AppModel+Voice.swift` (`jarvisInfo`).
 
+## Ablösung fest um 04:00 (Gateway, Stand 26.11.2026: Patch liegt bereit)
+
+Martin, 25.11.2026: „Drei passt einfach fest um 4:00 Uhr.“ Bisher beginnt die frische Chief-Sitzung träge, erst mit
+der ersten Nachricht nach 04:00. Morgens wartet die erste Nachricht dann, bis die neue Sitzung gestartet ist und ihre
+Notizen gelesen hat. Der Gateway-Patch vom Nachtbau 26.11.2026, 15:53 (`docs/nachtlog.md`) lässt das Gateway zur
+eingestellten Zeit (`team.rotate.chief_daily_at`) selbst ablösen. Die App braucht dafür keine Änderung.
+
+- Läuft der Chief und ist er ruhig, bittet ihn das Gateway zuerst um seine Notizen und um `hand_over("daily")`.
+  Ersetzt wird er, sobald er das gerufen hat, spätestens 15 Minuten nach der Bitte (`team.rotate.daily_notes_min`).
+- Arbeitet er, hat er eine Frage offen oder läuft bei ihm Hintergrundarbeit, geschieht nichts. Das Gateway schaut
+  alle 30 Sekunden wieder nach und löst erst ab, wenn nichts mehr läuft. Es wird nie etwas abgebrochen.
+- Läuft keine Chief-Sitzung (abends beendet), startet um 04:00 eine frische, die ihre Notizen liest.
+- `team.rotate.daily_timer: false` schaltet die Uhr ab, dann gilt wieder die träge Regel.
+- Die Trennlinie im Jarvis-Verlauf der App (neues Gespräch ab 4 Uhr) stimmt damit weiter.
+
 ## Was im Gateway fehlt (nicht gebaut, `~/relay` blieb unberührt)
 
 Zwei kleine RPCs in `daemon.py`, beide gegen `self.router_agent`:

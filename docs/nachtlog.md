@@ -979,3 +979,67 @@ Offen für Martin:
 - Sollen in Jarvis die ersten Sätze auf das Modell warten, statt mit der Apple-Stimme zu beginnen?
 
 Version: `project.yml` 0.4.11 auf 0.4.12. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 26. November 2026, 15:53 (Version 0.4.13)
+
+Drei Einträge aus dem Backlog. Eintrag 1 und 3 sind in der App umgesetzt. Eintrag 2 ist reiner Gateway-Code (`~/relay`), den der Nachtbau nicht ändert: Dafür liegt ein an einer Kopie geprüfter Patch bereit, der Eintrag bleibt offen. Swift läuft am Bau-PC nicht, kompiliert und getestet hat erst die CI. Auf einem iPhone ist nichts davon gesehen oder gehört.
+
+1. Jarvis offline: Eingesprochenes und Getipptes nicht verlieren. Erledigt.
+   - Weg: Die bestehende `Outbox` hat ein drittes Ziel bekommen, den Schlüssel `jarvis:ask` (C: JarvisOutbox.swift, A: Outbox.swift `startJarvis`, `deliverJarvis`). Keine zweite Warteschlange. `OutItem` trägt dafür drei neue Felder (`voice`, `shown`, `upload`), alte Einträge in `outbox.json` lesen sich unverändert.
+   - Ohne Verbindung (A: JarvisView.swift `ask`, `queue`): Steht die Verbindung nicht, geht die Frage gar nicht erst an `rpc`, sondern sofort in die Outbox. Das gilt für das Jarvis-Feld, das Mikrofon und die Eingabeleiste auf „Heute“ (sie öffnet Jarvis mit der Frage). Im Verlauf steht die Nachricht grau mit „wartet auf Verbindung“ (ohne Netz „wartet auf Netz“, Kennung `jarvisWaiting`). War sie eingesprochen und ist „Antworten vorlesen“ an, sagt Jarvis „Keine Verbindung. Ich sende es, sobald sie wieder steht.“ Der Gesprächsmodus endet dann, statt weiter zuzuhören.
+   - Senden: Der Sender der Outbox nimmt die Nachrichten der Reihe nach, sobald die Verbindung steht, auch nach einem Neustart der App. Eine Frage an Jarvis läuft dabei neben dem Sender her (eine Antwort kann Minuten dauern, Nachrichten an Sitzungen sollen nicht dahinter warten). Zwei Fragen an Jarvis gehen mit mindestens drei Sekunden Abstand hinaus, damit die Reihenfolge am PC stimmt. `ask` trägt die Kennung der Nachricht als `client_id`, auch auf dem direkten Weg mit Verbindung.
+   - Antwort: Sie landet als Zug im gespeicherten Verlauf (Kennung der Nachricht, `ref` `ask:<Kennung>`) und kommt über denselben Weg in die offene Ansicht wie die Rückmeldungen des Chiefs (`JarvisInbox`, `takeSays`). Vorgelesen wird sie, wenn die Frage eingesprochen war, die App im Vordergrund ist und der Jarvis-Chat offen ist (`JarvisOutbox.speaks`). Ist der Chat nicht zu sehen, kommt eine Mitteilung „Jarvis: <Anfang der Frage>“. „Chief hat es“ steht während des Wartens unter der Nachricht.
+   - Anhänge: Fotos und Dokumente, die ohne Verbindung angehängt sind, liegen in der Dateiablage der Outbox (`Outbox.storeFile`, derselbe Ordner wie beim Vault-Chat) und werden erst beim Senden hochgeladen. Danach steht in der Nachricht der Auftrag mit den Pfaden, ein weiterer Versuch lädt nichts doppelt hoch.
+   - Antippen (Kennung `jarvisWaiting`, Menü „Nachricht an Jarvis“): „Jetzt senden“ (verbindet sofort neu), „Bearbeiten“ (Text und Anhänge zurück in die Eingabe) und „Löschen“. Eine Nachricht, die gerade unterwegs ist, bietet nichts an.
+   - Nichts doppelt: Das Gateway wertet `client_id` bei `ask` heute nicht aus (im Code von `~/relay` 3926df9 geprüft, nur `send` tut das). Deshalb sendet die App nur dann von selbst erneut, wenn die Frage sicher nicht hinausging (keine Verbindung). Reißt die Verbindung beim Warten auf die Antwort, oder wurde die App dabei beendet, bleibt die Nachricht mit „Die Verbindung riss ab, bevor die Antwort kam. Ob die Nachricht am PC angekommen ist, ist offen.“ und „Erneut senden“ stehen. Bisher stand dort „Fehler: …“ und die Nachricht war weg. Meldet das Gateway `ask_once` in `hello_ok.config` (Patch unten), sendet die App auch in diesem Fall von selbst erneut, und zwar unter derselben Kennung.
+   - Hintergrund: Ohne `ask_once` gehen wartende Fragen nur im Vordergrund hinaus. iOS hält die App an, bevor die Antwort da ist, und die Frage hätte dann einen offenen Ausgang.
+   - Tests: `JarvisOutboxTests` (sieben Fälle: Platte und Neustart, Reihenfolge, nichts doppelt, Statuszeile, Anhänge, Antwort im Verlauf, Vorlesen). UI-Test `InfoTests.test30_JarvisOffline` nach der Vorgabe im Eintrag: Mock-Gateway aus, Text senden, „wartet auf Verbindung“, zweite Nachricht antippen und löschen, App beenden und neu starten, Zeile noch da, kein `ask` unterwegs, Gateway an, genau ein `ask` mit `client_id`, Antwort im Verlauf.
+
+2. Chief-Ablösung fest um 04:00 statt träge. Offen, Gateway-Patch gebaut.
+   - In der App ist dafür nichts zu ändern. Die Regel liegt im Gateway (`team.py`, `handoffs.py`), und `~/relay` ändert der Nachtbau nicht.
+   - Patch: neues Modul `dailyfresh.py`, aufgerufen aus der Team-Schleife des Daemons alle 30 Sekunden. Zur Zeit aus `team.rotate.chief_daily_at` (04:00) löst das Gateway den Chief selbst ab:
+     - Läuft der Chief und ist er ruhig (keine offene Frage, kein Fenster offen, keine Hintergrundarbeit), tippt das Gateway einmal die Bitte in seine Sitzung, die Notizen zu schreiben und `hand_over("daily")` zu rufen. Ersetzt wird er, sobald er das gerufen hat, sonst 15 Minuten nach der Bitte (`team.rotate.daily_notes_min`, 0 = ohne Bitte sofort).
+     - Arbeitet er, fragt er Martin etwas oder läuft bei ihm Hintergrundarbeit (Agenten, Workflows, Shells, arbeitende Worker), geschieht nichts. Der nächste Durchgang schaut wieder, egal wie lange es dauert. Abgebrochen wird nie etwas. Das war die Bedingung im Eintrag.
+     - Läuft keine Chief-Sitzung, startet um 04:00 eine frische, die ihre Notizen liest.
+     - Gibt es gar keine Sitzung oder begann sie nach 04:00, geschieht bis zum nächsten Tag nichts.
+     - Einmal je Tag, auch über einen Neustart des Gateways (`daily-fresh.json` im State-Ordner). `team.rotate.daily_timer: false` schaltet die Uhr ab. Die träge Regel bleibt als Rückfall bestehen: Schreibt Martin zwischen Bitte und Ablösung, löst seine Nachricht wie bisher ab.
+   - Entscheidung im Eintrag stand offen („vorher Notizen schreiben lassen oder nur ablösen, wenn nichts läuft“): Der Patch tut beides.
+
+3. Antwortfenster für Rückfragen: Mikrofon und Büroklammer wie im Jarvis-Chat. Erledigt.
+   - Gemeint war das Blatt „Rückfrage jetzt“ (A: QuestionPromptSheet.swift, Knöpfe „Antworten“ und „Später“). Dasselbe Antwortfeld steht jetzt auch in der Hinweis-Ansicht (A: NoticeView.swift).
+   - Neuer Baustein `AnswerComposer` (A: DocIntake.swift): links die Büroklammer mit denselben Einträgen wie im Jarvis-Chat, rechts das Mikrofon. Das Mikrofon nutzt `VoiceIO` (Relays Erkennung auf dem iPhone mit dem Vokabular des PCs), hört bis zur Pause oder bis zum zweiten Tipp und legt das Gesprochene ins Feld. Gesendet wird erst mit „Antworten“.
+   - Upload: Der Eintrag vermutete, das Gateway brauche einen eigenen Weg „Datei an die Rückfrage“. Den braucht es nicht. Die Anhänge gehen über die vorhandenen Upload-RPCs an den PC, die Pfade stehen am Ende der Antwort, in einer Zeile (`Rueckfrage.answerBody`: „Ja, siehe Foto. Anhang: /pfad/foto.jpg“). Eine Zeile, weil `~/.agents/bin/rueckfrage` die Antwort als eine Zeile in seine Notiz schreibt (dort nachgelesen). Der Agent, der gefragt hat, liest die Datei unter dem Pfad.
+   - „Antworten“ geht auch nur mit Anhang. „Ja (Empfehlung)“ nimmt Anhänge mit, „Erledigt“ nicht. Scheitert die Antwort nach dem Hochladen, steht sie mit den Pfaden im Feld.
+   - Die Annahme von Fotos und Dokumenten (Dateien, Mediathek, Kamera, Zwischenablage) und der Streifen mit den Marken sind aus JarvisView.swift herausgezogen (`DocIntake`, `DocStrip`), damit beide Stellen wirklich dasselbe tun. Der Jarvis-Chat nutzt sie jetzt auch.
+   - Tests: `NotifyTests.testAnswerWithAttachmentsAndDictation`, UI-Test `TabTests.test11_RueckfrageBlattMikrofonUndAnhang` (Büroklammer und Mikrofon sind da, Mikrofon legt den Satz ins Feld, „Antworten“ schickt ihn per `inbox_put`).
+
+Gateway-Patch zu 2 (und zu `ask_once` aus 1):
+- Datei: `/home/martin/.local/state/agents/relay-nachtbau/gateway-abloesung-0400-2026-11-26/gateway-abloesung-0400-und-ask-once.patch`. Er baut auf den beiden Patches vom 26.11. auf (Upload, dann Chief), weil er `rotation_reason` und `hand_over` aus dem Chief-Patch nutzt. Reihenfolge beim Einspielen: Upload, Chief, dieser.
+- Inhalt: `dailyfresh.py` (neu), `team.py` (`daily_due`), `config.py` (`daily_timer`, `daily_notes_min`), `daemon.py` (Aufruf in der Team-Schleife, `rpc_ask` über `_once`, `ask_once: true` in `hello_ok.config`), PROTOCOL.md, Tests `test_dailyfresh.py` (10) und zwei neue in `test_ask_chief.py`.
+- Geprüft an einer Kopie (`git archive` von 3926df9, venv aus `~/relay/gateway`, ohne den laufenden Dienst): Alle drei Patches lassen sich nacheinander auf eine frische Kopie anwenden. `~/relay` ist unverändert. Ganze Testsuite an der Kopie: 1496 bestanden, 10 übersprungen (mit Upload- und Chief-Patch vorher 1484 und 10; dazu 10 neue Tests zur Ablösung und 2 zu `ask`). Ein vorhandener Test (`test_monitor_daemon.py`, erwartete Konfiguration in `hello_ok`) ist um das neue Feld `ask_once` ergänzt. Gegenprobe ohne die Änderung: Die beiden neuen `ask`-Tests schlagen fehl, `test_dailyfresh.py` lässt sich ohne das Modul nicht laden. Ausgaben: `testlauf-ganz.txt` und `gegenprobe.txt` im selben Ordner.
+- Einspielen: in `~/relay` die drei Patches mit `git apply`, Tests, committen, danach `systemctl --user restart notifyd`. Das ist eine eigene Sitzung in `~/relay`, nicht Sache des Nachtbaus.
+
+Entscheidungen:
+- Offener Ausgang statt Wiederholung: Ohne Zusage des Gateways schickt die App eine Frage, die vielleicht schon am PC ist, nicht von selbst noch einmal. Ein doppelt ausgelöster Auftrag an den Chief wiegt schwerer als ein Tipp auf „Erneut senden“.
+- Fragen aus der Warteschlange werden ohne Streaming gestellt (die Antwort kommt am Stück). Der Chief antwortet ohnehin ohne Streaming.
+- Mikrofon im Antwortfeld als Diktat ins Feld, nicht als Gespräch wie im Jarvis-Chat. Eine Antwort an einen Agenten soll vor dem Senden lesbar sein.
+- Hinweis-Ansicht mitgenommen, die Karten in „Dein Zug“ nicht: Dort stünde je Karte eine eigene Spracherkennung. „Ganz lesen“ auf der Karte führt zur Hinweis-Ansicht.
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert. Geändert sind unter anderem JarvisView.swift (`ask` gibt jetzt zurück, ob eine Antwort da ist), Outbox.swift und der Umzug der Anhang-Annahme nach DocIntake.swift.
+- Der UI-Test zu Jarvis ohne Verbindung startet die App mitten im Test neu und wartet auf das Wiederverbinden (bis 70 Sekunden). Scheitert er an der Umgebung, dann am ehesten dort.
+- Auf „Heute“ steht eine wartende Nachricht nicht in der Jarvis-Karte, nur im Jarvis-Chat.
+- Die Mitteilung zur Antwort öffnet beim Antippen die App, aber nicht gezielt den Jarvis-Chat.
+- Reihenfolge bei Anhängen: Lädt eine wartende Nachricht noch hoch, kann eine spätere ohne Anhang vor ihr am PC sein.
+- Das Hochladen als Antwort auf eine Rückfrage ist im Simulator nicht prüfbar (keine Dateiauswahl). Geprüft ist das Format der Antwort und dass der Upload denselben Weg wie im Jarvis-Chat nimmt.
+- Der zweite, am Morgen des 26.11. gemeldete Fehler aus dem Eintrag (Diktat scheitert mit OSStatus 560557684, nachdem die App im Hintergrund war) ist nicht behoben. Er hat mit der Verbindung nichts zu tun und steht nicht als eigener Eintrag im Backlog.
+- Gateway-Patch: nur mit Tests an der Kopie geprüft, nicht gegen den laufenden Dienst. Um 04:00 startet damit jeden Tag eine Chief-Sitzung, auch wenn abends alles beendet wurde. Das kostet Kontingent für das Lesen der Notizen.
+
+Offen für Martin:
+- Am iPhone mit 0.4.13: Flugmodus, Jarvis etwas einsprechen, Flugmodus aus. Erwartet: Zeile „wartet auf Verbindung“, danach die Antwort, vorgelesen, wenn Relay offen ist.
+- Eine Rückfrage öffnen, über das Mikrofon antworten und ein Foto anhängen. Kommt der Pfad beim Agenten an und kann er die Datei lesen?
+- Gateway-Patches einspielen lassen (Reihenfolge: Upload, Chief, Ablösung 04:00). Erst dann löst sich der Chief um 04:00 von selbst ab und die App darf Fragen mit offenem Ausgang selbst wiederholen.
+- Soll um 04:00 auch dann eine frische Chief-Sitzung starten, wenn abends alle Sitzungen beendet wurden? Der Patch tut das (so steht es im Eintrag: „morgens schon ein frischer Chief mit gelesenen Notizen“). Abschalten: `team.rotate.daily_timer: false`.
+- Soll der Fehler beim Diktat nach dem Hintergrund (OSStatus 560557684) als eigener Eintrag ins Backlog?
+
+Version: `project.yml` 0.4.12 auf 0.4.13. Nicht gepusht, kein Tag. Das übernimmt das Skript.

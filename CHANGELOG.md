@@ -2,6 +2,19 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.13 (2026-11-26)
+
+**Neu**
+- Jarvis ohne Verbindung: Was du im Jarvis-Feld oder in der Eingabeleiste auf „Heute“ tippst oder einsprichst, während der PC nicht erreichbar ist, geht nicht mehr verloren. Die Nachricht steht grau im Verlauf mit „wartet auf Verbindung“ statt „Fehler“, bleibt auch nach einem Neustart der App und geht von selbst an Jarvis, sobald die Verbindung wieder steht. Mehrere Nachrichten gehen in der Reihenfolge hinaus, in der du sie geschrieben hast. Die Antwort steht danach im Verlauf. War die Frage eingesprochen und ist Relay gerade offen, liest Jarvis die Antwort vor, sonst kommt eine Mitteilung. Angehängte Fotos und Dokumente warten mit.
+- Ein Tipp auf eine wartende Nachricht bietet „Jetzt senden“, „Bearbeiten“ und „Löschen“.
+- Rückfragen beantworten: Am Antwortfeld stehen jetzt die Büroklammer (links) und das Mikrofon (rechts) wie im Jarvis-Chat, im Fenster, das sich für eine Rückfrage öffnet, und unter „Hinweise“. Das Mikrofon nutzt Relays eigene Spracherkennung und legt das Gesprochene ins Feld, du kannst es vor dem Senden noch ändern. Über die Büroklammer hängst du Fotos, Screenshots, Videos, ein Kamerabild oder Dateien an. Sie gehen beim Senden an den PC, und der Agent, der gefragt hat, bekommt mit der Antwort den Ablageort. „Antworten“ geht damit auch ohne Text.
+
+**Geändert**
+- Reißt die Verbindung ab, während Jarvis schon an der Antwort arbeitet, bleibt die Nachricht mit „Erneut senden“ stehen. Die App weiß in dem Moment nicht, ob die Nachricht am PC angekommen ist, und schickt sie deshalb nicht ungefragt ein zweites Mal. Bisher stand dort nur „Fehler“, und die Nachricht war weg.
+- Im Gesprächsmodus endet das Gespräch, wenn eine Frage mangels Verbindung warten muss. Jarvis sagt dann kurz, dass er sie später sendet.
+
+Hinweis: Auf einem iPhone ist diese Version noch nicht ausprobiert. Im Hintergrund sendet die App wartende Fragen noch nicht, sondern beim nächsten Öffnen; das ändert sich mit einer Ergänzung am PC, die bereitliegt. Die feste Ablösung des Chiefs um 4 Uhr ist reine PC-Sache und liegt ebenfalls als geprüfte Ergänzung bereit, in der App ändert sich dafür nichts.
+
 ## 0.4.12 (2026-11-26)
 
 **Behoben**

@@ -65,6 +65,18 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Sitzung (nicht, solange bei ihm Hintergrundarbeit läuft). Sofort wirkt das freie Feld. Statuszeile, Rückmeldungen und
   Ablösung brauchen die Gateway-Ergänzung (Stand 26.11.2026: Patch liegt bereit, `docs/nachtlog.md` und
   `docs/jarvis-kontext.md`).
+- **Jarvis ohne Verbindung (seit 0.4.13):** Was du im Jarvis-Feld oder in der Eingabeleiste auf „Heute“ tippst oder
+  einsprichst, während der PC nicht erreichbar ist, geht nicht mehr verloren. Die Nachricht steht grau im Verlauf mit
+  „wartet auf Verbindung“ (ohne Netz „wartet auf Netz“), bleibt auch nach einem Neustart der App und geht von selbst
+  an Jarvis, sobald die Verbindung steht, mehrere in der Reihenfolge, in der du sie geschrieben hast. Die Antwort steht
+  danach im Verlauf. War die Frage eingesprochen und ist Relay gerade offen, liest Jarvis sie vor, sonst kommt eine
+  Mitteilung. Angehängte Fotos und Dokumente warten mit und werden erst dann hochgeladen. Ein Tipp auf eine wartende
+  Nachricht bietet „Jetzt senden“, „Bearbeiten“ und „Löschen“. Reißt die Verbindung ab, während Jarvis schon an der
+  Antwort arbeitet, bleibt die Nachricht mit „Erneut senden“ stehen: Die App weiß dann nicht, ob sie am PC angekommen
+  ist, und schickt sie nicht ungefragt ein zweites Mal. Mit der Gateway-Ergänzung vom 26.11.2026 (`ask` wertet die
+  Kennung der Nachricht aus, `docs/nachtlog.md`) sendet die App auch in diesem Fall von selbst erneut, ohne dass etwas
+  doppelt ausgelöst wird. Im Hintergrund sendet die App wartende Fragen erst mit dieser Ergänzung, sonst beim nächsten
+  Öffnen.
 - **Alle Sitzungen beenden** (Menü der Sitzungsliste): Jede gewählte Sitzung schreibt ihren Eintrag ins Agenten-Log
   der Daily Note und ihre Übergabe, dann beendet das Gateway sie. Sitzungen mit offener Auswahl oder Freigabe am PC
   bleiben mit Grund offen. Das Gateway schickt Nachrichten mit getrenntem Enter und prüft, ob das Eingabefeld am PC
@@ -81,7 +93,10 @@ iPhone 16 Pro (iOS 17 oder neuer).
 - **Rückfragen der Agenten:** Karten im Tab „Dein Zug“ mit Antwortfeld, „Ja (Empfehlung)“, „Antworten“ und einem
   kleinen „Erledigt“ (schließt ohne Antwort, nach Nachfrage). Sind beim Öffnen der App Rückfragen offen, zeigt ein
   Blatt die älteste mit vollem Wortlaut („Später“ lässt es zu, bis eine neue kommt). Was am PC oder auf einem anderen
-  Gerät beantwortet wurde, verschwindet auch hier. Details: `docs/rueckfragen.md`.
+  Gerät beantwortet wurde, verschwindet auch hier. Seit 0.4.13 stehen am Antwortfeld (im Blatt und unter „Hinweise“)
+  die Büroklammer und das Mikrofon wie im Jarvis-Chat: Das Mikrofon nutzt Relays eigene Spracherkennung und legt das
+  Gesprochene ins Feld, Fotos und Dokumente gehen beim Senden an den PC, und ihr Pfad steht am Ende der Antwort, damit
+  der Agent sie lesen kann. Details: `docs/rueckfragen.md`.
 - **Sprachmodus für die Autofahrt** (Hinweise → „Sprachmodus“ oder Kurzbefehl „Sprachmodus in Relay“): liest offene
   Rückfragen vor (nur Frage und Empfehlung), du antwortest mit „ja“, „nein“ oder in eigenen Worten, hörst die Antwort
   zur Kontrolle und gibst sie mit „senden“ frei („nochmal“ oder ein neuer Satz korrigiert). Neue Rückfragen liest er

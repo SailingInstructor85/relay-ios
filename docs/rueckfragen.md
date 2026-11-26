@@ -67,6 +67,36 @@ Regeln in `C: Notify.swift` `QuestionPrompt`).
 - „Später“ (auch Herunterwischen) merkt den Zeitstempel der neuesten offenen Rückfrage. Das Blatt bleibt zu, bis
   eine neuere dazukommt. Die Karten in „Dein Zug“ und die Zahl am Tab bleiben unverändert.
 
+## Mikrofon und Büroklammer am Antwortfeld (ab 0.4.13)
+
+Martin, 25.11.2026: Im Fenster zum Beantworten einer Rückfrage fehlten das Mikrofon und der Knopf zum Hochladen. Das
+Tastaturdiktat erkennt schlechter als Relays eigene Spracherkennung, und eine Antwort soll auch ein Foto oder eine
+Datei sein können. Beides steht jetzt am Antwortfeld, im Blatt „Rückfrage jetzt“ und in der Hinweis-Ansicht
+(`A: DocIntake.swift` `AnswerComposer`, Kennungen `promptAttach`, `promptAnswer`, `promptMic` und `questionAttach`,
+`questionAnswer`, `questionMic`).
+
+- **Mikrofon (rechts am Feld):** dieselbe Erkennung wie im Jarvis-Chat (`VoiceIO`, auf dem iPhone, mit dem Vokabular
+  des PCs). Es hört zu, bis eine Pause entsteht oder der Knopf noch einmal getippt wird. Das Gesprochene steht dann im
+  Feld, hinter dem, was schon dort stand. Gesendet wird erst mit „Antworten“, der Text lässt sich vorher ändern.
+- **Büroklammer (links am Feld):** dieselben Einträge wie im Jarvis-Chat (Fotos, Screenshots oder Videos aus der
+  Mediathek, Kamera, Bild aus der Zwischenablage, Datei). Die Auswahl steht als Marken über dem Feld, Bilder mit
+  Vorschau, jede mit einem Knopf zum Herausnehmen. „Antworten“ geht dann auch ohne Text.
+- **Senden:** Die Anhänge gehen zuerst als Uploads an den PC (`upload_begin`, `upload_chunk`, `upload_end`, wie beim
+  Jarvis-Upload). Die Pfade stehen am Ende der Antwort, alles in einer Zeile (`C: Notify.swift`
+  `Rueckfrage.answerBody`): `Ja, siehe Foto. Anhang: /home/…/uploads/…/foto.jpg`, mehrere als
+  `Anhänge: /pfad/a.jpg | /pfad/b.pdf`. Eine Zeile, weil das Skript `rueckfrage` die Antwort als eine Zeile in seine
+  Notiz schreibt. Der Agent, der gefragt hat, liest die Datei unter dem Pfad. Am Gateway ist dafür nichts zu ändern.
+- Scheitert das Hochladen, bleibt alles stehen und es steht „Anhang nicht hochgeladen: …“ da. Scheitert danach die
+  Antwort, steht sie mit den Pfaden im Feld, ein zweiter Versuch lädt nichts doppelt hoch.
+- „Ja (Empfehlung)“ nimmt angehängte Dateien mit. „Erledigt“ (schließt ohne Antwort) nicht.
+- Die Karten in „Dein Zug“ haben weiter nur das Textfeld. „Ganz lesen“ auf der Karte öffnet die Hinweis-Ansicht mit
+  Mikrofon und Büroklammer.
+
+Die Annahme von Fotos und Dokumenten ist ein gemeinsamer Baustein für Jarvis-Chat und Antwortfeld (`DocIntake`,
+`DocStrip`). Tests: `NotifyTests.testAnswerWithAttachmentsAndDictation`, UI-Test
+`TabTests.test11_RueckfrageBlattMikrofonUndAnhang` (Mikrofon legt den Text ins Feld, „Antworten“ schickt ihn per
+`inbox_put`). Das Hochladen selbst lässt sich im Simulator nicht prüfen (keine Dateiauswahl).
+
 ## Vorschlag für `~/.agents/bin/rueckfrage` (Stand 06.11.2026, inzwischen am PC umgesetzt)
 
 1. `cmd_neu` und `cmd_meldung`: nach dem Schreiben der Datei, wenn Martin weg ist (`anwesenheit status` Exit 1),
