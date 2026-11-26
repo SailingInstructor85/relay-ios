@@ -50,6 +50,9 @@ struct JarvisView: View {
     @State private var confirmClear = false
     /// Füllstand des Gesprächs am PC (RPC `jarvis_context`); nil, solange das Gateway ihn nicht liefert.
     @State private var context: JarvisContext.Status?
+    /// Führt am PC der Chief das Gespräch (RPC `jarvis_context` mit `lead`), lässt er sich hier auf Zuruf ablösen.
+    @State private var lead: JarvisContext.Lead?
+    @State private var confirmHandOver = false
     /// Wann hier „Neues Gespräch beginnen“ getippt wurde (für die Trennlinie im Verlauf).
     @State private var resets: [Double] = JarvisResets.load()
     @State private var notice: String?
@@ -154,6 +157,13 @@ struct JarvisView: View {
                                 .disabled(asking)
                         }
                     }
+                    // der Chief führt das Gespräch: Ablösung auf Zuruf (er schreibt seine Notizen, dann beginnt eine frische Sitzung)
+                    if let l = lead {
+                        Section(JarvisContext.leadLabel(l)) {
+                            // die Nachfrage öffnet einen Moment später, sonst geht sie mit dem schließenden Menü verloren
+                            Button { Task { try? await Task.sleep(nanoseconds: 350_000_000); confirmHandOver = true } } label: { Label(JarvisContext.handOverLabel(l.name), systemImage: "arrow.triangle.2.circlepath") }
+                        }
+                    }
                     Button(role: .destructive) { confirmClear = true } label: { Label("Chat löschen", systemImage: "trash") }
                         .disabled(turns.isEmpty)
                 } label: { Image(systemName: "slider.horizontal.3") }
@@ -170,7 +180,7 @@ struct JarvisView: View {
             }
             await loadVocab()
             if autoListen { startVoice(trigger: "mic") }
-            context = await model.jarvisContext()
+            await loadContext()
         }
         .onChange(of: inputFocused) { _, focused in if focused { model.warmJarvis() } }
         .onDisappear { stopVoice() }
@@ -194,6 +204,10 @@ struct JarvisView: View {
         .confirmationDialog("Den Jarvis-Verlauf auf diesem iPhone löschen?", isPresented: $confirmClear, titleVisibility: .visible) {
             Button("Chat löschen", role: .destructive) { turns = []; JarvisStore.clear() }
         }
+        .confirmationDialog(JarvisContext.handOverTitle(lead?.name ?? ""), isPresented: $confirmHandOver, titleVisibility: .visible) {
+            Button(JarvisContext.handOverConfirm) { Task { await handOver() } }
+            Button("Abbrechen", role: .cancel) {}
+        } message: { Text(JarvisContext.handOverMessage(lead?.name ?? "")) }
     }
 
     private var micBar: some View {
@@ -372,7 +386,25 @@ struct JarvisView: View {
             JarvisResets.save(resets)
             notice = JarvisContext.resetDone
             UsageRecorder.shared.record("jarvis", "neues gespräch")
-            context = await model.jarvisContext()
+            await loadContext()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    /// Füllstand des Gesprächs oder, wenn der Chief es führt, sein Name für „ablösen“.
+    private func loadContext() async {
+        let r = await model.jarvisInfo()
+        context = r.flatMap(JarvisContext.status)
+        lead = r.flatMap(JarvisContext.lead)
+    }
+
+    /// „Chief ablösen“: Das Gateway bittet den Chief, seine Notizen zu schreiben und sich abzulösen. Ersetzt wird die
+    /// Sitzung am PC beim nächsten ruhigen Punkt, der Verlauf hier bleibt.
+    private func handOver() async {
+        do {
+            let r = try await model.jarvisReset()
+            notice = JarvisContext.handOverNotice(r, fallbackName: lead?.name ?? "")
+            UsageRecorder.shared.record("jarvis", "chief ablösen")
+            await loadContext()
         } catch { self.error = error.localizedDescription }
     }
 

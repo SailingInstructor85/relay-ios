@@ -68,4 +68,51 @@ public enum JarvisContext {
     }
 
     public static func fillLabel(_ s: Status) -> String { "Gespräch am PC zu \(s.percent) % gefüllt" }
+
+    // MARK: Ablösung auf Zuruf
+
+    /// Antwort des RPC `jarvis_context`, wenn am PC eine Agentensitzung das Gespräch führt (der Chief): Sie hat keinen
+    /// Füllstand und kein „Neues Gespräch beginnen“, lässt sich aber auf Zuruf ablösen. `askedAt`: Die Ablösung ist für
+    /// die laufende Sitzung schon erbeten (Unix-Sekunden).
+    public struct Lead: Equatable, Sendable {
+        public let name: String
+        public let askedAt: Double?
+        public init(name: String, askedAt: Double? = nil) { self.name = name; self.askedAt = askedAt }
+    }
+
+    /// nil, wenn kein Lead das Gespräch führt oder das Gateway die Ablösung auf Zuruf nicht kennt (`hand_over` fehlt):
+    /// Dann gibt es den Menüpunkt nicht.
+    public static func lead(_ r: JSON) -> Lead? {
+        let name = r.str("lead").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, r.flag("hand_over") else { return nil }
+        let at = r.num("asked_at")
+        return Lead(name: name, askedAt: at > 0 ? at : nil)
+    }
+
+    /// Überschrift des Abschnitts im Jarvis-Menü.
+    public static func leadLabel(_ l: Lead) -> String {
+        l.askedAt == nil ? "\(l.name) führt das Gespräch" : "\(l.name) führt das Gespräch · Ablösung erbeten"
+    }
+
+    public static func handOverLabel(_ name: String) -> String { "\(name) ablösen" }
+
+    /// Knopf in der Nachfrage. Er heißt anders als der Menüpunkt, damit beide auseinanderzuhalten sind.
+    public static let handOverConfirm = "Jetzt ablösen"
+
+    /// Titel und Text der Nachfrage vor dem Ablösen.
+    public static func handOverTitle(_ name: String) -> String { "\(name) ablösen?" }
+    public static func handOverMessage(_ name: String) -> String {
+        "\(name) schreibt zuerst seine Notizen. Danach beginnt am PC eine frische Sitzung, die mit den Notizen weitermacht. Der Verlauf auf dem iPhone bleibt."
+    }
+
+    /// Hinweis nach dem Tipp, aus der Antwort des RPC `jarvis_reset` (`lead`, `asked`). nil, wenn kein Lead antwortet
+    /// (dann hat der Überblicks-Agent neu begonnen, es gilt `resetDone`).
+    public static func handOverNotice(_ r: JSON, fallbackName: String = "") -> String? {
+        var name = r.str("lead").trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty { name = fallbackName }
+        guard !name.isEmpty else { return nil }
+        return r.flag("asked")
+            ? "\(name) schreibt jetzt seine Notizen und löst sich dann ab. Läuft bei ihm noch Hintergrundarbeit, wartet die Ablösung, bis sie fertig ist."
+            : "Für \(name) läuft gerade keine Sitzung. Die nächste Nachricht beginnt ohnehin eine neue."
+    }
 }

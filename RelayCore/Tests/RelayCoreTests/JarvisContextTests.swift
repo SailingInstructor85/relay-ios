@@ -59,4 +59,34 @@ final class JarvisContextTests: XCTestCase {
         XCTAssertNil(JarvisContext.status(["bytes": 5]))
         XCTAssertNil(JarvisContext.status([:]))
     }
+
+    func testLeadFromContext() {
+        // der Chief führt das Gespräch und lässt sich auf Zuruf ablösen
+        let l = JarvisContext.lead(JSON.obj(["lead": .string("Chief"), "hand_over": .bool(true)]))
+        XCTAssertEqual(l, JarvisContext.Lead(name: "Chief"))
+        XCTAssertEqual(l.map(JarvisContext.leadLabel), "Chief führt das Gespräch")
+        XCTAssertEqual(JarvisContext.handOverLabel("Chief"), "Chief ablösen")
+        // schon erbeten: steht in der Überschrift
+        let asked = JarvisContext.lead(JSON.obj(["lead": .string("Chief"), "hand_over": .bool(true), "asked_at": .number(1_795_000_000)]))
+        XCTAssertEqual(asked?.askedAt, 1_795_000_000)
+        XCTAssertEqual(asked.map(JarvisContext.leadLabel), "Chief führt das Gespräch · Ablösung erbeten")
+        // ein Gateway ohne Ablösung auf Zuruf (leere Antwort, oder Lead ohne das Feld): kein Menüpunkt
+        XCTAssertNil(JarvisContext.lead(JSON.obj([:])))
+        XCTAssertNil(JarvisContext.lead(JSON.obj(["lead": .string("Chief")])))
+        XCTAssertNil(JarvisContext.lead(JSON.obj(["lead": .string("  "), "hand_over": .bool(true)])))
+        // der Überblicks-Agent mit Füllstand ist kein Lead, und ein Lead hat keinen Füllstand
+        XCTAssertNil(JarvisContext.lead(JSON.obj(["bytes": .number(10), "max_bytes": .number(100)])))
+        XCTAssertNil(JarvisContext.status(JSON.obj(["lead": .string("Chief"), "hand_over": .bool(true)])))
+    }
+
+    func testHandOverNotice() {
+        let asked = JarvisContext.handOverNotice(JSON.obj(["lead": .string("Chief"), "asked": .bool(true)]))
+        XCTAssertEqual(asked?.hasPrefix("Chief schreibt jetzt seine Notizen"), true)
+        let none = JarvisContext.handOverNotice(JSON.obj(["lead": .string("Chief"), "asked": .bool(false)]))
+        XCTAssertEqual(none?.hasPrefix("Für Chief läuft gerade keine Sitzung"), true)
+        // Antwort ohne Namen: der Name aus dem Menü
+        XCTAssertEqual(JarvisContext.handOverNotice(JSON.obj(["asked": .bool(true)]), fallbackName: "Chief")?.hasPrefix("Chief schreibt"), true)
+        // der Überblicks-Agent antwortet leer: kein Hinweis zur Ablösung
+        XCTAssertNil(JarvisContext.handOverNotice(JSON.obj([:])))
+    }
 }

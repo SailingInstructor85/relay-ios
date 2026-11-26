@@ -46,16 +46,18 @@ extension AppModel {
         }
     }
 
-    /// Füllstand des Jarvis-Gesprächs am PC (RPC `jarvis_context`: `bytes`, `max_bytes`). nil, wenn das Gateway den
-    /// RPC nicht kennt oder nicht antwortet: dann zeigt Jarvis weder Füllstand noch „Neues Gespräch beginnen“.
-    func jarvisContext() async -> JarvisContext.Status? {
-        guard state == .connected, let r = try? await rpc("jarvis_context", [:], timeout: 10) else { return nil }
-        return JarvisContext.status(r)
+    /// Die rohe Antwort von `jarvis_context`: Füllstand (`JarvisContext.status`) oder, wenn der Chief das Gespräch führt,
+    /// sein Name mit der Ablösung auf Zuruf (`JarvisContext.lead`). nil ohne Verbindung oder ohne Antwort.
+    func jarvisInfo() async -> JSON? {
+        guard state == .connected else { return nil }
+        return try? await rpc("jarvis_context", [:], timeout: 10)
     }
 
-    /// Der PC beginnt für Jarvis ein neues Gespräch (RPC `jarvis_reset`).
-    func jarvisReset() async throws {
-        _ = try await rpc("jarvis_reset", [:], timeout: 20)
+    /// Der PC beginnt für Jarvis ein neues Gespräch (RPC `jarvis_reset`). Führt der Chief das Gespräch, bittet das
+    /// Gateway ihn damit um die Ablösung; die Antwort (`lead`, `asked`) sagt, was geschehen ist.
+    @discardableResult
+    func jarvisReset() async throws -> JSON {
+        try await rpc("jarvis_reset", [:], timeout: 30)
     }
 
     /// "Erkennung korrigieren": adds a term, or the correction "heard => meant", then reloads the vocabulary.

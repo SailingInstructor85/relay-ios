@@ -17,6 +17,8 @@ Control files in $MOCK_DIR/control (the UI tests or the CI script create them):
   routines_off   the team is not configured: routines, routine_run, routine_set, team_send answer enabled: false
   inbox_off      a gateway without inbox and calendar: inbox_feed, inbox_search, inbox_mail, inbox_mail_suggest and
                  calendar answer "unknown rpc" (inbox_put stays: it is the phone bridge)
+  chief          the chief answers the Jarvis field: jarvis_context names it with hand_over, jarvis_reset asks it to
+                 hand over (without the file both answer "unknown rpc", as before)
   inbox_empty    inbox_feed and inbox_mail_suggest answer without items, calendar without events
 Logs: $MOCK_DIR/rpc.jsonl (every request received), $MOCK_DIR/mock.log (text).
 """
@@ -812,6 +814,21 @@ def rpc_voice_timing(p):
 
 def rpc_jarvis_warm(p):
     return {"running": True}
+
+
+def rpc_jarvis_context(p):
+    # control file `chief`: a member's lead (the chief) answers the Jarvis field and can be asked to hand over
+    if os.path.exists(os.path.join(CTL, "chief")):
+        at = load_state().get("hand_over_at")
+        return {"lead": "Chief", "hand_over": True, **({"asked_at": at} if at else {})}
+    raise RpcError("unknown rpc 'jarvis_context'")
+
+
+def rpc_jarvis_reset(p):
+    if os.path.exists(os.path.join(CTL, "chief")):
+        mutate(lambda st: st.__setitem__("hand_over_at", time.time()))
+        return {"lead": "Chief", "asked": True}
+    raise RpcError("unknown rpc 'jarvis_reset'")
 
 
 def rpc_speak_summary(p):

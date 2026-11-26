@@ -354,6 +354,28 @@ final class InfoTests: RelayTestCase {
         shot("jarvis-vokabular")
     }
 
+    /// Führt der Chief das Gespräch, steht im Jarvis-Menü „Chief ablösen“; nach der Nachfrage geht `jarvis_reset` an den PC.
+    func test28_JarvisHandOver() {
+        ctl("chief")
+        launchConnected()
+        mainMenu("Jarvis fragen")
+        XCTAssertTrue(id("jarvisInput").waitForExistence(timeout: 8), "Jarvis nicht geöffnet")
+        XCTAssertTrue(mockReceived("jarvis_context"), "jarvis_context nicht abgefragt")
+        settle(1)
+        let menus = app.navigationBars.buttons
+        menus.element(boundBy: menus.count - 1).tap()
+        settle(0.8)
+        shot("jarvis-menue-chief")
+        XCTAssertTrue(tap("Chief ablösen", 4, exact: true), "Menüpunkt „Chief ablösen“ fehlt")
+        XCTAssertTrue(has("Chief ablösen?", 4), "Nachfrage vor dem Ablösen fehlt")
+        XCTAssertFalse(rpcLog().contains { ($0["method"] as? String) == "jarvis_reset" }, "jarvis_reset ging schon vor der Bestätigung")
+        shot("jarvis-abloesen-nachfrage")
+        XCTAssertTrue(tap("Jetzt ablösen", 4, exact: true), "Knopf „Jetzt ablösen“ in der Nachfrage fehlt")
+        XCTAssertTrue(mockReceived("jarvis_reset"), "jarvis_reset fehlt nach der Bestätigung")
+        XCTAssertTrue(id("jarvisNotice").waitForExistence(timeout: 6), "Hinweis nach dem Ablösen fehlt")
+        shot("jarvis-abloesung-erbeten")
+    }
+
     func test12_Settings() {
         launchConnected()
         mainMenu("Einstellungen")
