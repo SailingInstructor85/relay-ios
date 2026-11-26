@@ -132,8 +132,15 @@ final class Outbox: ObservableObject {
                     if !waitsOn { notifyFailed(item, why: why) }
                 }
             }
-            if !model.isForeground && OutboxLogic.next(items) == nil { model.releaseBackground() }
+            if !model.isForeground && nothingLeftInBackground { model.releaseBackground() }
         }
+    }
+
+    /// Im Hintergrund ist nichts mehr zu senden: Nichts ist unterwegs, und was noch wartet, geht erst im Vordergrund
+    /// (Fragen an Jarvis ohne `ask_once`). Dann kann die kurze Verbindung wieder zu.
+    private var nothingLeftInBackground: Bool {
+        let once = AppModel.shared.askOnce
+        return !items.contains { $0.state == .sending || ($0.state == .queued && (!JarvisOutbox.isJarvis($0.key) || once)) }
     }
 
     /// Wann je Sitzung zuletzt von selbst nachgesendet wurde (Abstand `OutboxLogic.autoResendGap`).
@@ -235,9 +242,7 @@ final class Outbox: ObservableObject {
             jarvisFailed(id, JarvisOutbox.outcome(remote: remote, message: error.localizedDescription, once: model.askOnce),
                          why: error.localizedDescription)
         }
-        if !model.isForeground && OutboxLogic.next(items) == nil && !items.contains(where: { $0.state == .sending }) {
-            model.releaseBackground()
-        }
+        if !model.isForeground && nothingLeftInBackground { model.releaseBackground() }
     }
 
     private func jarvisFailed(_ id: String, _ o: JarvisOutbox.Outcome, why: String) {
