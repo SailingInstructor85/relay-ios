@@ -404,6 +404,58 @@ final class InfoTests: RelayTestCase {
         shot("jarvis-rueckmeldung")
     }
 
+    /// Ohne Verbindung geht nichts verloren: Die Nachricht wartet sichtbar („wartet auf Verbindung“), übersteht den
+    /// Neustart der App und geht genau einmal an `ask`, sobald das Gateway wieder da ist. Die Antwort steht danach
+    /// im Verlauf. Eine wartende Nachricht lässt sich antippen und löschen.
+    func test30_JarvisOffline() {
+        let question = "Frage ohne Verbindung"
+        launchConnected()
+        ctl("offline"); ctl("kick")
+        settle(4)
+        mainMenu("Jarvis fragen")
+        XCTAssertTrue(id("jarvisInput").waitForExistence(timeout: 8), "Jarvis nicht geöffnet")
+        typeInto("jarvisInput", question)
+        tapID("jarvisSend")
+        XCTAssertTrue(id("jarvisWaiting").waitForExistence(timeout: 6), "die Nachricht wartet nicht sichtbar")
+        expect("wartet auf Verbindung", 6)
+        expect(question, 3)
+        XCTAssertFalse(has("Fehler: Nicht verbunden", 1), "die Nachricht endete als Fehler statt zu warten")
+        shot("jarvis-wartet-auf-verbindung")
+        // eine zweite wartende Nachricht antippen: Jetzt senden, Bearbeiten, Löschen
+        typeInto("jarvisInput", "Doch nicht")
+        tapID("jarvisSend")
+        XCTAssertTrue(has("Doch nicht", 5, exact: true), "zweite wartende Nachricht fehlt")
+        tap("Doch nicht", 3, exact: true)
+        XCTAssertTrue(has("Jetzt senden", 4, exact: true), "Menü der wartenden Nachricht fehlt")
+        expect("Bearbeiten", 2)
+        shot("jarvis-wartende-nachricht-menue")
+        XCTAssertTrue(tap("Löschen", 3, exact: true), "„Löschen“ fehlt im Menü")
+        settle(1)
+        XCTAssertFalse(has("Doch nicht", 1.5, exact: true), "gelöschte Nachricht steht noch da")
+        // Neustart der App, das Gateway ist weiter weg: Die Nachricht ist noch da
+        app.terminate()
+        launch(keep: true)
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 20), "App nach dem Neustart nicht da")
+        settle(1)
+        mainMenu("Jarvis fragen")
+        XCTAssertTrue(id("jarvisInput").waitForExistence(timeout: 8), "Jarvis nach dem Neustart nicht geöffnet")
+        XCTAssertTrue(has(question, 6), "die wartende Nachricht hat den Neustart nicht überstanden")
+        XCTAssertTrue(id("jarvisWaiting").waitForExistence(timeout: 4), "Stand der wartenden Nachricht fehlt nach dem Neustart")
+        XCTAssertFalse(rpcLog().contains { ($0["method"] as? String) == "ask" }, "ask ging ohne Verbindung hinaus")
+        shot("jarvis-wartet-nach-neustart")
+        // Gateway wieder da: genau ein ask mit client_id, die Antwort steht im Verlauf
+        ctlRemove("offline")
+        XCTAssertTrue(mockReceived("ask", where: { ($0["text"] as? String) == question && !(($0["client_id"] as? String) ?? "").isEmpty }, timeout: 70),
+                      "die wartende Nachricht ging nach dem Wiederverbinden nicht an ask")
+        XCTAssertTrue(hasSelectableText("Du hast gefragt: " + question, 15) || has("Du hast gefragt: " + question, 2), "Antwort auf die wartende Nachricht fehlt")
+        settle(2)
+        shot("jarvis-nachgesendet")
+        let asks = rpcLog().filter { ($0["method"] as? String) == "ask" && (($0["params"] as? [String: Any])?["text"] as? String) == question }
+        XCTAssertEqual(asks.count, 1, "die Nachricht kam nicht genau einmal am Gateway an")
+        XCTAssertFalse(has("Doch nicht", 1, exact: true), "die gelöschte Nachricht ist wieder da")
+        XCTAssertFalse(id("jarvisWaiting").exists, "nach der Antwort wartet noch etwas")
+    }
+
     func test12_Settings() {
         launchConnected()
         mainMenu("Einstellungen")

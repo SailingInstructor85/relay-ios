@@ -176,17 +176,26 @@ public struct OutItem: Sendable, Equatable, Identifiable {
     /// Anhänge, die auf dem iPhone warten (Vault-Chat ohne Verbindung): Dateinamen im lokalen Ablageordner, beim
     /// Zustellen hochgeladen und als Pfade an den Text gehängt.
     public var files: [String]
+    /// Nur Nachrichten an Jarvis (`JarvisOutbox`): eingesprochen statt getippt. Die Antwort wird dann vorgelesen.
+    public var voice: Bool
+    /// Nur Jarvis: was im Verlauf statt `text` steht (Nachricht und Dateinamen statt des Auftrags mit Pfaden).
+    public var shown: String?
+    /// Nur Jarvis: Die Nachricht ist ein Upload, das Gateway legt dafür immer einen neuen Vorgang an.
+    public var upload: Bool
 
     public init(id: String, key: String, text: String, at: Double, state: OutState = .queued, error: String? = nil,
-                tries: Int = 0, doneAt: Double = 0, force: Bool = false, files: [String] = []) {
+                tries: Int = 0, doneAt: Double = 0, force: Bool = false, files: [String] = [],
+                voice: Bool = false, shown: String? = nil, upload: Bool = false) {
         self.id = id; self.key = key; self.text = text; self.at = at; self.state = state; self.error = error
         self.tries = tries; self.doneAt = doneAt; self.force = force; self.files = files
+        self.voice = voice; self.shown = shown; self.upload = upload
     }
 
     public var json: JSON {
         .obj(["id": .string(id), "key": .string(key), "text": .string(text), "at": .number(at), "state": .string(state.rawValue),
               "error": error.map { .string($0) }, "tries": .number(Double(tries)), "done_at": .number(doneAt), "force": .bool(force),
-              "files": files.isEmpty ? nil : .array(files.map { .string($0) })])
+              "files": files.isEmpty ? nil : .array(files.map { .string($0) }),
+              "voice": voice ? .bool(true) : nil, "shown": shown.map { .string($0) }, "upload": upload ? .bool(true) : nil])
     }
 
     public static func from(_ o: JSON) -> OutItem? {
@@ -195,7 +204,7 @@ public struct OutItem: Sendable, Equatable, Identifiable {
         guard !id.isEmpty, !key.isEmpty, !text.isEmpty || !files.isEmpty else { return nil }
         return OutItem(id: id, key: key, text: text, at: o.num("at"), state: OutState(rawValue: o.str("state")) ?? .queued,
                        error: o["error"].string, tries: o["tries"].int ?? 0, doneAt: o.num("done_at"), force: o.flag("force"),
-                       files: files)
+                       files: files, voice: o.flag("voice"), shown: o["shown"].string, upload: o.flag("upload"))
     }
 }
 
@@ -215,7 +224,8 @@ public enum OutboxLogic {
     /// one keeps its id, so a send whose answer got lost is never typed twice.
     public static func retried(_ i: OutItem, force: Bool?, newId: String) -> OutItem {
         OutItem(id: i.state == .failed ? newId : i.id, key: i.key, text: i.text, at: i.at, state: .queued, error: nil,
-                tries: i.tries, doneAt: 0, force: force ?? i.force, files: i.files)
+                tries: i.state == .failed ? 0 : i.tries, doneAt: 0, force: force ?? i.force, files: i.files,
+                voice: i.voice, shown: i.shown, upload: i.upload)
     }
 
     /// The list as it is kept on disk: delivered ones are done, a send cut off by the app's end counts as not sent.

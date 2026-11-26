@@ -11,6 +11,10 @@ final class Outbox: ObservableObject {
     static let shared = Outbox()
 
     @Published private(set) var items: [OutItem] = []
+    /// Nachrichten an Jarvis, die gerade unterwegs sind: „Chief hat es“, sobald das Gateway das meldet (je Kennung).
+    @Published private(set) var jarvisTaken: [String: String] = [:]
+    /// Wann zuletzt eine wartende Frage an Jarvis hinausging (`JarvisOutbox.startGap`).
+    private var jarvisStarted: Double = 0
     private var started = false
 
     private static var url: URL? {
@@ -30,11 +34,21 @@ final class Outbox: ObservableObject {
 
     /// Queues a message and returns at once.
     @discardableResult
-    func add(id: String = UUID().uuidString, key: String, text: String, force: Bool = false, files: [String] = []) -> OutItem {
+    func add(id: String = UUID().uuidString, key: String, text: String, force: Bool = false, files: [String] = [],
+             voice: Bool = false, shown: String? = nil, upload: Bool = false) -> OutItem {
         if let old = items.first(where: { $0.id == id }) { return old }
-        let i = OutItem(id: id, key: key, text: text, at: Date().timeIntervalSince1970, force: force, files: files)
+        let i = OutItem(id: id, key: key, text: text, at: Date().timeIntervalSince1970, force: force, files: files,
+                        voice: voice, shown: shown, upload: upload)
         update { $0 + [i] }
         return i
+    }
+
+    /// Eine Frage an Jarvis, deren Ausgang offen ist (die Verbindung riss beim Warten auf die Antwort): Sie bleibt mit
+    /// „Erneut senden“ stehen, statt verloren zu gehen oder ungefragt ein zweites Mal hinauszugehen.
+    func addUnclear(id: String, text: String, voice: Bool, shown: String?, upload: Bool) {
+        let i = OutItem(id: id, key: JarvisOutbox.key, text: text, at: Date().timeIntervalSince1970, state: .failed,
+                        error: JarvisOutbox.unclearText, tries: 1, voice: voice, shown: shown, upload: upload)
+        update { list in list.filter { $0.id != id } + [i] }
     }
 
     /// A message the gateway refused because the session works: kept and shown as failed, with "Trotzdem senden".
@@ -75,7 +89,10 @@ final class Outbox: ObservableObject {
         let model = AppModel.shared
         while !Task.isCancelled {
             autoResend()
-            guard let item = OutboxLogic.next(items) else { waits = 0; try? await Task.sleep(nanoseconds: 700_000_000); continue }
+            // Fragen an Jarvis gehen im Hintergrund nur mit `ask_once` hinaus und nie zwei auf einmal (`JarvisOutbox.next`)
+            guard let item = JarvisOutbox.next(items, foreground: model.isForeground, once: model.askOnce,
+                                               now: Date().timeIntervalSince1970, lastStart: jarvisStarted)
+            else { waits = 0; try? await Task.sleep(nanoseconds: 700_000_000); continue }
             if model.state != .connected || model.isForeground == false {
                 if model.isForeground {
                     try? await Task.sleep(nanoseconds: 500_000_000) // the main loop reconnects by itself
@@ -92,6 +109,11 @@ final class Outbox: ObservableObject {
                 }
             }
             waits = 0
+            if JarvisOutbox.isJarvis(item.key) {
+                // eine Antwort von Jarvis kann Minuten dauern: Sie läuft neben dem Sender, der Rest der Outbox wartet nicht
+                startJarvis(item)
+                continue
+            }
             set(item.id) { var c = $0; c.state = .sending; c.tries += 1; c.error = nil; return c }
             do {
                 // the vault chat delivers every waiting message at once when it starts its agent
@@ -143,6 +165,92 @@ final class Outbox: ObservableObject {
                                                   "force": .bool(item.force), "client_id": .string(item.id)]), timeout: 60)
         }
         return [item.id]
+    }
+
+    // MARK: Jarvis
+
+    /// Eine wartende Frage an Jarvis geht hinaus. War ein früherer Versuch schon unterwegs und sein Ausgang ist
+    /// unbekannt (die App wurde dabei beendet), bleibt sie ohne `ask_once` stehen und der Nutzer entscheidet.
+    private func startJarvis(_ item: OutItem) {
+        if JarvisOutbox.unclear(item, once: AppModel.shared.askOnce) {
+            set(item.id) { JarvisOutbox.failed($0, .unclear, message: "") }
+            UsageRecorder.shared.record("jarvis", "postausgang offen", kind: "text", length: item.text.count)
+            return
+        }
+        jarvisStarted = Date().timeIntervalSince1970
+        set(item.id) { var c = $0; c.state = .sending; c.tries += 1; c.error = nil; return c }
+        UsageRecorder.shared.record("jarvis", "postausgang gesendet", kind: item.voice ? "diktat" : "text", length: item.text.count)
+        Task { await self.deliverJarvis(item.id) }
+    }
+
+    /// Lädt die Anhänge hoch, fragt Jarvis (`ask` mit der Kennung als `client_id`) und legt die Antwort in den
+    /// gespeicherten Verlauf. Der offene Jarvis-Chat übernimmt sie von dort (`JarvisInbox`).
+    private func deliverJarvis(_ id: String) async {
+        let model = AppModel.shared
+        guard var item = items.first(where: { $0.id == id }) else { return }
+        do {
+            if !item.files.isEmpty {
+                var paths: [String] = []
+                for f in item.files {
+                    guard let d = Self.filesDir, let data = try? Data(contentsOf: d.appendingPathComponent(f)) else { continue }
+                    let (name, prepared) = await Task.detached(priority: .userInitiated) { AttachPrep.prepared(name: VaultChat.displayName(f), data: data) }.value
+                    paths.append(try await model.upload(name: name, data: prepared))
+                }
+                if paths.isEmpty && item.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    throw RelayError(JarvisOutbox.lostFiles, remote: true)
+                }
+                // ab hier liegen die Dateien am PC: Ein weiterer Versuch lädt nichts doppelt hoch
+                let old = item
+                let ready = JarvisOutbox.uploaded(item, paths: paths, vault: model.vaultDir)
+                set(id) { cur in var c = ready; c.state = cur.state; c.tries = cur.tries; c.error = cur.error; return c }
+                removeFiles(old)
+                item = ready
+            }
+        } catch {
+            // beim Hochladen gescheitert: Jarvis hat noch nichts bekommen, die Nachricht wartet weiter
+            let remote = (error as? RelayError)?.remote ?? false
+            let o: JarvisOutbox.Outcome = remote ? .refused(error.localizedDescription) : .again(sent: false)
+            jarvisFailed(id, o, why: error.localizedDescription)
+            return
+        }
+        do {
+            let r = try await model.rpc("ask", .object(JarvisOutbox.params(item)), timeout: 300, onStatus: { o in
+                Task { @MainActor in
+                    if let label = JarvisAsk.statusLabel(o) { Outbox.shared.jarvisTaken[id] = label }
+                }
+            })
+            jarvisTaken[id] = nil
+            // inzwischen gelöscht (gibt es für eine laufende Nachricht nicht) oder schon beantwortet: nichts doppelt
+            guard items.contains(where: { $0.id == id }) else { return }
+            let turn = JarvisOutbox.turn(item, answer: r.str("text"), now: Date().timeIntervalSince1970)
+            let fresh = JarvisInbox.shared.receive(turn)
+            update { $0.filter { $0.id != id } }
+            UsageRecorder.shared.record("jarvis", "postausgang beantwortet", kind: item.voice ? "diktat" : "text", length: turn.a.count)
+            if fresh && !(model.isForeground && JarvisInbox.shared.visible) {
+                Notifier.post(id: "jarvis-\(id)", title: JarvisOutbox.noticeTitle(item), body: turn.a, thread: "jarvis")
+            }
+        } catch {
+            jarvisTaken[id] = nil
+            let remote = (error as? RelayError)?.remote ?? false
+            jarvisFailed(id, JarvisOutbox.outcome(remote: remote, message: error.localizedDescription, once: model.askOnce),
+                         why: error.localizedDescription)
+        }
+        if !model.isForeground && OutboxLogic.next(items) == nil && !items.contains(where: { $0.state == .sending }) {
+            model.releaseBackground()
+        }
+    }
+
+    private func jarvisFailed(_ id: String, _ o: JarvisOutbox.Outcome, why: String) {
+        guard let item = items.first(where: { $0.id == id }) else { return }
+        set(id) { JarvisOutbox.failed($0, o, message: why) }
+        if case .again = o { return }
+        UsageRecorder.shared.record("jarvis", "postausgang gescheitert", kind: "text", error: why)
+        let model = AppModel.shared
+        if !(model.isForeground && JarvisInbox.shared.visible) {
+            Notifier.post(id: "jarvis-\(id)", title: "Nachricht an Jarvis nicht gesendet",
+                          body: "\(JarvisOutbox.status(items.first { $0.id == id } ?? item, connected: true, network: true)) \(JarvisOutbox.shownText(item))",
+                          thread: "jarvis")
+        }
     }
 
     // MARK: vault chat

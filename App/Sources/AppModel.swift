@@ -105,6 +105,9 @@ final class AppModel: ObservableObject {
     @Published var openDrive = false   // Kurzbefehl „Sprachmodus in Relay“
     @Published var voiceLive = false   // hello_ok.config.voice == "live": the Desktop offers Jarvis Live (not used here)
     var conversationActive = false     // Jarvis conversation mode is running (set by JarvisView)
+    /// `hello_ok.config.ask_once`: Das Gateway erkennt eine zweimal gesendete Frage an Jarvis an ihrer `client_id`
+    /// (`JarvisOutbox`). Ohne die Zusage sendet die App eine Frage mit offenem Ausgang nicht von selbst noch einmal.
+    var askOnce = false
     var driveActive = false            // Sprachmodus offen: er liest selbst vor, keine zweite Stimme (DriveView)
     var lastJarvisWarm = Date.distantPast
     var jarvisWarmUnsupported = false
@@ -816,6 +819,7 @@ final class AppModel: ObservableObject {
         guard config.object != nil else { return }
         let live = VoiceMode.isLive(config["voice"].string)
         if live != voiceLive { voiceLive = live }
+        askOnce = config.flag("ask_once")
         var raw: [String: JSON] = [:]
         for k in ["avatars", "avatar_colors", "avatar_topics"] where config.has(k) { raw[k] = config[k] }
         let l = Avatars.look(from: .object(raw))

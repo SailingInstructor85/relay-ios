@@ -26,6 +26,10 @@ struct JarvisDoc: Identifiable {
 /// read aloud sentence by sentence; in conversation mode it listens again after each answer until nothing is said.
 struct JarvisView: View {
     @EnvironmentObject var model: AppModel
+    /// Nachrichten, die ohne Verbindung geschrieben oder eingesprochen wurden, warten in der Outbox (`JarvisOutbox`).
+    @ObservedObject private var outbox = Outbox.shared
+    /// Die angetippte wartende Nachricht („Jetzt senden“, „Bearbeiten“, „Löschen“).
+    @State private var acting: OutItem?
     var autoListen = false
     /// Eine Frage, die beim Öffnen sofort gestellt wird (Eingabeleiste auf „Heute“).
     var initialQuestion: String?
@@ -86,7 +90,7 @@ struct JarvisView: View {
                             Label("Der Desktop bietet Jarvis Live an. Das braucht den Sprachkanal des PCs und gibt es in dieser App nicht. Relay nutzt hier die Spracherkennung des iPhones.", systemImage: "info.circle")
                                 .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
                         }
-                        if turns.isEmpty {
+                        if turns.isEmpty && waiting.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
                                 Label(JarvisDictation.intro, systemImage: "info.circle").font(.callout)
                                     .accessibilityIdentifier("jarvisIntro")
@@ -122,6 +126,7 @@ struct JarvisView: View {
                                 } else { MarkdownText(text: t.a, marking: true).font(RelayFont.reply).lineSpacing(3) }
                             }.padding(.horizontal).id(t.id)
                         }
+                        waitingRows
                         if pending == 0, JarvisContext.breakPending(last: turns.last?.ts, now: Date().timeIntervalSince1970, resets: resets) {
                             contextBreak(JarvisContext.nextBreakLabel)
                         }
@@ -133,6 +138,7 @@ struct JarvisView: View {
                 }
                 .onChange(of: turns.last?.a) { _, _ in if let id = turns.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
                 .onChange(of: turns.count) { _, _ in if let id = turns.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
+                .onChange(of: waiting.count) { _, _ in if let id = waiting.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
                 .onChange(of: voice.partial) { _, _ in proxy.scrollTo("partial", anchor: .bottom) }
             }
             if let e = error { ErrorBanner(text: Binding(get: { e }, set: { error = $0 })).padding(.vertical, 4) }
@@ -374,9 +380,28 @@ struct JarvisView: View {
     /// Senden: ohne Dokumente die Frage wie bisher. Mit Dokumenten gehen sie zuerst an den PC, dann bekommt Jarvis die
     /// Pfade mit dem Auftrag (`JarvisDocs.prompt`); im Verlauf stehen Nachricht und Dateinamen. Scheitert ein Upload,
     /// bleiben Dokumente und Text stehen.
-    private func submit(_ text: String, byVoice: Bool, trigger: String? = nil, t0: Date? = nil) async {
-        guard !docs.isEmpty else { await ask(text, byVoice: byVoice, trigger: trigger, t0: t0); return }
+    /// Ohne Verbindung wartet alles in der Outbox, die Anhänge in ihrer Dateiablage auf dem iPhone (`queue`).
+    /// Ergebnis: true, wenn die Antwort jetzt da ist; false, wenn die Nachricht wartet oder etwas scheiterte.
+    @discardableResult
+    private func submit(_ text: String, byVoice: Bool, trigger: String? = nil, t0: Date? = nil) async -> Bool {
+        guard !docs.isEmpty else { return await ask(text, byVoice: byVoice, trigger: trigger, t0: t0) }
         let batch = docs
+        if model.state != .connected {
+            var stored: [String] = []
+            for d in batch {
+                guard let data = d.bytes(), data.count <= JarvisDocs.maxBytes, let name = Outbox.storeFile(name: d.name, data: data) else {
+                    stored.forEach { Outbox.dropFile($0) }
+                    self.error = JarvisDocs.unreadable(d.name)
+                    if input.isEmpty { input = text }
+                    return false
+                }
+                stored.append(name)
+            }
+            batch.forEach { $0.discard() }
+            docs.removeAll { d in batch.contains { $0.id == d.id } }
+            queue(text.trimmingCharacters(in: .whitespacesAndNewlines), byVoice: byVoice, files: stored)
+            return false
+        }
         var paths: [String] = []
         asking = true
         do {
@@ -392,15 +417,103 @@ struct JarvisView: View {
             self.error = error.localizedDescription
             if input.isEmpty { input = text }
             UsageRecorder.shared.record("jarvis", "dokument fehlgeschlagen", kind: "datei", error: error.localizedDescription)
-            return
+            return false
         }
         uploading = ""
         asking = false
         batch.forEach { $0.discard() }
         docs.removeAll { d in batch.contains { $0.id == d.id } }
         UsageRecorder.shared.record("jarvis", "dokument gesendet", kind: "datei", length: batch.count)
-        await ask(JarvisDocs.prompt(message: text, paths: paths, vault: model.vaultDir), byVoice: byVoice, trigger: trigger, t0: t0,
-                  shown: JarvisDocs.shown(message: text, names: batch.map(\.name)), upload: true)
+        return await ask(JarvisDocs.prompt(message: text, paths: paths, vault: model.vaultDir), byVoice: byVoice, trigger: trigger, t0: t0,
+                         shown: JarvisDocs.shown(message: text, names: batch.map(\.name)), upload: true)
+    }
+
+    // MARK: Warteschlange ohne Verbindung
+
+    private var waiting: [OutItem] { outbox.items(for: JarvisOutbox.key) }
+
+    /// Die Nachricht wartet auf dem iPhone und geht von selbst an Jarvis, sobald die Verbindung steht (auch nach
+    /// einem Neustart der App). `files`: Anhänge in der Dateiablage der Outbox.
+    private func queue(_ q: String, byVoice: Bool, shown: String? = nil, upload: Bool = false, files: [String] = []) {
+        notice = nil
+        Outbox.shared.add(key: JarvisOutbox.key, text: q, files: files, voice: byVoice, shown: shown, upload: upload)
+        UsageRecorder.shared.record("jarvis", "in postausgang", kind: byVoice ? "diktat" : (files.isEmpty ? "text" : "datei"), length: q.count)
+        if byVoice && speakAnswers { voice.speak(JarvisOutbox.spokenQueued) }
+    }
+
+    /// Wartende Nachrichten unter dem Verlauf: grau, mit ihrem Stand („wartet auf Verbindung“). Antippen bietet
+    /// „Jetzt senden“, „Bearbeiten“ und „Löschen“ an.
+    @ViewBuilder private var waitingRows: some View {
+        let list = waiting
+        if !list.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(list) { i in waitingRow(i).id(i.id) }
+            }
+            .confirmationDialog(JarvisOutbox.menuTitle, isPresented: Binding(get: { acting != nil }, set: { if !$0 { acting = nil } }),
+                                titleVisibility: .visible, presenting: acting) { i in
+                Button(i.state == .failed ? JarvisOutbox.sendAgain : JarvisOutbox.sendNow) { sendNow(i) }
+                if JarvisOutbox.editable(i) { Button(JarvisOutbox.edit) { editWaiting(i) } }
+                Button(JarvisOutbox.delete, role: .destructive) { deleteWaiting(i) }
+                Button("Abbrechen", role: .cancel) {}
+            } message: { i in
+                Text(JarvisOutbox.shownText(i))
+            }
+        }
+    }
+
+    private func waitingRow(_ i: OutItem) -> some View {
+        let connected = model.state == .connected
+        let status = JarvisOutbox.status(i, connected: connected, network: model.state != .noNetwork, taken: outbox.jarvisTaken[i.id])
+        return VStack(alignment: .trailing, spacing: 4) {
+            HStack {
+                Spacer()
+                if i.voice { Image(systemName: "waveform").font(.caption).foregroundStyle(.secondary) }
+                Text(JarvisOutbox.shownText(i)).padding(10)
+                    .background(Color.secondary.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 6) {
+                if i.state == .sending || (i.state == .queued && connected) { ProgressView().controlSize(.mini) }
+                Text(status).font(.caption2).foregroundStyle(i.state == .failed ? Color.red : Color.secondary)
+                    .multilineTextAlignment(.trailing)
+                    .accessibilityIdentifier("jarvisWaiting")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.horizontal)
+        .contentShape(Rectangle())
+        .onTapGesture { if JarvisOutbox.actionable(i) { acting = i } }
+    }
+
+    /// „Jetzt senden“: sofort neu verbinden, der Sender der Outbox schickt die Nachricht, sobald die Verbindung steht.
+    /// „Erneut senden“ nach einer Absage oder offenem Ausgang: wieder in die Warteschlange, unter neuer Kennung.
+    private func sendNow(_ i: OutItem) {
+        UsageRecorder.shared.record("jarvis", i.state == .failed ? "postausgang erneut" : "postausgang jetzt", kind: "text", length: i.text.count)
+        if i.state == .failed { Outbox.shared.retry(i.id) }
+        if model.state != .connected { model.reconnect() }
+    }
+
+    /// „Bearbeiten“: Text und Anhänge zurück in die Eingabe, die wartende Nachricht geht.
+    private func editWaiting(_ i: OutItem) {
+        let head = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        input = head.isEmpty ? i.text : head + "\n" + i.text
+        var back: [JarvisDoc] = []
+        if let dir = Outbox.filesDir {
+            for f in i.files {
+                guard let data = try? Data(contentsOf: dir.appendingPathComponent(f)) else { continue }
+                let name = VaultChat.displayName(f)
+                back.append(JarvisDoc(name: name, data: data, media: nil, preview: JarvisDocs.isPicture(name) ? AttachPrep.thumbnail(data) : nil))
+            }
+        }
+        docs += back
+        Outbox.shared.remove(i.id)
+        UsageRecorder.shared.record("jarvis", "postausgang bearbeitet", kind: "text", length: i.text.count)
+        inputFocused = true
+    }
+
+    private func deleteWaiting(_ i: OutItem) {
+        UsageRecorder.shared.record("jarvis", "postausgang gelöscht", kind: "text", length: i.text.count)
+        Outbox.shared.remove(i.id)
     }
 
     // MARK: Gesprächskontext
@@ -525,8 +638,10 @@ struct JarvisView: View {
                 silent = 0
                 // "stop", "danke", "tschüss" end the conversation instead of being asked
                 if conversation && SpeechText.isStopPhrase(heard) { return }
-                await submit(heard, byVoice: true, trigger: kind, t0: t0)
+                let answered = await submit(heard, byVoice: true, trigger: kind, t0: t0)
                 if speakAnswers { await voice.waitUntilSpoken() }
+                // ohne Verbindung wartet die Frage in der Outbox: Das Gespräch endet hier, statt ins Leere zuzuhören
+                if !answered { return }
                 kind = "follow_up"
             } while conversation && !Task.isCancelled
         }
@@ -561,7 +676,8 @@ struct JarvisView: View {
         turns += new.map(Turn.from)
         UsageRecorder.shared.record("jarvis", "rückmeldung", kind: "text", length: new.count)
         if speakAnswers {
-            toSpeak += new.map(JarvisSay.spoken)
+            // Antworten auf Fragen aus der Warteschlange nur, wenn sie eingesprochen waren und die App vorn ist
+            toSpeak += new.filter { JarvisOutbox.speaks($0, foreground: model.isForeground) }.map(JarvisSay.spoken)
             speakPending()
         }
     }
@@ -592,9 +708,17 @@ struct JarvisView: View {
     /// `shown`: was statt der Frage im Verlauf steht (Dokumente: Nachricht und Dateinamen statt des Auftrags mit Pfaden).
     /// `upload`: Die Frage ist ein Upload. Das Gateway macht daraus immer einen neuen Vorgang und nie die Antwort auf
     /// eine offene Rückfrage (`JarvisDocs.askParams`).
-    private func ask(_ raw: String, byVoice: Bool, trigger: String? = nil, t0: Date? = nil, shown: String? = nil, upload: Bool = false) async {
+    /// Ohne Verbindung wartet die Frage in der Outbox und geht später von selbst hinaus (`queue`). Reißt die
+    /// Verbindung beim Warten auf die Antwort, landet sie ebenfalls dort, statt als „Fehler“ zu enden.
+    /// Ergebnis: true, wenn jetzt eine Antwort (oder eine Absage des Gateways) in der Zeile steht.
+    @discardableResult
+    private func ask(_ raw: String, byVoice: Bool, trigger: String? = nil, t0: Date? = nil, shown: String? = nil, upload: Bool = false) async -> Bool {
         let q = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return }
+        guard !q.isEmpty else { return true }
+        if model.state != .connected {
+            queue(q, byVoice: byVoice, shown: shown, upload: upload)
+            return false
+        }
         // die Frage sperrt das Feld nicht: Während die Antwort aussteht, geht die nächste Nachricht sofort raus
         pending += 1; defer { pending -= 1 }
         notice = nil
@@ -615,7 +739,10 @@ struct JarvisView: View {
         let stamp = Stamp()
         let sent = Date()
         do {
-            let r = try await model.rpc("ask", .object(JarvisDocs.askParams(text: q, byVoice: byVoice, upload: upload)), timeout: 300, onProgress: { delta in
+            // die Kennung der Zeile geht als `client_id` mit: Ein zweiter Versand derselben Frage löst nichts doppelt aus
+            var params = JarvisDocs.askParams(text: q, byVoice: byVoice, upload: upload)
+            params["client_id"] = .string(tid.uuidString)
+            let r = try await model.rpc("ask", .object(params), timeout: 300, onProgress: { delta in
                 Task { @MainActor in
                     edit(tid) { $0.a += delta }
                     if !streamed.value { stamp.first = Date() }
@@ -635,8 +762,26 @@ struct JarvisView: View {
             }
             edit(tid) { $0.a = final }
         } catch {
-            edit(tid) { $0.a = "Fehler: \(error.localizedDescription)" }
-            if speak { voice.speakUnlessStopped("Das hat nicht geklappt.") }
+            let why = error.localizedDescription
+            switch JarvisOutbox.outcome(remote: (error as? RelayError)?.remote ?? false, message: why, once: model.askOnce) {
+            case .refused:
+                edit(tid) { $0.a = "Fehler: \(why)" }
+                if speak { voice.speakUnlessStopped("Das hat nicht geklappt.") }
+            case .again:
+                // nicht angekommen (oder das Gateway erkennt die Wiederholung): Die Frage wartet unter derselben Kennung
+                turns.removeAll { $0.id == tid }
+                Outbox.shared.add(id: tid.uuidString, key: JarvisOutbox.key, text: q, voice: byVoice, shown: shown, upload: upload)
+                UsageRecorder.shared.record("jarvis", "in postausgang", kind: byVoice ? "diktat" : "text", length: q.count, error: why)
+                if speak { voice.speakUnlessStopped(JarvisOutbox.spokenQueued) }
+                return false
+            case .unclear:
+                // die Verbindung riss beim Warten: Ob die Frage am PC ist, weiß die App nicht. Sie bleibt stehen.
+                turns.removeAll { $0.id == tid }
+                Outbox.shared.addUnclear(id: tid.uuidString, text: q, voice: byVoice, shown: shown, upload: upload)
+                UsageRecorder.shared.record("jarvis", "fehler", kind: byVoice ? "diktat" : "text", error: why)
+                if speak { voice.speakUnlessStopped("Das hat nicht geklappt.") }
+                return false
+            }
         }
         edit(tid) { $0.done = true }
         persist()
@@ -646,6 +791,7 @@ struct JarvisView: View {
             if let f = stamp.first { stages["first_text"] = ms(f) }
             model.sendVoiceTiming(trigger: trigger, stages: stages)
         }
+        return true
     }
 }
 
