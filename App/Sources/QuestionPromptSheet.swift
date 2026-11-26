@@ -6,15 +6,20 @@ import RelayCore
 /// „Antworten“ schickt den Text aus dem Feld, „Später“ schließt das Blatt bis zur nächsten neuen Rückfrage. Nach einer
 /// Antwort rückt die nächste offene nach; ist keine mehr offen, schließt sich das Blatt. Die Regeln stehen in
 /// `QuestionPrompt` (RelayCore), die Antwort geht über `AppModel.answerQuestion` wie in „Dein Zug“.
+/// Am Antwortfeld stehen die Büroklammer und das Mikrofon wie im Jarvis-Chat (`AnswerComposer`): Das Mikrofon legt das
+/// Gesprochene ins Feld, Fotos und Dokumente gehen beim Senden an den PC und stehen mit ihrem Pfad in der Antwort.
 struct QuestionPromptSheet: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject private var notices = NoticeStore.shared
     @State private var answer = ""
+    /// Angehängte Fotos und Dokumente: Sie gehen mit der Antwort an den PC.
+    @State private var docs: [JarvisDoc] = []
+    @State private var progress = ""
     @State private var sending = false
     @State private var error: String?
     @FocusState private var focused: Bool
 
-    private var trimmed: String { answer.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var canSend: Bool { Rueckfrage.canAnswer(text: answer, docs: docs.count) }
 
     var body: some View {
         let open = QuestionPrompt.open(notices.items)
@@ -27,7 +32,11 @@ struct QuestionPromptSheet: View {
             }
         }
         .background(RelayColor.background.ignoresSafeArea())
-        .onChange(of: open.first?.ref) { _, _ in answer = ""; error = nil; focused = false }
+        .onChange(of: open.first?.ref) { _, _ in
+            answer = ""; error = nil; focused = false
+            docs.forEach { $0.discard() }
+            docs = []
+        }
         .onChange(of: open.isEmpty) { _, empty in if empty { model.showQuestionPrompt = false } }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
@@ -64,20 +73,17 @@ struct QuestionPromptSheet: View {
     private func answerBar(_ n: Notice, _ q: AgentQuestion) -> some View {
         let quick = Rueckfrage.quickAnswer(q)
         return VStack(alignment: .leading, spacing: 8) {
-            TextField("Antwort an \(q.agent)", text: $answer, axis: .vertical).lineLimit(1...4)
-                .font(RelayFont.bodyLarge)
-                .focused($focused)
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(RelayColor.surfaceContainerLowest, in: RoundedRectangle(cornerRadius: RelayRadius.option, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: RelayRadius.option, style: .continuous).strokeBorder(RelayColor.outlineVariant, lineWidth: 1) }
-                .accessibilityIdentifier("promptAnswer")
+            // Büroklammer links, Mikrofon rechts am Feld (Kennungen promptAttach, promptAnswer, promptMic)
+            AnswerComposer(placeholder: "Antwort an \(q.agent)", text: $answer, docs: $docs, error: $error, focused: $focused,
+                           prefix: "prompt", screen: "rückfrageblatt")
+                .disabled(sending)
             HStack(spacing: 8) {
                 if let quick {
                     Button("Ja (Empfehlung)") { send(n.ref, quick) }.buttonStyle(RelayFilledButtonStyle()).accessibilityIdentifier("promptYes")
-                    Button("Antworten") { send(n.ref, answer) }.buttonStyle(RelayTonalButtonStyle()).disabled(trimmed.isEmpty)
+                    Button("Antworten") { send(n.ref, answer) }.buttonStyle(RelayTonalButtonStyle()).disabled(!canSend)
                         .accessibilityIdentifier("promptSend")
                 } else {
-                    Button("Antworten") { send(n.ref, answer) }.buttonStyle(RelayFilledButtonStyle()).disabled(trimmed.isEmpty)
+                    Button("Antworten") { send(n.ref, answer) }.buttonStyle(RelayFilledButtonStyle()).disabled(!canSend)
                         .accessibilityIdentifier("promptSend")
                 }
                 if sending { ProgressView().controlSize(.small) }
@@ -87,17 +93,38 @@ struct QuestionPromptSheet: View {
                     .accessibilityIdentifier("promptLater")
             }
             .disabled(sending)
+            if !progress.isEmpty { Text(progress).font(RelayFont.bodySmall).foregroundStyle(RelayColor.onSurfaceVariant) }
             if let error { Text(error).font(RelayFont.bodySmall).foregroundStyle(RelayColor.error) }
         }
         .padding(.horizontal, RelaySpace.page).padding(.vertical, 12)
         .background(RelayColor.surfaceContainer)
     }
 
+    /// Anhänge gehen zuerst an den PC, ihre Pfade stehen dann am Ende der Antwort. Scheitert das Hochladen, bleibt
+    /// alles stehen. Scheitert danach die Antwort, steht sie mit den Pfaden im Feld und nichts wird doppelt hochgeladen.
     private func send(_ ref: String, _ text: String) {
         sending = true
-        UsageRecorder.shared.record("rückfrageblatt", "rückfrage beantwortet", kind: "text", length: text.count)
+        error = nil
+        let batch = docs
+        UsageRecorder.shared.record("rückfrageblatt", "rückfrage beantwortet", kind: batch.isEmpty ? "text" : "datei", length: text.count)
         Task { @MainActor in
-            let e = await model.answerQuestion(ref: ref, text: text)
+            var body = text
+            if !batch.isEmpty {
+                do {
+                    let paths = try await DocIntake.upload(batch, model: model) { progress = $0 }
+                    progress = ""
+                    body = Rueckfrage.answerBody(text, paths: paths)
+                    batch.forEach { $0.discard() }
+                    docs.removeAll { d in batch.contains { $0.id == d.id } }
+                    answer = body
+                } catch {
+                    progress = ""
+                    sending = false
+                    self.error = "Anhang nicht hochgeladen: \(error.localizedDescription)"
+                    return
+                }
+            }
+            let e = await model.answerQuestion(ref: ref, text: body)
             sending = false
             // ist die Rückfrage inzwischen zu (auch durch eine Antwort von woanders), zeigt das Blatt schon die nächste
             if NoticeStore.shared.get(ref)?.answer == nil { error = e }

@@ -288,31 +288,11 @@ struct JarvisView: View {
 
     // MARK: Dokumente
 
-    /// Die angehängten Fotos und Dokumente über der Eingabe, Bilder mit Vorschau, jedes mit einem Knopf zum Herausnehmen.
+    /// Die angehängten Fotos und Dokumente über der Eingabe (`DocStrip`, derselbe Streifen wie im Antwortfeld einer Rückfrage).
     private var docStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(docs) { d in
-                    HStack(spacing: 4) {
-                        if let t = d.thumb {
-                            Image(uiImage: t).resizable().scaledToFill().frame(width: 36, height: 36)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                        } else {
-                            Image(systemName: JarvisDocs.symbol(d.name))
-                        }
-                        Text(d.name).lineLimit(1).truncationMode(.middle).frame(maxWidth: 180)
-                        Button { removeDoc(d.id) } label: { Image(systemName: "xmark.circle.fill") }
-                            .buttonStyle(.plain).disabled(asking)
-                            .accessibilityLabel("Aus der Auswahl nehmen")
-                    }
-                    .font(.footnote)
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .background(Color(.secondarySystemBackground), in: Capsule())
-                }
-            }.padding(.horizontal)
-        }
-        .padding(.bottom, 6)
-        .accessibilityIdentifier("jarvisDocs")
+        DocStrip(docs: docs, disabled: asking) { removeDoc($0) }
+            .padding(.bottom, 6)
+            .accessibilityIdentifier("jarvisDocs")
     }
 
     private func removeDoc(_ id: UUID) {
@@ -326,55 +306,34 @@ struct JarvisView: View {
         UsageRecorder.shared.record("jarvis", "dokument angehängt", kind: kind, length: new.count)
     }
 
-    /// Dateien aus der Dateien-App: sofort lesen (der Zugriff gilt nur jetzt), hochgeladen wird erst beim Senden.
+    /// Annehmen über `DocIntake`, gemeinsam mit dem Antwortfeld einer Rückfrage. Hochgeladen wird erst beim Senden.
+    private func took(_ r: DocIntake.Loaded, kind: String) {
+        attached(r.docs, kind: kind)
+        if let e = r.error { error = e }
+    }
+
+    /// Dateien aus der Dateien-App: sofort lesen (der Zugriff gilt nur jetzt).
     private func addFiles(_ urls: [URL]) {
-        var new: [JarvisDoc] = []
-        var problems: [String] = []
-        for url in urls {
-            let ok = url.startAccessingSecurityScopedResource()
-            defer { if ok { url.stopAccessingSecurityScopedResource() } }
-            let name = url.lastPathComponent
-            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { problems.append(JarvisDocs.unreadable(name)); continue }
-            guard data.count <= JarvisDocs.maxBytes else { problems.append(JarvisDocs.tooBig(name)); continue }
-            // Bilddateien (zum Beispiel ein gesicherter Screenshot) zeigen wie Fotos eine Vorschau
-            new.append(JarvisDoc(name: name, data: data, media: nil, preview: JarvisDocs.isPicture(name) ? AttachPrep.thumbnail(data) : nil))
-        }
-        attached(new, kind: "datei")
-        if !problems.isEmpty { error = problems.joined(separator: ", ") }
+        took(DocIntake.files(urls), kind: "datei")
     }
 
     /// Fotos und Videos aus der Mediathek (Fotos schon auf 2048 px verkleinert, Videos bleiben in ihrer Datei).
     private func addPicked(_ providers: [NSItemProvider]) async {
         uploading = providers.count > 1 ? "Lade \(providers.count) Fotos aus der Mediathek…" : "Lade Auswahl…"
-        let (items, failed) = await StagedMedia.load(providers, stamp: Int(Date().timeIntervalSince1970))
+        let r = await DocIntake.picked(providers)
         uploading = ""
-        let tooBig = items.filter { $0.size() > JarvisDocs.maxBytes }
-        tooBig.forEach { $0.discard() }
-        attached(items.filter { $0.size() <= JarvisDocs.maxBytes }.map { JarvisDoc(name: $0.name, data: nil, media: $0) }, kind: "foto")
-        var problems = tooBig.map { JarvisDocs.tooBig($0.name) }
-        if failed > 0 { problems.append(failed == 1 ? "1 Auswahl konnte nicht geladen werden" : "\(failed) Auswahlen konnten nicht geladen werden") }
-        if !problems.isEmpty { error = problems.joined(separator: ", ") }
+        took(r, kind: "foto")
     }
 
     private func addCamera(_ jpeg: Data) async {
-        let raw = "kamera-\(Int(Date().timeIntervalSince1970)).jpg"
-        await addImage(name: raw, data: jpeg, mime: "image/jpeg", kind: "foto")
+        let r = await DocIntake.camera(jpeg)
+        took(r, kind: "foto")
     }
 
     /// Ein Bild aus der Zwischenablage, zum Beispiel ein eben kopierter Screenshot.
     private func addClipboard() async {
-        guard let img = UIPasteboard.general.image, let d = img.pngData() else { error = "Kein Bild in der Zwischenablage"; return }
-        await addImage(name: JarvisDocs.clipboardName(stamp: Int(Date().timeIntervalSince1970)), data: d, mime: "image/png", kind: "zwischenablage")
-    }
-
-    /// Ein Bild als Bytes (Kamera, Zwischenablage): wie Fotos aus der Mediathek auf 2048 px verkleinert, mit Vorschau.
-    private func addImage(name: String, data: Data, mime: String, kind: String) async {
-        let p: (name: String, data: Data, thumb: UIImage?) = await Task.detached(priority: .userInitiated) { () -> (name: String, data: Data, thumb: UIImage?) in
-            let prep = AttachPrep.prepared(name: name, data: data, mime: mime)
-            return (prep.name, prep.data, AttachPrep.thumbnail(prep.data))
-        }.value
-        guard p.data.count <= JarvisDocs.maxBytes else { error = JarvisDocs.tooBig(p.name); return }
-        attached([JarvisDoc(name: p.name, data: p.data, media: nil, preview: p.thumb)], kind: kind)
+        let r = await DocIntake.clipboard()
+        took(r, kind: "zwischenablage")
     }
 
     /// Senden: ohne Dokumente die Frage wie bisher. Mit Dokumenten gehen sie zuerst an den PC, dann bekommt Jarvis die

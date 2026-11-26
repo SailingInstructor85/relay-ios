@@ -286,4 +286,27 @@ final class NotifyTests: XCTestCase {
         XCTAssertEqual(QuestionPrompt.countLabel(1), "1 offene Rückfrage")
         XCTAssertEqual(QuestionPrompt.countLabel(3), "3 offene Rückfragen, die älteste zuerst")
     }
+
+    func testAnswerWithAttachmentsAndDictation() {
+        // ein Anhang: der Pfad am PC steht am Ende der Antwort, alles in einer Zeile
+        XCTAssertEqual(Rueckfrage.answerBody("Ja, siehe Foto", paths: ["/home/dev/uploads/foto.jpg"]),
+                       "Ja, siehe Foto. Anhang: /home/dev/uploads/foto.jpg")
+        XCTAssertEqual(Rueckfrage.answerBody("Passt das so?", paths: ["/u/a.jpg", " /u/b.pdf "]), "Passt das so? Anhänge: /u/a.jpg | /u/b.pdf")
+        XCTAssertFalse(Rueckfrage.answerBody("Zeile eins", paths: ["/u/a.jpg", "/u/b.pdf"]).contains("\n"))
+        // nur Anhänge, nur Text
+        XCTAssertEqual(Rueckfrage.answerBody("  ", paths: ["/u/a.jpg"]), "Anhang: /u/a.jpg")
+        XCTAssertEqual(Rueckfrage.answerBody(" ja ", paths: []), "ja")
+        XCTAssertEqual(Rueckfrage.answerBody("ja", paths: ["", " "]), "ja")
+        // die Antwort mit Anhang geht wie jede andere als Eingangs-Element zum PC
+        let item = Rueckfrage.answerItem(agent: "relay-ios", id: "R3", answer: Rueckfrage.answerBody("Hier", paths: ["/u/a.jpg"]), now: 10)
+        XCTAssertEqual(item.str("text"), "Hier. Anhang: /u/a.jpg")
+        // Antworten geht mit Text oder mit Anhang
+        XCTAssertFalse(Rueckfrage.canAnswer(text: "  \n", docs: 0))
+        XCTAssertTrue(Rueckfrage.canAnswer(text: "ja", docs: 0))
+        XCTAssertTrue(Rueckfrage.canAnswer(text: "", docs: 1))
+        // Diktat hängt an, was schon im Feld steht, bleibt
+        XCTAssertEqual(Rueckfrage.dictated(field: "", heard: " Mach das so "), "Mach das so")
+        XCTAssertEqual(Rueckfrage.dictated(field: "Ja. ", heard: "Aber erst morgen"), "Ja. Aber erst morgen")
+        XCTAssertEqual(Rueckfrage.dictated(field: "Ja", heard: "  "), "Ja")
+    }
 }

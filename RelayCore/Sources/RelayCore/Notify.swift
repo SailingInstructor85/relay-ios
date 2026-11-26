@@ -288,6 +288,38 @@ public enum Rueckfrage {
                  "text": .string(answer), "conversation": .string(agent), "has_reply": .bool(false)])
     }
 
+    // MARK: Antwort mit Anhängen und Diktat (Martin, 25.11.2026)
+    //
+    // Im Antwortfeld einer Rückfrage stehen die Büroklammer und das Mikrofon wie im Jarvis-Chat. Fotos und Dokumente
+    // gehen als Uploads an den PC, ihre Pfade stehen am Ende der Antwort. Die Antwort bleibt eine Zeile, weil das
+    // Skript `rueckfrage` am PC sie als eine Zeile in seine Notiz schreibt. Der Agent, der gefragt hat, kann die
+    // Dateien unter den Pfaden selbst lesen.
+
+    /// Die Antwort mit den Pfaden der hochgeladenen Anhänge: „Ja, siehe Foto. Anhang: /pfad/foto.jpg“, mehrere mit
+    /// „ | “ getrennt. Ohne Text nur die Anhänge, ohne Anhänge nur der Text.
+    public static func answerBody(_ text: String, paths: [String]) -> String {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let p = paths.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard !p.isEmpty else { return t }
+        let files = (p.count == 1 ? "Anhang: " : "Anhänge: ") + p.joined(separator: " | ")
+        if t.isEmpty { return files }
+        let ended = t.last.map { ".!?:".contains($0) } ?? false
+        return t + (ended ? " " : ". ") + files
+    }
+
+    /// „Antworten“ geht mit Text oder mit mindestens einem Anhang.
+    public static func canAnswer(text: String, docs: Int) -> Bool {
+        docs > 0 || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Das Feld nach einem Diktat: Das Gesprochene hängt hinter dem, was schon dasteht.
+    public static func dictated(field: String, heard: String) -> String {
+        let head = field.trimmingCharacters(in: .whitespacesAndNewlines)
+        let h = heard.trimmingCharacters(in: .whitespacesAndNewlines)
+        if h.isEmpty { return field }
+        return head.isEmpty ? h : head + " " + h
+    }
+
     // MARK: Schließen auf allen Geräten (PROTOCOL.md des Gateways, „Rückfragen“, 2026-11-24)
     //
     // Wahr ist der Stand am PC (die Dateien des Skripts `rueckfrage`). Die App spiegelt ihn: das Ereignis

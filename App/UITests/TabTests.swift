@@ -177,6 +177,36 @@ final class TabTests: RelayTestCase {
         shot("rueckfrage-blatt-beantwortet")
     }
 
+    /// Im Blatt stehen am Antwortfeld die Büroklammer und das Mikrofon wie im Jarvis-Chat. Das Mikrofon legt das
+    /// Gesprochene ins Feld (im Simulator „hört“ die App einen festen Satz), „Antworten“ schickt es zum PC.
+    func test11_RueckfrageBlattMikrofonUndAnhang() {
+        let phrase = "Welche Sitzung braucht mich gerade?"
+        launchConnected()
+        ctl("trigger_rueckfrage")
+        settle(3)
+        reopenApp()
+        XCTAssertTrue(id("promptSend").waitForExistence(timeout: 25), "Blatt mit der offenen Rückfrage fehlt nach dem Öffnen")
+        XCTAssertTrue(id("promptAttach").exists, "Büroklammer fehlt im Antwortfenster der Rückfrage")
+        XCTAssertTrue(id("promptMic").exists, "Mikrofon fehlt im Antwortfenster der Rückfrage")
+        XCTAssertTrue(id("promptLater").exists, "„Später“ fehlt im Antwortfenster")
+        shot("rueckfrage-blatt-mikrofon-anhang")
+        tapID("promptMic")
+        XCTAssertTrue(has(phrase, 6), "Teilergebnis der Aufnahme fehlt")
+        shot("rueckfrage-blatt-hoert")
+        tapID("promptMic")  // Stopp: der Text kommt ins Antwortfeld
+        settle(1.5)
+        let field = id("promptAnswer")
+        XCTAssertTrue(field.waitForExistence(timeout: 3), "Antwortfeld fehlt")
+        XCTAssertTrue((field.value as? String)?.contains(phrase) == true, "Diktat nicht im Antwortfeld: \(String(describing: field.value))")
+        shot("rueckfrage-blatt-diktat-im-feld")
+        tapID("promptSend")
+        XCTAssertTrue(mockReceived("inbox_put", where: { p in
+            ((p["items"] as? [[String: Any]])?.first?["app"] as? String) == "rueckfrage" && ((p["items"] as? [[String: Any]])?.first?["text"] as? String) == phrase
+        }), "diktierte Antwort nicht per inbox_put gesendet")
+        settle(2)
+        XCTAssertFalse(id("promptSend").exists, "Blatt nach der Antwort noch offen")
+    }
+
     /// Smart Home im Tab „Mehr“: „HDMI 2 aktivieren“ schickt nur Gerät und Aktionsnamen ans Gateway, die Rückmeldung
     /// des Skripts steht danach oben auf der Seite.
     func test10_SmartHomeFernseher() {

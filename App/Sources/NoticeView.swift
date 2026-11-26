@@ -63,6 +63,9 @@ struct NoticeView: View {
     @State private var answer = ""
     @State private var answering = false
     @State private var answerError: String?
+    /// Angehängte Fotos und Dokumente: Sie gehen mit der Antwort an den PC.
+    @State private var docs: [JarvisDoc] = []
+    @FocusState private var answerFocused: Bool
     @State private var confirmDismiss = false
     @ObservedObject private var reader = SpeechOut.shared
 
@@ -167,14 +170,16 @@ struct NoticeView: View {
                 // die eigene Antwort kam zu spät: kein Fehler, sondern was schon gilt
                 if let e = answerError { Text(e).font(.footnote).foregroundStyle(.secondary) }
             } else {
-                TextField("Antwort an \(q.agent)", text: $answer, axis: .vertical).lineLimit(1...4)
-                    .accessibilityIdentifier("questionAnswer")
+                // Büroklammer links, Mikrofon rechts am Feld wie im Jarvis-Chat (Kennungen questionAttach, questionAnswer, questionMic)
+                AnswerComposer(placeholder: "Antwort an \(q.agent)", text: $answer, docs: $docs, error: $answerError, focused: $answerFocused,
+                               prefix: "question", screen: "hinweis")
+                    .disabled(answering)
                 HStack(spacing: 10) {
                     if let quick = Rueckfrage.quickAnswer(q) {
                         Button("Ja (Empfehlung)") { Task { await send(n.ref, quick) } }.buttonStyle(.borderedProminent)
                     }
                     Button("Antworten") { Task { await send(n.ref, answer) } }.buttonStyle(.bordered)
-                        .disabled(answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(!Rueckfrage.canAnswer(text: answer, docs: docs.count))
                     if answering { ProgressView().controlSize(.small) }
                     Spacer(minLength: 4)
                     // schließt die Rückfrage ohne Antwort (nach Nachfrage); bewusst klein und abgesetzt
@@ -182,7 +187,7 @@ struct NoticeView: View {
                         .accessibilityIdentifier("questionDismiss")
                 }.disabled(answering)
                 .confirmationDialog(Rueckfrage.dismissTitle, isPresented: $confirmDismiss, titleVisibility: .visible) {
-                    Button(Rueckfrage.dismissConfirm, role: .destructive) { Task { await send(n.ref, Rueckfrage.dismissed) } }
+                    Button(Rueckfrage.dismissConfirm, role: .destructive) { Task { await send(n.ref, Rueckfrage.dismissed, withDocs: false) } }
                     Button("Abbrechen", role: .cancel) {}
                 } message: { Text(Rueckfrage.dismissNote(agent: q.agent)) }
                 if let e = answerError { Text(e).font(.footnote).foregroundStyle(.red) }
@@ -192,10 +197,27 @@ struct NoticeView: View {
         }
     }
 
-    private func send(_ ref: String, _ text: String) async {
+    /// Anhänge gehen zuerst an den PC, ihre Pfade stehen dann am Ende der Antwort (`Rueckfrage.answerBody`). Scheitert
+    /// die Antwort danach, steht sie mit den Pfaden im Feld und nichts wird doppelt hochgeladen.
+    /// `withDocs: false`: „Erledigt“ schließt die Rückfrage ohne Antwort, Anhänge gehen dabei nicht mit.
+    private func send(_ ref: String, _ text: String, withDocs: Bool = true) async {
         answering = true
         defer { answering = false }
-        answerError = await AppModel.shared.answerQuestion(ref: ref, text: text)
+        var body = text
+        let batch = withDocs ? docs : []
+        if !batch.isEmpty {
+            do {
+                let paths = try await DocIntake.upload(batch, model: AppModel.shared) { _ in }
+                body = Rueckfrage.answerBody(text, paths: paths)
+                batch.forEach { $0.discard() }
+                docs.removeAll { d in batch.contains { $0.id == d.id } }
+                answer = body
+            } catch {
+                answerError = "Anhang nicht hochgeladen: \(error.localizedDescription)"
+                return
+            }
+        }
+        answerError = await AppModel.shared.answerQuestion(ref: ref, text: body)
         if answerError == nil { answer = "" }
     }
 
