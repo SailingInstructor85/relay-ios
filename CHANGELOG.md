@@ -2,6 +2,17 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.11 (2026-11-26)
+
+**Behoben**
+- Jarvis blieb stumm, wenn sich das iPhone sperrte, während du auf eine Antwort gewartet hast. Die Ursache steht jetzt fest: Im Hintergrund lässt iOS die Stimme Supertonic nicht auf den Grafikchip, und die App bekommt die Tonausgabe nicht mehr. Dagegen hilft jetzt dreierlei. Erstens bleibt der Bildschirm an, solange eine gesprochene Frage auf ihre Antwort wartet, die vorgelesen werden soll (höchstens zehn Minuten). Zweitens rechnet Supertonic im Hintergrund auf dem Prozessor, das erlaubt iOS. Drittens holt Jarvis eine Antwort nach, die im Hintergrund nicht zu hören gewesen wäre: Er liest sie vor, sobald du Relay wieder öffnest, sofern das innerhalb von zwei Minuten geschieht. Später steht sie nur im Chat.
+- Supertonic: Scheitert ein Satz, versucht die App ihn ein zweites Mal auf dem Prozessor. Erst wenn auch das scheitert, spricht die Apple-Stimme diesen Satz. Bisher schaltete ein einzelner Vorfall im Hintergrund Supertonic bis zum nächsten Start der App ab, das passiert nicht mehr.
+
+**Geändert**
+- Supertonic: Nach dem Laden rechnet die Stimme einmal einen kurzen Satz, ohne ihn abzuspielen. Der erste Satz nach dem Laden brauchte bisher über sieben Sekunden, die folgenden eine halbe. Diese Wartezeit soll damit vor der ersten Antwort liegen statt mittendrin.
+
+Hinweis: Auf einem iPhone ist diese Version noch nicht ausprobiert. Wie schnell Supertonic auf dem Prozessor rechnet, ist nicht gemessen. Die Ablösung des Chiefs auf Zuruf, „Chief hat es“ und Ergebnisse mit Thema im Jarvis-Chat warten weiter auf die Ergänzung am PC (siehe 0.4.10).
+
 ## 0.4.10 (2026-11-26)
 
 **Neu**

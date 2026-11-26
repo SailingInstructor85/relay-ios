@@ -890,3 +890,42 @@ Offen für Martin:
 - Am iPhone mit 0.4.10 (schon ohne Patch prüfbar): Im Jarvis-Feld eine Frage stellen und gleich die nächste hinterherschicken.
 
 Version: `project.yml` 0.4.9 auf 0.4.10. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 26. November 2026, 10:54 (Version 0.4.11)
+
+Drei Einträge aus dem Backlog. Erledigt ist Eintrag 3 (Supertonic bleibt stumm). Eintrag 1 und 2 bleiben offen: Die App-Teile sind seit 0.4.10 fertig, es fehlt nur das Einspielen der Gateway-Patches in `~/relay`, das der Nachtbau nicht macht.
+
+1. Chief-Ablösung auf Zuruf. Offen, in diesem Lauf nichts gebaut.
+   - Stand unverändert zum Lauf 08:30: App-Teil in 0.4.10, Gateway-Patch `/home/martin/.local/state/agents/relay-nachtbau/gateway-chief-2026-11-26/gateway-chief-abloesung-und-jarvis-say.patch`. Geprüft in diesem Lauf: `~/relay` steht weiter auf 3926df9 (Zweig `lokal-clear-beendet`), der Upload-Patch, auf dem er aufbaut, läuft weiter durch `git apply --check`.
+
+2. Jarvis-Feld parallel. Offen, in diesem Lauf nichts gebaut.
+   - Das freie Feld wirkt seit 0.4.10. „Chief hat es“ und `jarvis_say` hängen am selben Patch wie Eintrag 1.
+
+3. Supertonic am iPhone: CoreML-Fehler, Antwort wird nicht vorgelesen. Erledigt.
+   - Ursache, belegt aus `~/.local/state/notifyd/phone-log.jsonl` und dem Nutzungsprotokoll vom 25.11. (`~/.local/share/notifyd/nutzung/2026-11-25.jsonl`): Die Antwort brauchte 72,5 s. 26 s nach dem Diktat ging die App in den Hintergrund (das passt zur automatischen Sperre, belegt ist nur „hintergrund“). Als die Antwort kam, scheiterten zwei Sätze mit „Unable to compute the prediction using ML Program“, darunter „GPU sync execute failed: Insufficient Permission (to submit GPU work from background)“. iOS verbietet im Hintergrund Arbeit auf dem Grafikchip. Die Apple-Stimme sollte einspringen, bekam aber die Tonausgabe nicht: zehnmal „audio nicht übernommen“. Alle Sätze liefen stumm durch. Zusätzlich ruhte Supertonic danach bis zum nächsten App-Start, weil zwei Fehler in Folge gezählt wurden (der laufende und der vorausberechnete Satz).
+   - Rechenweg (`VoiceCompute`, C: VoiceModel.swift): Im Vordergrund wie bisher alle Recheneinheiten, im Hintergrund nur der Prozessor. Scheitert ein Satz, lädt `SupertonicWorker` das Modell frisch für den Prozessor und versucht ihn noch einmal. Erst wenn auch das scheitert, wirft er, und die Apple-Stimme spricht den Satz. Nur solche doppelt gescheiterten Sätze zählen, nach zweien in Folge ruht Supertonic. War der erste Fehler die Hintergrund-Sperre, bleibt im Vordergrund der schnelle Weg. War es ein anderer Fehler im Vordergrund, bleibt es bis zum Neuladen beim Prozessor (sonst scheiterte jeder Satz erst einmal). Kommt die App nach vorn, lädt das Modell gleich wieder für den schnellen Weg.
+   - Nachholen (`HeldSpeech`, C: Speech.swift; A: Voice.swift `say`, `audioReady`, `speakHeld`): Lässt sich die Tonausgabe nicht übernehmen und ist die App im Hintergrund, hält `VoiceIO` die Sätze zurück und spricht sie bei `didBecomeActive`, sofern der erste höchstens 120 s alt ist. Ältere verfallen, ebenso alles bei „Stopp“ oder wenn schon wieder aufgenommen wird. Gilt für Supertonic und die Apple-Stimme, in Jarvis, Chat und Sprachmodus. Im Nutzungsprotokoll stehen dafür „vorlesen zurückgehalten“, „vorlesen nachgeholt“ und „vorlesen verfallen“.
+   - Bildschirm (A: JarvisView.swift `ask`, ScreenAwake.swift `answerAwaited`): Wartet eine gesprochene Frage auf eine Antwort, die vorgelesen wird, bleibt der Bildschirm an, bis die Antwort da ist. Das nutzt die Regel der Aufnahme in `AwakePolicy` (höchstens 10 Minuten), die Frage selbst läuft nach 300 s ab. Getippte Fragen und Fragen ohne „Antworten vorlesen“ halten nichts an.
+   - Aufwärmen (A: SupertonicStore.swift `warm`): Nach dem Laden rechnet das Modell einmal „Hallo.“. Anlass ist die zweite Messung im Eintrag (kalter Start: erster Satz 7,35 s für 37 Zeichen, danach 0,49 s).
+   - Protokoll: Die Zeile zur Rechenzeit endet bei Prozessor-Sätzen auf „, Prozessor“. Ein geglückter zweiter Versuch steht einmal je App-Start mit dem gekürzten ersten Fehler im Protokoll.
+   - Tests: `VoiceModelTests` (sieben neue zum Rechenweg, mit dem echten Fehlertext vom 25.11.), `SpeechTests` (drei neue zu den zurückgehaltenen Sätzen). Keine Änderung an Texten oder Kennungen der Oberfläche, die UI-Tests bleiben unberührt.
+
+Entscheidungen:
+- Der schnelle Weg bleibt im Vordergrund, weil er gemessen ist (Faktor 0,19 bis 0,35). Dauerhaft nur Prozessor oder Neural Engine wäre einfacher, aber ungemessen.
+- Ein Modell zur Zeit im Speicher, beim Wechsel wird umgeladen. Zwei Fassungen nebeneinander hätten den Speicherbedarf verdoppelt.
+- Nachholen nur zwei Minuten lang: Jarvis soll nicht losreden, wenn das iPhone viel später entsperrt wird. Die Zahl ist geschätzt, nicht von Martin vorgegeben.
+- Der Bildschirm bleibt nur beim Warten an, nicht während des Vorlesens. Läuft der Ton schon, spielt er nach dem Sperren weiter (Hintergrundmodus `audio`).
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert, das prüft die CI. Auf einem iPhone ist nichts davon geprüft.
+- Wie schnell Supertonic auf dem Prozessor rechnet und wie lange das Umladen dauert, ist nicht gemessen. Rechnet er langsamer als Echtzeit, entstehen im Hintergrund Pausen zwischen den Sätzen.
+- Ob das Aufwärmen mit einem kurzen Satz den ersten echten Satz beschleunigt, ist eine Annahme. Die Graphen arbeiten mit wechselnder Länge. Scheitert das Aufwärmen, wird das nicht gemeldet, der Fehler zeigt sich dann beim ersten echten Satz.
+- Sperrt Martin das iPhone selbst, während er wartet, kommt die Antwort erst beim Entsperren (bis zwei Minuten) oder nur als Text. Eine App im Hintergrund darf keine Tonausgabe neu beginnen, das lässt sich nicht umgehen.
+- Der Gesprächsmodus im Hintergrund ist nicht betrachtet: Er wartet nicht auf zurückgehaltene Sätze.
+
+Offen für Martin:
+- Die Gateway-Patches einspielen lassen (eigene Sitzung in `~/relay`, Reihenfolge: Upload, dann Chief), danach schließen sich Eintrag 1 und 2.
+- Am iPhone mit 0.4.11: Frage sprechen, das iPhone beim Warten von Hand sperren, nach der Antwort entsperren. Erwartet: Jarvis liest dann vor. Danach am PC `notifyd phone log` ansehen (Zeilen mit „Prozessor“).
+- Sind zwei Minuten für das Nachholen richtig, oder soll es kürzer oder länger sein?
+
+Version: `project.yml` 0.4.10 auf 0.4.11. Nicht gepusht, kein Tag. Das übernimmt das Skript.

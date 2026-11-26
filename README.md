@@ -35,7 +35,10 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Einstellungen → „Sprache und Stimme“ → „Stimme Deutsch“ → „Supertonic 3 (M2)“, dann einmalig „Modell laden“ (rund
   400 MB). Die Apple-Stimme bleibt voreingestellt und springt ein, wenn das Modell fehlt oder scheitert
   (`docs/jarvis-stimme.md`). Seit 0.4.8 spricht Supertonic Wörter aus einer kleinen Ausspracheliste in
-  eigener Schreibweise (zuerst „Chief“). Im Gesprächsmodus hört Jarvis danach wieder zu. In den Antworten lässt sich per langem Drücken Text
+  eigener Schreibweise (zuerst „Chief“). Seit 0.4.11 bleibt der Bildschirm an, solange eine gesprochene Frage auf
+  ihre Antwort wartet. Sperrt sich das iPhone trotzdem, rechnet Supertonic auf dem Prozessor weiter, und eine
+  Antwort, die im Hintergrund nicht zu hören wäre, liest Jarvis vor, sobald Relay wieder offen ist (bis zu zwei
+  Minuten später). Im Gesprächsmodus hört Jarvis danach wieder zu. In den Antworten lässt sich per langem Drücken Text
   markieren und in Teilen kopieren. Der Kurzbefehl „Jarvis in Relay“ funktioniert per Siri
   oder über die Aktionstaste. Eine Trennlinie im Verlauf zeigt, wo am PC ein neues Gespräch begonnen hat (jeden Tag um
   4 Uhr): Was davor steht, weiß Jarvis nicht mehr. Details und der geplante Knopf „Neues Gespräch beginnen“:
