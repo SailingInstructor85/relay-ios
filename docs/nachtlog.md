@@ -1096,3 +1096,22 @@ Offen für Martin:
 - Soll der Chief oder der Betriebsprüfer aus `signatur_bis` warnen, wenn weniger als drei Tage bleiben? Das braucht eine eigene Sitzung am PC.
 
 Version: `project.yml` 0.4.13 auf 0.4.14. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 26. November 2026, 23:02 (keine neue Version, bleibt 0.4.14)
+
+Ein Eintrag aus dem Backlog, zum zweiten Mal: „Jarvis druckt: Datei an Jarvis geben und ‚druck das‘ sagen“. Er bleibt offen. An der App ist in diesem Lauf nichts geändert, dieser Abschnitt ist der einzige Commit.
+
+1. Jarvis druckt. Offen, unverändert gegenüber dem Lauf von 20:30.
+   - Der Stand ist derselbe wie vor zweieinhalb Stunden: `~/relay` steht auf 3926df9 und hat keine offenen Änderungen, eingespielt ist keiner der vier Patches. Der Druck-Patch liegt unverändert bereit (`/home/martin/.local/state/agents/relay-nachtbau/gateway-drucken-2026-11-26/gateway-drucken-print-file.patch`, Stand 20:41).
+   - In der App gibt es dafür nichts zu bauen. Dateien kommen über „An Jarvis geben“ und die Büroklammer schon mit Pfad beim Chief an, der Text beim Teilen geht mit. Was fehlt, ist allein das Druckwerkzeug am PC, und `~/relay` ändert der Nachtbau nicht.
+   - Den Patch habe ich in diesem Lauf nicht noch einmal getestet. Die Prüfung von 20:30 (1531 Gateway-Tests an der Kopie, kein echter Ausdruck) gilt für denselben Stand von `~/relay` und dieselbe Patch-Datei. Einzelheiten und Einspielweg stehen im Abschnitt von 20:30.
+
+Entscheidungen:
+- Keine neue Version und kein Eintrag im CHANGELOG, abweichend vom Auftrag (Punkt 3 und 4). Eine 0.4.15 ohne jede Änderung hätte ein Release erzeugt, das Relay seit 0.4.14 als „Update verfügbar“ anzeigt, und das Einspielen geht nur im WLAN. Das wäre Aufwand für nichts. Der Tag v0.4.14 besteht schon, das Skript setzt dann kein Release.
+- Trotzdem ein Commit (dieser Abschnitt), damit das Skript den Lauf regulär abschließt und der Eintrag nach dem zweiten Versuch unter „Wartet auf Martin“ landet, statt stündlich neu gezogen zu werden.
+
+Offen für Martin:
+- Die vier Gateway-Patches in einer eigenen Sitzung in `~/relay` einspielen lassen (Reihenfolge: Upload, Chief, Ablösung 04:00, Drucken), dazu `printing: {queue: EPSON_ET_2870_Series}` in `~/.config/notifyd/config.yaml` und ein Neustart von notifyd. Danach am iPhone: PDF und Foto teilen, „druck das“, Auftrag in `lpstat -W completed`.
+- Die Frage von 20:30 steht noch: Soll „druck das“ ein mehrseitiges Dokument ganz drucken (so ist es gebaut) oder nur die erste Seite?
+
+Version: `project.yml` bleibt 0.4.14. Nicht gepusht, kein Tag.
