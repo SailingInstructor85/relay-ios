@@ -54,6 +54,10 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     /// Name of this voice in `AudioFocus` (Chat, Jarvis and Sprachmodus each have their own `VoiceIO`).
     private let holder = "voice-" + UUID().uuidString
+    /// Der Bildschirm bleibt an, solange diese Stimme vorliest (Jarvis: Eine begonnene Antwort soll nicht daran
+    /// hängen, dass sich das iPhone mittendrin sperrt). Höchstens so lange wie bei einer Aufnahme.
+    var keepsScreenOnWhileSpeaking = false
+    private var screenHeld = false
 
     override init() {
         super.init()
@@ -277,7 +281,8 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     func beginReply() {
         splitter.reset()
         queue.begin()
-        SupertonicStore.shared.warmUp()
+        // Hat Supertonic nach Fehlern geruht, fängt es mit dieser Antwort von vorn an.
+        SupertonicStore.shared.wake()
     }
 
     func speak(_ text: String) { beginReply(); feed(text); flush() }
@@ -326,9 +331,14 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
             update()
             return
         }
-        if SupertonicStore.shared.active || chainTask != nil {
+        let store = SupertonicStore.shared
+        if store.active || chainTask != nil {
             sayInOrder(text)
             return
+        }
+        // Supertonic ist gewählt und geladen, spricht aber gerade nicht: fürs Protokoll, damit sich „falsche Stimme“ zuordnen lässt
+        if let why = store.idleReason, Voices.langFor(text, setting: SpeechPrefs.outputLang) == VoiceModel.language {
+            logFallback(text, why)
         }
         let u = Self.utterance(text)
         guard queue.enqueue(AnyHashable(ObjectIdentifier(u))) else { return }
@@ -373,7 +383,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         guard queue.enqueue(AnyHashable(item.id)) else { return }
         chain.append(item)
         update()
-        prepareNext()
+        prepareAhead()
         guard chainTask == nil else { return }
         chainTask = Task { [weak self] in
             while let me = self, !me.chain.isEmpty {
@@ -392,22 +402,32 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         update()
     }
 
-    /// Berechnet den Ton des nächsten deutschen Satzes voraus, damit zwischen zwei Sätzen keine Lücke entsteht.
-    private func prepareNext() {
+    /// Berechnet den Ton aller schon bekannten deutschen Sätze voraus (höchstens `VoiceCompute.ahead`), nicht nur
+    /// den des nächsten. So entsteht zwischen zwei Sätzen keine Lücke, und sperrt sich das iPhone mitten in einer
+    /// Antwort, liegt ihr Ton meist schon fertig da. Was dann noch fehlt, rechnet der Prozessor im Hintergrund.
+    private func prepareAhead() {
         let store = SupertonicStore.shared
-        guard store.active, store.warm, let next = chain.first, next.lang == VoiceModel.language,
-              prepared[next.id] == nil else { return }
-        let text = next.text
-        prepared[next.id] = Task { try await store.synthesize(text) }
+        guard store.active, store.warm else { return }
+        for item in chain where item.lang == VoiceModel.language && prepared[item.id] == nil {
+            if prepared.count >= VoiceCompute.ahead { break }
+            let text = item.text
+            prepared[item.id] = Task { try await store.synthesize(text) }
+        }
     }
 
     private func speakInOrder(_ item: Spoken, round: Int) async {
         let store = SupertonicStore.shared
-        if item.lang == VoiceModel.language, store.active {
-            if store.warm || prepared[item.id] != nil {
+        let ready = prepared.removeValue(forKey: item.id)
+        if item.lang == VoiceModel.language {
+            var why: String?
+            if !store.active {
+                // nicht gewählt, Modell fehlt (kein Rückfall, `idleReason` ist nil) oder Supertonic ruht nach Fehlern
+                ready?.cancel()
+                why = store.idleReason
+            } else if store.warm || ready != nil {
                 let text = item.text
-                let task = prepared.removeValue(forKey: item.id) ?? Task { try await store.synthesize(text) }
-                prepareNext()
+                let task = ready ?? Task { try await store.synthesize(text) }
+                prepareAhead()
                 do {
                     let pcm = try await task.value
                     guard round == chainRound else { return }
@@ -416,14 +436,26 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
                     return
                 } catch {
                     // die Apple-Stimme spricht diesen Satz
+                    why = (error as? RelayErrorText)?.text ?? "\(error)"
                 }
                 guard round == chainRound else { return }
             } else {
                 // Das Modell ist noch nicht im Speicher: laden lassen, bis dahin spricht die Apple-Stimme.
                 store.warmUp()
+                why = "Das Modell ist noch nicht im Speicher und lädt gerade"
             }
+            if let why { logFallback(item.text, why) }
+        } else {
+            ready?.cancel()
         }
         await speakWithApple(item.text)
+    }
+
+    /// Die Apple-Stimme spricht einen deutschen Satz, obwohl Supertonic gewählt und geladen ist: ins Protokoll mit
+    /// Satzanfang, Grund und ob die App vorn war. Ohne Verbindung wartet der Eintrag in einer Datei.
+    private func logFallback(_ text: String, _ why: String) {
+        let front = UIApplication.shared.applicationState != .background
+        AppLog.shared.log("info", "supertonic", VoiceCompute.fallbackLine(sentence: text, reason: why, foreground: front), keep: true)
     }
 
     private func speakWithApple(_ text: String) async {
@@ -466,6 +498,11 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private func update() {
         let active = queue.active
         if speaking != active { speaking = active }
+        let hold = active && keepsScreenOnWhileSpeaking
+        if hold != screenHeld {
+            screenHeld = hold
+            if hold { ScreenAwake.shared.readingStarted(holder) } else { ScreenAwake.shared.readingEnded(holder) }
+        }
         if !active && splitter.isEmpty { resumeSpeakWaiters() }
     }
 

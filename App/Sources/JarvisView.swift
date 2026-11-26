@@ -489,7 +489,7 @@ struct JarvisView: View {
                 let heard: String
                 endedBy = .pause
                 UsageRecorder.shared.record("jarvis", "diktat gestartet", kind: "diktat")
-                SupertonicStore.shared.warmUp()  // Jarvis' Stimme lädt, während du sprichst
+                SupertonicStore.shared.wake()  // Jarvis' Stimme lädt, während du sprichst
                 do { heard = try await voice.listen() } catch {
                     UsageRecorder.shared.record("jarvis", "fehler", kind: "diktat", error: error.localizedDescription)
                     self.error = error.localizedDescription; return
@@ -607,7 +607,10 @@ struct JarvisView: View {
         let awaiting = "jarvis-antwort-" + tid.uuidString
         if speak { ScreenAwake.shared.answerAwaited(awaiting) }
         defer { if speak { ScreenAwake.shared.answerArrived(awaiting) } }
-        if speak { voice.beginReply() }
+        if speak {
+            voice.keepsScreenOnWhileSpeaking = true  // auch während des Vorlesens, nicht nur beim Warten
+            voice.beginReply()
+        }
         let streamed = Flag()
         let stamp = Stamp()
         let sent = Date()

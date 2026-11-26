@@ -4,7 +4,7 @@ import RelayCore
 
 /// Hält den Bildschirm an, solange ein Chat oder der Live-Bildschirm offen ist und zuletzt vor weniger als 60 s berührt
 /// wurde, solange eine Mikrofon-Aufnahme läuft (höchstens 10 Minuten ab ihrem Start), solange Jarvis auf eine Antwort
-/// wartet, die er vorlesen soll (gleiche Obergrenze), oder solange der Sprachmodus offen ist (`AwakePolicy`). Die Gründe gelten nebeneinander, erst wenn keiner mehr greift, sperrt iOS wieder normal.
+/// wartet, die er vorlesen soll, und solange er sie vorliest (je gleiche Obergrenze), oder solange der Sprachmodus offen ist (`AwakePolicy`). Die Gründe gelten nebeneinander, erst wenn keiner mehr greift, sperrt iOS wieder normal.
 /// Berührungen zählt ein Gestenerkenner am Fenster, der nie auslöst und nichts verschluckt.
 @MainActor
 final class ScreenAwake {
@@ -49,6 +49,13 @@ final class ScreenAwake {
     func answerAwaited(_ who: String) { recordingStarted(who) }
 
     func answerArrived(_ who: String) { recordingEnded(who) }
+
+    /// Jarvis liest eine Antwort vor: Der Bildschirm bleibt an, bis er fertig ist (gleiche Obergrenze wie bei einer
+    /// Aufnahme). So sperrt sich das iPhone nicht mitten in der Antwort von selbst. Drückt der Nutzer die
+    /// Seitentaste, spricht Jarvis im Hintergrund weiter.
+    func readingStarted(_ who: String) { recordingStarted(who + "-vorlesen") }
+
+    func readingEnded(_ who: String) { recordingEnded(who + "-vorlesen") }
 
     func pin(_ id: UUID) {
         pins.insert(id)

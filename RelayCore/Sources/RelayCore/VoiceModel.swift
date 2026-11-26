@@ -110,7 +110,9 @@ public enum VoiceModel {
 /// (Bildschirm gesperrt, andere App vorn) verbietet iOS Arbeit auf dem Grafikchip, die Berechnung scheitert dann mit
 /// „Unable to compute the prediction using ML Program“ (Messung vom 25.11.2026). Dort rechnet nur der Prozessor.
 /// Scheitert ein Satz, kommt ein zweiter Versuch auf dem Prozessor mit frisch geladenem Modell, erst danach spricht
-/// die Apple-Stimme. Reine Entscheidung, die App lädt das Modell passend.
+/// die Apple-Stimme. Scheitern zwei Sätze in Folge ganz, ruht Supertonic nur für den Rest dieser Antwort: Die nächste
+/// Antwort (oder die Rückkehr in den Vordergrund) beginnt mit frisch geladenem Modell von vorn (`revive`). Reine
+/// Entscheidung, die App lädt das Modell passend.
 public struct VoiceCompute: Equatable, Sendable {
     public enum Units: String, Equatable, Sendable {
         /// Alles, was das Gerät hat (Grafikchip, Neural Engine, Prozessor). Nur im Vordergrund erlaubt.
@@ -119,13 +121,17 @@ public struct VoiceCompute: Equatable, Sendable {
         case cpu
     }
 
-    /// So viele Sätze in Folge dürfen ganz scheitern (beide Versuche), dann ruht Supertonic.
+    /// So viele Sätze in Folge dürfen ganz scheitern (beide Versuche), dann ruht Supertonic bis zum nächsten Anlauf.
     public static let failureLimit = 2
+    /// So viele Sätze einer Antwort rechnet die App höchstens voraus (Ton im Speicher: rund 0,2 MB je Sekunde).
+    public static let ahead = 30
 
     /// Der Grafikchip hat im Vordergrund versagt: Bis zum Neuladen rechnet nur noch der Prozessor.
     public private(set) var cpuOnly = false
     /// Sätze in Folge, bei denen auch der zweite Versuch gescheitert ist.
     public private(set) var failures = 0
+    /// Supertonic ruht nach `failureLimit` gescheiterten Sätzen, die Apple-Stimme spricht. Endet mit `revive`.
+    public private(set) var resting = false
 
     public init() {}
 
@@ -145,10 +151,19 @@ public struct VoiceCompute: Equatable, Sendable {
         if let firstError, units == .all, !Self.backgroundDenied(firstError) { cpuOnly = true }
     }
 
-    /// Beide Versuche sind gescheitert. true: Supertonic soll ruhen, die Apple-Stimme spricht weiter.
+    /// Beide Versuche sind gescheitert. true: Supertonic ruht jetzt, die Apple-Stimme spricht den Rest der Antwort.
     public mutating func failed() -> Bool {
         failures += 1
-        return failures >= Self.failureLimit
+        if failures >= Self.failureLimit { resting = true }
+        return resting
+    }
+
+    /// Eine neue Antwort beginnt oder die App kommt nach vorn. true: Supertonic hat geruht und fängt mit frisch
+    /// geladenem Modell von vorn an. Ohne Ruhe ändert sich nichts.
+    public mutating func revive() -> Bool {
+        guard resting else { return false }
+        reset()
+        return true
     }
 
     /// Das Modell wird neu geladen: alles wieder wie am Anfang.
@@ -158,5 +173,30 @@ public struct VoiceCompute: Equatable, Sendable {
     public static func brief(_ error: String, limit: Int = 300) -> String {
         let one = error.split(whereSeparator: \.isNewline).joined(separator: " ")
         return one.count > limit ? String(one.prefix(limit)) + "…" : one
+    }
+
+    /// Protokollzeile, wenn die Apple-Stimme einen deutschen Satz spricht, obwohl Supertonic gewählt ist: Anfang des
+    /// Satzes (damit sich eine Meldung zuordnen lässt), ob die App vorn war, und der Grund.
+    public static func fallbackLine(sentence: String, reason: String, foreground: Bool, start: Int = 40) -> String {
+        let one = sentence.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        let head = one.count > start ? String(one.prefix(start)) + "…" : one
+        let place = foreground ? "App vorn" : "App im Hintergrund"
+        return "Apple-Stimme statt Supertonic (\(place)): „\(head)“. Grund: " + brief(reason, limit: 200)
+    }
+
+    /// Zusatz der Protokollzeile mit der Rechenzeit: womit und wo gerechnet wurde.
+    public static func timingNote(processor: Bool, foreground: Bool) -> String {
+        (processor ? ", Prozessor" : "") + (foreground ? "" : ", App im Hintergrund")
+    }
+}
+
+/// Protokolleinträge, die ohne Verbindung zum PC nicht verloren gehen sollen (Rückfälle auf die Apple-Stimme): Sie
+/// warten in einer Datei auf die nächste Verbindung. Hier nur die Regel für die Liste, die Datei führt die App.
+public enum KeptLog {
+    /// Mehr Einträge warten nicht; die ältesten fallen weg.
+    public static let limit = 60
+
+    public static func appended<T>(_ list: [T], _ entry: T, limit: Int = KeptLog.limit) -> [T] {
+        Array((list + [entry]).suffix(max(limit, 1)))
     }
 }

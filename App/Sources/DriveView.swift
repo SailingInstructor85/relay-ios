@@ -238,7 +238,7 @@ final class DriveController: ObservableObject {
             await withCheckedContinuation { c in tapWait = c }
             return ""
         }
-        SupertonicStore.shared.warmUp()
+        SupertonicStore.shared.wake()
         do { return try await voice.listen() } catch {
             self.error = error.localizedDescription
             return ""

@@ -19,6 +19,7 @@ final class VoiceTester: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         player.stop()
         let text = lang == "de" ? "Hallo, ich bin Jarvis. So klinge ich." : "Hello, I am Jarvis. This is how I sound."
         AudioFocus.takeForPlayback("tester")
+        if lang == VoiceModel.language { SupertonicStore.shared.wake() }  // nach Fehlern: neuer Anlauf
         if lang == VoiceModel.language, SupertonicStore.shared.active {
             preparing = true
             sample = Task { [weak self] in
@@ -55,6 +56,17 @@ struct SupertonicRow: View {
     @ObservedObject private var store = SupertonicStore.shared
     @State private var confirmDelete = false
 
+    /// Zustand des geladenen Modells: startet gerade, pausiert nach Fehlern oder ist bereit.
+    private var installedText: String {
+        if store.warming {
+            return "\(VoiceModel.title) wird gestartet … Beim ersten Mal dauert das länger, so lange spricht die Apple-Stimme."
+        }
+        if store.resting {
+            return "\(VoiceModel.title) hat bei zwei Sätzen nacheinander versagt und pausiert. Bei der nächsten Antwort startet Relay das Modell neu, so lange spricht die Apple-Stimme."
+        }
+        return "\(VoiceModel.title) ist geladen (\(VoiceModel.sizeText(store.bytes))) und spricht auf dem iPhone, ohne Netz."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             switch store.phase {
@@ -75,9 +87,7 @@ struct SupertonicRow: View {
                 }
                 Button("Abbrechen") { store.cancelDownload() }.buttonStyle(.bordered)
             case .installed:
-                Text(store.warming
-                     ? "\(VoiceModel.title) wird gestartet … Beim ersten Mal dauert das länger, so lange spricht die Apple-Stimme."
-                     : "\(VoiceModel.title) ist geladen (\(VoiceModel.sizeText(store.bytes))) und spricht auf dem iPhone, ohne Netz.")
+                Text(installedText)
                     .font(.footnote).foregroundStyle(.secondary)
                 Button("Modell löschen", role: .destructive) { confirmDelete = true }.buttonStyle(.bordered)
             case .failed(let why):

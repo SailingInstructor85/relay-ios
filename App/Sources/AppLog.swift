@@ -3,8 +3,8 @@ import MetricKit
 import RelayCore
 
 /// The app's errors and crashes for the Desktop (rpc `app_log`, read with `notifyd phone log`). Entries go out at once
-/// while connected and are not buffered otherwise; only crashes (found at the next start) wait in a file for the next
-/// connection. At most 200 entries per call.
+/// while connected and are not buffered otherwise; crashes (found at the next start) and entries logged with
+/// `keep` (Rückfälle auf die Apple-Stimme) wait in a file for the next connection. At most 200 entries per call.
 @MainActor
 final class AppLog {
     static let shared = AppLog()
@@ -13,24 +13,38 @@ final class AppLog {
         CrashFile.entry(level, tag, message, stack: stack, ts: Date().timeIntervalSince1970)
     }
 
-    /// One message now, only when connected. The same text is sent at most once a minute.
-    func log(_ level: String, _ tag: String, _ message: String, stack: String = "") {
+    /// One message now, only when connected. The same text is sent at most once a minute. `keep`: without a
+    /// connection (or when sending fails) the entry waits in a file and goes out after the next `hello_ok`.
+    func log(_ level: String, _ tag: String, _ message: String, stack: String = "", keep: Bool = false) {
         let model = AppModel.shared
-        guard model.state == .connected else { return }
+        let connected = model.state == .connected
+        guard connected || keep else { return }
         let k = "\(tag)|\(message)"
         if let t = sentRecently[k], Date().timeIntervalSince(t) < 60 { return }
         sentRecently[k] = Date()
         if sentRecently.count > 100 { sentRecently = sentRecently.filter { Date().timeIntervalSince($0.value) < 60 } }
         let e = entry(level, tag, message, stack: stack)
-        Task { _ = try? await model.rpc("app_log", ["entries": .array([e])], timeout: 10) }
+        guard connected else { KeptFile.save(e); return }
+        Task {
+            let sent = (try? await model.rpc("app_log", ["entries": .array([e])], timeout: 10)) != nil
+            if !sent && keep { KeptFile.save(e) }
+        }
     }
 
-    /// After `hello_ok`: sends the saved crashes and removes the file once the Desktop has them.
+    /// After `hello_ok`: sends the saved crashes and kept entries and removes each file once the Desktop has them.
     func flushSaved() {
-        guard let u = CrashFile.url, let d = try? Data(contentsOf: u), let list = JSON.parse(d)?.array, !list.isEmpty else { return }
-        Task {
-            if (try? await AppModel.shared.rpc("app_log", ["entries": .array(Array(list.suffix(200)))], timeout: 15)) != nil {
-                try? FileManager.default.removeItem(at: u)
+        for u in [CrashFile.url, KeptFile.url].compactMap({ $0 }) {
+            guard let d = try? Data(contentsOf: u), let list = JSON.parse(d)?.array, !list.isEmpty else { continue }
+            Task {
+                if (try? await AppModel.shared.rpc("app_log", ["entries": .array(Array(list.suffix(200)))], timeout: 15)) != nil {
+                    // nur löschen, wenn inzwischen nichts dazugekommen ist; sonst geht der Rest beim nächsten Mal mit
+                    let now = (try? Data(contentsOf: u)).flatMap { JSON.parse($0) }?.array ?? []
+                    if now.count <= list.count {
+                        try? FileManager.default.removeItem(at: u)
+                    } else if let rest = try? JSONEncoder().encode(JSON.array(Array(now.suffix(now.count - list.count)))) {
+                        try? rest.write(to: u, options: .atomic)
+                    }
+                }
             }
         }
     }
@@ -88,5 +102,20 @@ enum CrashFile {
         var list = (try? Data(contentsOf: u)).flatMap { JSON.parse($0) }?.array ?? []
         list.append(entry("crash", tag, message, stack: stack, ts: ts))
         if let d = try? JSONEncoder().encode(JSON.array(Array(list.suffix(20)))) { try? d.write(to: u, options: .atomic) }
+    }
+}
+
+/// Protokolleinträge, die auf die nächste Verbindung warten (`AppLog.log(..., keep: true)`). Nur vom Hauptthread.
+@MainActor
+enum KeptFile {
+    static var url: URL? {
+        try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent("kept-log.json")
+    }
+
+    static func save(_ entry: JSON) {
+        guard let u = url else { return }
+        let list = (try? Data(contentsOf: u)).flatMap { JSON.parse($0) }?.array ?? []
+        if let d = try? JSONEncoder().encode(JSON.array(KeptLog.appended(list, entry))) { try? d.write(to: u, options: .atomic) }
     }
 }

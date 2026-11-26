@@ -128,6 +128,74 @@ final class VoiceModelTests: XCTestCase {
         XCTAssertEqual(c.failures, 0)
     }
 
+    func testRestingEndsWithTheNextReply() {
+        // zwei Sätze scheitern ganz: Supertonic ruht für den Rest der Antwort
+        var c = VoiceCompute()
+        XCTAssertFalse(c.resting)
+        XCTAssertFalse(c.failed())
+        XCTAssertFalse(c.resting)
+        XCTAssertTrue(c.failed())
+        XCTAssertTrue(c.resting)
+        // weitere Fehler ändern daran nichts
+        XCTAssertTrue(c.failed())
+        // die nächste Antwort beginnt: wieder Supertonic, wie nach einem frischen Start
+        XCTAssertTrue(c.revive())
+        XCTAssertFalse(c.resting)
+        XCTAssertEqual(c.failures, 0)
+        XCTAssertEqual(c.units(foreground: true), .all)
+        XCTAssertEqual(c, VoiceCompute())
+        // danach zählt es wieder von vorn: ein einzelner Fehler lässt Supertonic nicht ruhen
+        XCTAssertFalse(c.failed())
+        XCTAssertFalse(c.resting)
+    }
+
+    func testReviveWithoutRestKeepsWhatWasLearned() {
+        var c = VoiceCompute()
+        XCTAssertFalse(c.revive())
+        c.succeeded(with: .all, firstError: "Unable to compute the prediction using ML Program.")
+        XCTAssertFalse(c.failed())
+        XCTAssertFalse(c.revive())
+        // ohne Ruhe bleibt der Prozessor gemerkt und der eine Fehler gezählt
+        XCTAssertTrue(c.cpuOnly)
+        XCTAssertEqual(c.failures, 1)
+    }
+
+    func testRevivedAfterProcessorOnlyStartsWithEverything() {
+        var c = VoiceCompute()
+        c.succeeded(with: .all, firstError: "kaputt")
+        XCTAssertTrue(c.cpuOnly)
+        _ = c.failed()
+        _ = c.failed()
+        XCTAssertTrue(c.revive())
+        XCTAssertFalse(c.cpuOnly)
+    }
+
+    func testFallbackLineNamesSentenceStartPlaceAndReason() {
+        let s = "Beides kommt ins Relay-Backlog, der Nachtbau setzt es dann um."
+        let line = VoiceCompute.fallbackLine(sentence: s, reason: denied, foreground: false)
+        XCTAssertTrue(line.hasPrefix("Apple-Stimme statt Supertonic (App im Hintergrund): „Beides kommt ins Relay-Backlog, der Nach…“. Grund: "), line)
+        XCTAssertFalse(line.contains("setzt es dann um"))
+        let front = VoiceCompute.fallbackLine(sentence: "Kurz.\nZweite Zeile", reason: "Modell lädt", foreground: true)
+        XCTAssertEqual(front, "Apple-Stimme statt Supertonic (App vorn): „Kurz. Zweite Zeile“. Grund: Modell lädt")
+        // lange Fehlermeldungen von iOS werden gekürzt
+        let long = VoiceCompute.fallbackLine(sentence: "Hallo", reason: String(repeating: "x", count: 900), foreground: true)
+        XCTAssertTrue(long.hasSuffix("…"))
+        XCTAssertLessThan(long.count, 300)
+    }
+
+    func testTimingNote() {
+        XCTAssertEqual(VoiceCompute.timingNote(processor: false, foreground: true), "")
+        XCTAssertEqual(VoiceCompute.timingNote(processor: true, foreground: true), ", Prozessor")
+        XCTAssertEqual(VoiceCompute.timingNote(processor: true, foreground: false), ", Prozessor, App im Hintergrund")
+    }
+
+    func testKeptLogDropsTheOldest() {
+        XCTAssertEqual(KeptLog.appended([1, 2], 3), [1, 2, 3])
+        XCTAssertEqual(KeptLog.appended([1, 2, 3], 4, limit: 3), [2, 3, 4])
+        XCTAssertEqual(KeptLog.appended([Int](), 1, limit: 0), [1])
+        XCTAssertEqual(KeptLog.appended(Array(1...100), 101).count, KeptLog.limit)
+    }
+
     func testBriefShortensLongErrors() {
         XCTAssertEqual(VoiceCompute.brief("kurz"), "kurz")
         XCTAssertEqual(VoiceCompute.brief("a\nb"), "a b")
