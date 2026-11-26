@@ -79,9 +79,15 @@ struct FileChip: View {
     }
 }
 
-/// Reads a text aloud on demand with an installed on-device voice (ReadAloud.cleaned: no code, paths and links by
-/// name). One reader for the whole app, so a new start replaces the old one; pause and resume at a word boundary; the
-/// sound goes wherever the phone plays (headset, Bluetooth, speaker).
+/// Reads a text aloud on demand (ReadAloud.cleaned: no code, paths and links by name). One reader for the whole app,
+/// so a new start replaces the old one; pause and resume; the sound goes wherever the phone plays (headset,
+/// Bluetooth, speaker). Used by the read buttons of chat messages, notices (Meldungen) and questions (Rückfragen).
+///
+/// Ist Supertonic als deutsche Stimme gewählt und geladen, spricht es die deutschen Sätze, wie bei Jarvis
+/// (`VoiceIO`): Satz für Satz, der Ton der folgenden Sätze wird vorausberechnet, englische Stücke liest die
+/// Apple-Stimme. Scheitert ein Satz, spricht ihn die Apple-Stimme (mit Eintrag im Protokoll). Jedes neue Vorlesen
+/// gibt Supertonic nach Fehlern einen neuen Anlauf (`SupertonicStore.wake`), es bleibt also nicht dauerhaft bei der
+/// Apple-Stimme. Ohne Supertonic liest wie bisher die Apple-Stimme den ganzen Text am Stück.
 @MainActor
 final class SpeechOut: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     static let shared = SpeechOut()
@@ -89,6 +95,15 @@ final class SpeechOut: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     @Published private(set) var speaking = false
     @Published private(set) var paused = false
     private let synth = AVSpeechSynthesizer()
+
+    // Vorlesen mit Supertonic: die Stücke der Reihe nach
+    private var chain: Task<Void, Never>?
+    /// Erhöht sich bei jedem Start und Stopp: Was davor begonnen wurde, zählt danach nicht mehr.
+    private var round = 0
+    /// Ton der folgenden deutschen Sätze, schon berechnet (Schlüssel: Stelle im Text).
+    private var prepared: [Int: Task<[Float], Error>] = [:]
+    private var player: PCMPlayer?
+    private var appleWaiting: (id: ObjectIdentifier, c: CheckedContinuation<Void, Never>)?
 
     override init() { super.init(); synth.delegate = self }
 
@@ -99,7 +114,19 @@ final class SpeechOut: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         AudioFocus.takeForPlayback("reader")
         speaking = true
         paused = false
-        synth.speak(VoiceIO.utterance(text))
+        let store = SupertonicStore.shared
+        store.wake()
+        let parts = ReadAloud.parts(text, setting: SpeechPrefs.outputLang)
+        guard store.active, parts.contains(where: { $0.lang == VoiceModel.language }) else {
+            // Supertonic gewählt und geladen, aber nicht bereit: fürs Protokoll
+            if let why = store.idleReason, let first = parts.first(where: { $0.lang == VoiceModel.language }) {
+                logFallback(first.text, why)
+            }
+            synth.speak(VoiceIO.utterance(text))
+            return
+        }
+        let mine = round
+        chain = Task { [weak self] in await self?.read(parts, round: mine) }
     }
 
     func toggle(_ markdown: String) {
@@ -108,12 +135,24 @@ final class SpeechOut: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     func pause() {
         guard speaking, !paused else { return }
-        if synth.pauseSpeaking(at: .word) { paused = true }
+        if chain != nil {
+            // Läuft gerade Ton, hält er an. Wird gerade gerechnet, wartet der nächste Satz auf „Weiter“ (`read`).
+            paused = true
+            if player?.pause() != true, synth.isSpeaking { synth.pauseSpeaking(at: .word) }
+        } else if synth.pauseSpeaking(at: .word) {
+            paused = true
+        }
     }
 
     func resume() {
         guard paused else { return }
-        if synth.continueSpeaking() { paused = false }
+        if chain != nil {
+            paused = false
+            player?.resume()
+            if synth.isPaused { synth.continueSpeaking() }
+        } else if synth.continueSpeaking() {
+            paused = false
+        }
     }
 
     func stop() {
@@ -122,16 +161,126 @@ final class SpeechOut: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     }
 
     private func halt() {
+        round += 1
+        chain?.cancel()
+        chain = nil
+        prepared.values.forEach { $0.cancel() }
+        prepared.removeAll()
+        player?.stop()
         if synth.isSpeaking || synth.isPaused { synth.stopSpeaking(at: .immediate) }
+        if let w = appleWaiting {
+            appleWaiting = nil
+            w.c.resume()
+        }
         speaking = false
         paused = false
     }
 
-    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { Task { @MainActor in self.ended() } }
-    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { Task { @MainActor in self.ended() } }
-    /// Read to the end: the audio goes back to other apps (Spotify resumes).
-    private func ended() {
-        guard !synth.isSpeaking else { return }  // a new reading has already started
+    // MARK: Supertonic
+
+    /// Liest die Stücke der Reihe nach: deutsche mit Supertonic, die übrigen (und gescheiterte Sätze) mit der
+    /// Apple-Stimme.
+    private func read(_ parts: [ReadAloud.Part], round mine: Int) async {
+        let store = SupertonicStore.shared
+        for (i, part) in parts.enumerated() {
+            guard mine == round else { return }
+            let ahead = prepared.removeValue(forKey: i)
+            var spoken = false
+            if part.lang == VoiceModel.language {
+                var why: String?
+                if store.active {
+                    // Ist das Modell noch nicht im Speicher, lädt es beim ersten Satz. Wer auf „Vorlesen“ tippt, wartet
+                    // lieber einen Moment auf die gewählte Stimme, als die andere zu hören.
+                    let text = part.text
+                    let task = ahead ?? Task { try await store.synthesize(text) }
+                    prepareAhead(parts, after: i)
+                    do {
+                        let pcm = try await task.value
+                        guard await unpaused(round: mine) else { return }
+                        if player == nil { player = PCMPlayer() }
+                        try await player?.play(pcm)
+                        spoken = true
+                    } catch {
+                        why = (error as? RelayErrorText)?.text ?? "\(error)"
+                    }
+                } else {
+                    ahead?.cancel()
+                    why = store.idleReason
+                }
+                guard mine == round else { return }
+                if !spoken, let why { logFallback(part.text, why) }
+            } else {
+                ahead?.cancel()
+            }
+            if !spoken {
+                guard await unpaused(round: mine) else { return }
+                await speakWithApple(part.text)
+            }
+        }
+        guard mine == round else { return }
+        chain = nil
+        player?.rest()
+        speaking = false
+        paused = false
+        AudioFocus.release("reader")
+    }
+
+    /// Wartet, solange pausiert ist. false: Inzwischen wurde gestoppt oder etwas anderes vorgelesen.
+    private func unpaused(round mine: Int) async -> Bool {
+        while paused, mine == round {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        return mine == round
+    }
+
+    /// Berechnet den Ton der folgenden deutschen Sätze voraus (höchstens `VoiceCompute.ahead`).
+    private func prepareAhead(_ parts: [ReadAloud.Part], after index: Int) {
+        let store = SupertonicStore.shared
+        guard store.active, index + 1 < parts.count else { return }
+        for i in (index + 1)..<parts.count where parts[i].lang == VoiceModel.language && prepared[i] == nil {
+            if prepared.count >= VoiceCompute.ahead { break }
+            let text = parts[i].text
+            prepared[i] = Task { try await store.synthesize(text) }
+        }
+    }
+
+    private func speakWithApple(_ text: String) async {
+        let u = VoiceIO.utterance(text)
+        let id = ObjectIdentifier(u)
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            appleWaiting = (id, c)
+            synth.speak(u)
+        }
+    }
+
+    private func logFallback(_ text: String, _ why: String) {
+        let front = UIApplication.shared.applicationState != .background
+        AppLog.shared.log("info", "supertonic", "Vorlesen: " + VoiceCompute.fallbackLine(sentence: text, reason: why, foreground: front), keep: true)
+    }
+
+    // MARK: Apple-Stimme
+
+    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) {
+        // den Satz bis zur Verarbeitung festhalten: so kann ein neuer Satz nicht dieselbe Kennung (Adresse) bekommen
+        nonisolated(unsafe) let utt = u
+        Task { @MainActor in self.ended(ObjectIdentifier(utt)) }
+    }
+
+    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) {
+        nonisolated(unsafe) let utt = u
+        Task { @MainActor in self.ended(ObjectIdentifier(utt)) }
+    }
+
+    /// Die Apple-Stimme meldet ein Stück als fertig oder abgebrochen. In der Kette geht es mit dem nächsten Stück
+    /// weiter. Ohne Kette ist der ganze Text gelesen: the audio goes back to other apps (Spotify resumes).
+    private func ended(_ id: ObjectIdentifier) {
+        if let w = appleWaiting {
+            guard w.id == id else { return }  // Nachzügler eines abgebrochenen Stücks
+            appleWaiting = nil
+            w.c.resume()
+            return
+        }
+        guard chain == nil, !synth.isSpeaking else { return }  // a new reading has already started
         speaking = false; paused = false
         AudioFocus.release("reader")
     }

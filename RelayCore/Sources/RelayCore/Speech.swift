@@ -381,6 +381,33 @@ public enum ReadAloud {
         return t.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Ein Stück eines vorzulesenden Textes mit seiner Sprache ("de" oder "en").
+    public struct Part: Equatable, Sendable {
+        public let text: String
+        public let lang: String
+        public init(text: String, lang: String) { self.text = text; self.lang = lang }
+    }
+
+    /// Der bereinigte Text (`cleaned`) in Stücken zum Vorlesen, mit der Sprache je Stück (Einstellung „Sprache der
+    /// Ausgabe“: auto | de | en). Sätze in der Sprache der Gerätestimme (`model`, Supertonic spricht Deutsch) bleiben
+    /// einzeln, damit ihr Ton Satz für Satz berechnet werden kann. Aufeinanderfolgende Sätze einer anderen Sprache
+    /// werden ein Stück, das die Apple-Stimme am Stück liest. Zeilen ohne Buchstaben und Ziffern fallen weg.
+    public static func parts(_ cleaned: String, setting: String, model: String = VoiceModel.language) -> [Part] {
+        var splitter = SentenceSplitter()
+        var sentences = splitter.add(cleaned)
+        if let rest = splitter.end() { sentences.append(rest) }
+        var out: [Part] = []
+        for s in sentences where s.rangeOfCharacter(from: .alphanumerics) != nil {
+            let lang = Voices.langFor(s, setting: setting)
+            if lang != model, let last = out.last, last.lang == lang {
+                out[out.count - 1] = Part(text: last.text + " " + s, lang: lang)
+            } else {
+                out.append(Part(text: s, lang: lang))
+            }
+        }
+        return out
+    }
+
     // a path segment: word characters, a dot only when a word character follows (so a sentence's full stop stays)
     private static let segment = #"(?:[\w@+~-]|\.(?=\w))+"#
     /// `/usr/x`, `~/x/y`, `./x`, `../x`, with an optional `:line` or `:line:col`; not "km/h" or "und/oder".

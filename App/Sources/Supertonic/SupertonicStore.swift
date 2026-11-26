@@ -508,6 +508,8 @@ final class PCMPlayer {
     private var wired = false
     private var waiting: (id: Int, c: CheckedContinuation<Void, Never>)?
     private var serial = 0
+    /// Der laufende Ton ist angehalten (`pause`), bis `resume` oder `stop`.
+    private(set) var held = false
 
     /// Spielt den Ton und kehrt zurück, wenn er zu Ende ist oder `stop()` ihn abbricht.
     func play(_ pcm: [Float]) async throws {
@@ -532,10 +534,17 @@ final class PCMPlayer {
         serial += 1
         let id = serial
         let seconds = Double(pcm.count) / format.sampleRate
-        // Sicherung: Meldet die Ausgabe das Ende nicht (Wechsel des Audiowegs), geht es trotzdem weiter.
+        held = false
+        // Sicherung: Meldet die Ausgabe das Ende nicht (Wechsel des Audiowegs), geht es trotzdem weiter. Die Zeit
+        // einer Pause zählt nicht mit.
         let guardTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64((seconds + 2) * 1_000_000_000))
-            if !Task.isCancelled { self?.done(id) }
+            var left = seconds + 2
+            while left > 0 {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                if Task.isCancelled { return }
+                if self?.held != true { left -= 0.25 }
+            }
+            self?.done(id)
         }
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             waiting = (id, c)
@@ -559,8 +568,26 @@ final class PCMPlayer {
         w.c.resume()
     }
 
+    /// Hält den laufenden Ton an. false: Es läuft gerade keiner.
+    @discardableResult
+    func pause() -> Bool {
+        guard wired, engine.isRunning, waiting != nil, !held else { return false }
+        node.pause()
+        held = true
+        return true
+    }
+
+    /// Spielt nach `pause` an derselben Stelle weiter.
+    func resume() {
+        guard held else { return }
+        held = false
+        if !engine.isRunning { try? engine.start() }
+        node.play()
+    }
+
     /// Bricht den laufenden Ton ab.
     func stop() {
+        held = false
         if wired, engine.isRunning { node.stop() }
         if let w = waiting {
             waiting = nil

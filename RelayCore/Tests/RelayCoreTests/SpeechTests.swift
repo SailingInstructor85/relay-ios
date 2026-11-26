@@ -143,6 +143,29 @@ final class SpeechTests: XCTestCase {
         XCTAssertEqual(ReadAloud.pathName("/"), "Pfad")
     }
 
+    func testReadAloudParts() {
+        let text = "Der Kalender ist wieder da. The session is done and waiting for you. This is the second one.\nHeute ist noch nichts offen."
+        // automatisch: deutsche Sätze einzeln (Supertonic), englische am Stück (Apple-Stimme)
+        XCTAssertEqual(ReadAloud.parts(text, setting: "auto"), [
+            ReadAloud.Part(text: "Der Kalender ist wieder da.", lang: "de"),
+            ReadAloud.Part(text: "The session is done and waiting for you. This is the second one.", lang: "en"),
+            ReadAloud.Part(text: "Heute ist noch nichts offen.", lang: "de"),
+        ])
+        // fest Deutsch: jeder Satz einzeln
+        XCTAssertEqual(ReadAloud.parts(text, setting: "de").map(\.lang), ["de", "de", "de", "de"])
+        // fest Englisch: alles ein Stück
+        let en = ReadAloud.parts(text, setting: "en")
+        XCTAssertEqual(en.count, 1)
+        XCTAssertEqual(en.first?.lang, "en")
+        XCTAssertTrue(en.first?.text.hasSuffix("Heute ist noch nichts offen.") ?? false)
+        // unentschieden gilt als Deutsch, Zeilen ohne Buchstaben fallen weg
+        XCTAssertEqual(ReadAloud.parts("Codeblock ausgelassen.\n...\n---", setting: "auto"),
+                       [ReadAloud.Part(text: "Codeblock ausgelassen.", lang: "de")])
+        XCTAssertEqual(ReadAloud.parts("", setting: "auto"), [])
+        // eine andere Gerätesprache: dann bleiben deren Sätze einzeln
+        XCTAssertEqual(ReadAloud.parts(text, setting: "auto", model: "en").map(\.lang), ["de", "en", "en", "de"])
+    }
+
     func testReadAloudQuestion() {
         let md = """
         Ich habe die CI repariert und die Tests laufen.
