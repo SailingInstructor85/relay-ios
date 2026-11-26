@@ -2,6 +2,19 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.10 (2026-11-26)
+
+**Neu**
+- Jarvis: Das Eingabefeld bleibt frei, während eine Antwort aussteht. Du kannst sofort die nächste Nachricht schreiben oder sprechen, ohne auf die erste Antwort zu warten. Jede Antwort landet bei ihrer Frage. Stehen mehrere aus, steht das über dem Feld. Gesperrt ist das Senden nur noch, solange angehängte Fotos oder Dokumente hochladen.
+- Jarvis: Unter einer Frage steht „Chief hat es“, sobald deine Nachricht am PC angekommen ist. So siehst du gleich, dass sie da ist, auch wenn die Antwort noch dauert.
+- Jarvis: Ergebnisse, die erst später fertig werden, stehen mit ihrem Thema als Überschrift im Jarvis-Chat und werden vorgelesen, das Thema zuerst. Ist der Chat gerade zu, kommt eine Mitteilung, ein Tipp darauf öffnet Jarvis. Das Vorlesen folgt dem Schalter „Antworten vorlesen“ im Jarvis-Menü und wartet, bis eine laufende Antwort oder Aufnahme zu Ende ist.
+- Jarvis: Im Menü oben rechts steht „Chief ablösen“. Nach einer kurzen Nachfrage schreibt der Chief seine Notizen, danach beginnt am PC eine frische Sitzung, die mit den Notizen weitermacht. Läuft bei ihm noch Hintergrundarbeit, wartet die Ablösung, bis sie fertig ist. Der Verlauf auf dem iPhone bleibt.
+
+**Behoben**
+- Jarvis: „Chat löschen“, während eine Antwort noch aussteht, bringt den Verlauf nicht mehr durcheinander.
+
+Hinweis: Sofort wirkt das freie Eingabefeld. „Chief hat es“, die Ergebnisse mit Thema und „Chief ablösen“ brauchen eine Ergänzung am PC. Sie ist vorbereitet und geprüft, aber noch nicht eingespielt. Bis dahin fehlen der Menüpunkt und die Anzeige, sonst ändert sich nichts. Auf einem iPhone ist diese Version noch nicht ausprobiert.
+
 ## 0.4.9 (2026-11-26)
 
 **Neu**

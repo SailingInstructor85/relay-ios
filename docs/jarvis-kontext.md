@@ -30,7 +30,27 @@ Gespräch wird schon heute von selbst neu begonnen:
   die Trennlinie. Ohne die Auskunft des Gateways bleiben Füllstand und Knopf ausgeblendet (kein toter Knopf).
 
 Technik: RelayCore `JarvisContext.swift` (Tagesgrenze, Trennstellen, Füllstand) mit `JarvisContextTests`, App
-`JarvisView.swift` (Trennlinie, Menüabschnitt), `AppModel+Voice.swift` (`jarvisContext`, `jarvisReset`).
+`JarvisView.swift` (Trennlinie, Menüabschnitt), `AppModel+Voice.swift` (`jarvisInfo`, `jarvisReset`).
+
+## Wenn der Chief das Gespräch führt (seit 0.4.10)
+
+Seit dem 25.11.2026 geht das Jarvis-Feld an den Chief, eine Agentensitzung am PC. Für ihn gelten Füllstand und „Neues
+Gespräch beginnen“ nicht: Er beginnt täglich neu und dann, wenn sein Kontext voll wird. Dazu kommt die Ablösung auf
+Zuruf:
+
+- Im Jarvis-Menü steht der Abschnitt „Chief führt das Gespräch“ mit „Chief ablösen“. Nach der Nachfrage bittet das
+  Gateway den Chief, seine Notizen zu schreiben und sich abzulösen. Ersetzt wird die Sitzung beim nächsten ruhigen
+  Punkt, nie solange bei ihm Hintergrundarbeit läuft. Der Verlauf auf dem iPhone bleibt.
+- Derselbe Weg per Sprache: „lös dich ab“ im Jarvis-Feld. Der Chief schreibt seine Notizen und ruft das Werkzeug
+  `hand_over()` selbst.
+- Vertrag: `jarvis_context` → `{"lead": "<Name>", "hand_over": true, "asked_at"?: <Zeit>}`, `jarvis_reset` →
+  `{"lead": "<Name>", "asked": true|false}` (`false`: Es gibt gar keine Sitzung). Ohne `hand_over` in der Antwort
+  zeigt die App den Menüpunkt nicht.
+- Stand 26.11.2026: Die App-Seite ist fertig, der Gateway-Teil liegt als geprüfter Patch bereit und ist noch nicht
+  eingespielt (`docs/nachtlog.md`, Nachtbau 26. November 2026, 08:30).
+
+Technik: RelayCore `JarvisContext.lead`, `leadLabel`, `handOverNotice`, App `JarvisView.swift` (`handOver`),
+`AppModel+Voice.swift` (`jarvisInfo`).
 
 ## Was im Gateway fehlt (nicht gebaut, `~/relay` blieb unberührt)
 

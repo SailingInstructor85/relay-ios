@@ -48,6 +48,14 @@ iPhone 16 Pro (iOS 17 oder neuer).
   Gateway ihn als eigenen Vorgang führt, auch wenn gerade eine Rückfrage offen ist. Eine offene Rückfrage beantwortet nur, was du ohne
   Anhang tippst oder sprichst. Das greift erst, wenn auch das Gateway das Kennzeichen auswertet (Stand 26.11.2026: Patch liegt bereit,
   `docs/nachtlog.md`).
+- **Jarvis-Feld parallel (seit 0.4.10):** Eine Frage sperrt das Feld nicht mehr. Während eine Antwort aussteht, geht die
+  nächste Nachricht sofort raus, jede Antwort landet bei ihrer Frage. Sobald die Nachricht am PC angekommen ist, steht
+  „Chief hat es“ unter der Frage. Ergebnisse, die der Chief später von sich aus meldet, stehen mit ihrem Thema als
+  Überschrift im Chat und werden mit „Antworten vorlesen“ gelesen; ist der Chat zu, kommt eine Mitteilung, die Jarvis
+  öffnet. Im Jarvis-Menü steht „Chief ablösen“: Der Chief schreibt seine Notizen, danach beginnt am PC eine frische
+  Sitzung (nicht, solange bei ihm Hintergrundarbeit läuft). Sofort wirkt das freie Feld. Statuszeile, Rückmeldungen und
+  Ablösung brauchen die Gateway-Ergänzung (Stand 26.11.2026: Patch liegt bereit, `docs/nachtlog.md` und
+  `docs/jarvis-kontext.md`).
 - **Alle Sitzungen beenden** (Menü der Sitzungsliste): Jede gewählte Sitzung schreibt ihren Eintrag ins Agenten-Log
   der Daily Note und ihre Übergabe, dann beendet das Gateway sie. Sitzungen mit offener Auswahl oder Freigabe am PC
   bleiben mit Grund offen. Das Gateway schickt Nachrichten mit getrenntem Enter und prüft, ob das Eingabefeld am PC

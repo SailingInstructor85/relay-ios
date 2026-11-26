@@ -841,3 +841,52 @@ Offen für Martin:
 - Am iPhone mit 0.4.9: eine alte Sitzung über „/“ → „/exit · Sitzung schließen“ schließen, danach ist sie in `tmux ls` weg und in der Liste als geschlossen.
 
 Version: `project.yml` 0.4.8 auf 0.4.9. Nicht gepusht, kein Tag. Das übernimmt das Skript.
+
+## Nachtbau 26. November 2026, 08:30 (Version 0.4.10)
+
+Drei Einträge aus dem Backlog, alle drei hängen am Gateway (`~/relay`), das der Nachtbau nicht ändert. Gebaut sind die App-Teile zu Eintrag 2 und 3 und dazu ein gemeinsamer, an einer Kopie geprüfter Gateway-Patch. Alle drei Einträge bleiben offen, bis die Patches eingespielt sind. Ohne Gateway-Patch wirkt aus diesem Lauf nur eines sofort: Das Jarvis-Feld bleibt frei, während eine Antwort aussteht.
+
+1. Upload während offener Jarvis-Rückfrage wird als Antwort verbucht. Offen, in diesem Lauf nichts gebaut.
+   - Der App-Teil ist seit 0.4.9 fertig (`upload: true`). Es fehlt nur das Einspielen des Gateway-Patches vom Lauf 00:30 (`/home/martin/.local/state/agents/relay-nachtbau/gateway-upload-2026-11-26/gateway-upload-eigener-handoff.patch`). Geprüft: `~/relay` steht unverändert auf 3926df9, `git apply --check` läuft weiter durch. Mehr kann der Nachtbau hier nicht tun.
+
+2. Chief-Ablösung auf Zuruf („lös dich ab“). Offen, App-Teil und Gateway-Patch gebaut.
+   - App: Führt am PC der Chief das Gespräch, zeigt das Jarvis-Menü (oben rechts) den Abschnitt „Chief führt das Gespräch“ mit „Chief ablösen“. Nach der Nachfrage („Chief ablösen?“, Knopf „Jetzt ablösen“) geht `jarvis_reset` ans Gateway. Darunter steht, was geschehen ist („Chief schreibt jetzt seine Notizen und löst sich dann ab …“ oder „Für Chief läuft gerade keine Sitzung …“). Ist die Ablösung schon erbeten, steht das in der Überschrift. Der Menüpunkt steht über „Chat löschen“, das bleibt der letzte Eintrag.
+   - Logik in RelayCore: `JarvisContext.lead`, `leadLabel`, `handOverLabel`, `handOverNotice` (C: JarvisContext.swift), Tests `JarvisContextTests.testLeadFromContext` und `testHandOverNotice`. Ansicht: A: JarvisView.swift (`lead`, `handOver`, `loadContext`), A: AppModel+Voice.swift (`jarvisInfo`, `jarvisReset` liefert die Antwort).
+   - Gateway (Patch, siehe unten): Werkzeug `hand_over(reason)` für die Leads, RPC `team_hand_over`. Die Bitte hängt an der Sitzungs-ID, liegt in `team-handover.json` im State-Ordner und übersteht einen Neustart. `Team.rotation_reason` liefert dafür `"asked"` (vor `context` und `daily`). Ersetzt wird wie beim Kontextgrund bei der nächsten Zustellung, wenn der Lead ruhig ist, keine Frage offen hat und `running_work` leer ist. `jarvis_context` antwortet mit Lead `{"lead", "hand_over": true, "asked_at"?}`, `jarvis_reset` tippt die Bitte (Notizen schreiben, dann `hand_over()` rufen) in die Sitzung und antwortet `{"lead", "asked"}`.
+   - Martins Weg per Sprache („lös dich ab“ im Jarvis-Feld) läuft über den Chief selbst: Er liest den Satz, schreibt seine Notizen und ruft `hand_over()`. Das steht im Docstring des Werkzeugs, im Auftragstext des Chiefs (Vault) steht es noch nicht.
+   - UI-Test: `InfoTests.test28_JarvisHandOver` (Mock mit Kontrolldatei `chief`): Menüpunkt, Nachfrage, kein `jarvis_reset` vor der Bestätigung, danach `jarvis_reset` und der Hinweis.
+
+3. Jarvis-Feld parallel: Chief antwortet sofort, Ergebnisse kommen später mit Thema in den Jarvis-Chat. Offen, App-Teil und Gateway-Patch gebaut.
+   - Feld bleibt frei (wirkt sofort, ohne Gateway-Patch): Eine Frage sperrt Feld, Senden und Mikrofon nicht mehr. Die nächste Nachricht geht raus, während die erste Antwort aussteht, jede Antwort landet bei ihrer Frage. Stehen mehrere aus, steht über dem Feld „N Antworten stehen noch aus. Du kannst weiterschreiben.“ Gesperrt ist nur noch, solange angehängte Dokumente hochladen. Die Züge werden über ihre Kennung gefunden statt über die Position. Vorher hätte „Chat löschen“ während einer offenen Antwort auf einen Platz außerhalb der Liste geschrieben.
+   - „Chief hat es“ (braucht den Patch): `ask` schickt `status: true`. Kommt `rpc_progress` mit `status: "taken"` und `name`, steht „Chief hat es“ neben dem Fortschrittskreis unter der Frage. `Link.rpc` hat dafür `onStatus`, die Unterscheidung von Textstück und Statuszeile liegt in `RpcProgress` (C: JarvisParallel.swift). Das Gateway schickt die Zeile nur auf Verlangen: Ältere Apps lesen aus jeder Fortschrittszeile `delta` und würden sonst eine Antwort ohne Stream nicht mehr vorlesen.
+   - Rückmeldungen mit Thema (braucht den Patch): Ein Hinweis mit `kind: "jarvis_say"` ist ein Ergebnis, das der Chief später von sich aus schreibt (Werkzeug `jarvis_say(topic, text)`). Die App stellt es mit dem Thema als Überschrift in den Jarvis-Chat und liest es mit „Antworten vorlesen“ vor, das Thema zuerst. Vorgelesen wird nicht in eine laufende Antwort, nicht in eine Aufnahme und nicht mitten in ein Gespräch im Gesprächsmodus hinein, sondern danach. Ist der Chat zu, landet die Rückmeldung trotzdem im Verlauf und kommt als Mitteilung, ein Tipp öffnet Jarvis. Wiederholt das Gateway Ereignisse nach einer Verbindungspause, gibt es keine Dublette (Kennung ist der `tag`). Die Suche findet Rückmeldungen auch über ihr Thema. Logik: `JarvisSay`, `JarvisAsk` (C: JarvisParallel.swift), `JarvisTurn` mit `topic` und `ref` (alte Verläufe ohne die Felder lesen sich weiter), Tests `JarvisParallelTests` (8 Fälle). Ansicht: A: JarvisView.swift (`JarvisInbox`, `takeSays`, `speakPending`, `persist`, `edit`), A: AppModel.swift (Fall `notice`), A: RelayApp.swift (Tipp auf die Mitteilung).
+   - Punkt 3 des Eintrags (Nachrichten, die eintreffen, während der Chief arbeitet): Im Gateway gelesen, nicht live geprüft. Jeder RPC läuft dort als eigene Aufgabe (`_rpc_task`), eine zweite Frage wird also angenommen, während die erste wartet, und in die arbeitende Sitzung getippt. Der Überblicks-Agent (ohne Chief) reiht Fragen hinter einer Sperre ein. Blockiert hat bisher die App, das ist behoben.
+   - Gateway (Patch): Statuszeile nur mit `status: true` und nicht beim Rückfall auf den Überblicks-Agenten. `jarvis_say` nur für das Mitglied aus `team.ask.to`, leere Felder abgelehnt, Thema höchstens 120 und Text höchstens 2000 Zeichen, je Meldung ein eigener `tag` (`jarvis-say-<n>`), Weg wie jeder andere Hinweis (Folgenummer, Wiederholung, Klingeln). Auch das Ergebnis nach „… ist noch dran. Das Ergebnis kommt als Mitteilung.“ kommt jetzt als `jarvis_say` mit dem Anfang der Frage als Thema.
+   - UI-Test: `InfoTests.test29_JarvisParallel`: Frage mit langsamer Antwort (der Mock wartet 10 s), `ask` mit `status: true`, „Chief hat es“ erscheint, zweite Nachricht geht raus, solange die erste aussteht, beide Antworten kommen, danach `trigger_jarvis_say` und die Überschrift im Chat.
+
+Gateway-Patch zu 2 und 3:
+- Datei: `/home/martin/.local/state/agents/relay-nachtbau/gateway-chief-2026-11-26/gateway-chief-abloesung-und-jarvis-say.patch`. Er baut auf dem Upload-Patch auf (beide ändern `rpc_ask` und `_ask_member`), Reihenfolge beim Einspielen: erst Upload, dann dieser.
+- Gebaut von einem Hilfsagenten an einer Kopie (`git archive` von 3926df9, venv aus `~/relay/gateway`, ohne den laufenden Dienst). Von mir nachgeprüft: `~/relay` unverändert, beide Patches lassen sich nacheinander auf eine frische Kopie anwenden, Feldnamen im Patch stimmen mit der App überein. Die Testzahlen stammen aus der Ausgabe des Hilfsagenten (`testlauf-ganz.txt` im selben Ordner): ganze Testsuite 1484 bestanden, 10 übersprungen (vorher mit Upload-Patch 1460 und 10). Neue Datei `gateway/tests/test_chief_say_handover.py` mit 24 Tests. Gegenprobe ohne die Änderung: 20 fehlgeschlagen, 19 bestanden (die 19 sind Schutztests, die auch vorher gelten, zum Beispiel keine Statuszeile ohne `status`).
+- Zwei bestehende Tests sind an gewolltes neues Verhalten angepasst (`jarvis_context` und `jarvis_reset` mit Lead, Ergebnis nach „noch dran“), abgeschwächt ist keiner.
+- Einspielen: in `~/relay` beide Patches mit `git apply`, Tests, committen, danach `systemctl --user restart notifyd`.
+
+Entscheidungen:
+- Ein Hinweis mit Zusatzfeld statt eines neuen Ereignistyps für `jarvis_say`: Ältere Apps zeigen ihn als gewöhnlichen Hinweis, es geht nichts verloren, und Folgenummer, Wiederholung und Klingeln kommen vom vorhandenen Weg.
+- Die Ablösung ersetzt die Sitzung nicht blind. Erst schreibt der Chief seine Notizen, dann ruft er `hand_over()`. Der Knopf in der App tippt deshalb nur die Bitte.
+- Der Knopf in der Nachfrage heißt „Jetzt ablösen“, nicht wie der Menüpunkt, damit beide auseinanderzuhalten sind (auch für die UI-Tests).
+- Rückmeldungen werden mit „Antworten vorlesen“ gelesen, auch wenn die letzte Frage getippt war. So steht es im Backlog („angezeigt und mit der Stimme vorgelesen“). Wer das nicht will, schaltet „Antworten vorlesen“ im Jarvis-Menü aus.
+- Vorgelesen wird nur, wenn der Jarvis-Chat offen ist. Ist er zu, kommt die Mitteilung.
+
+Risiken und Grenzen:
+- Swift lokal nicht kompiliert und die UI-Tests nicht gelaufen, das prüft die CI.
+- Auf einem iPhone ist nichts davon geprüft, auch nicht gegen einen laufenden Dienst. Der Gateway-Patch ist nur mit den Tests an der Kopie geprüft.
+- Zwei Fragen gleichzeitig an den Chief ohne Patch: Antwortet er in seinem Terminal, ohne `handoff_done` zu rufen, ordnet das Gateway die Antwort über die Marke der Nachricht zu. Ob das bei zwei offenen Fragen immer die richtige trifft, ist nicht geprüft.
+- Eine Rückmeldung, die mitten in ein Gespräch im Gesprächsmodus fällt, wird erst nach dessen Ende gelesen.
+- Der Chief erfährt von `jarvis_say` und `hand_over` nur über die Docstrings der Werkzeuge.
+
+Offen für Martin:
+- Beide Gateway-Patches einspielen lassen (eigene Sitzung in `~/relay`, Pfade oben), zusammen mit dem Patch zur Ausspracheliste vom 25.11. Danach schließen sich Eintrag 1 bis 3.
+- Im Auftragstext des Chiefs (Vault, „Chief Auftragstext“) ergänzen: Ergebnisse von Hintergrundarbeit mit `jarvis_say(thema, text)` melden, und bei „lös dich ab“ erst Notizen schreiben, dann `hand_over()` rufen.
+- Am iPhone mit 0.4.10 (schon ohne Patch prüfbar): Im Jarvis-Feld eine Frage stellen und gleich die nächste hinterherschicken.
+
+Version: `project.yml` 0.4.9 auf 0.4.10. Nicht gepusht, kein Tag. Das übernimmt das Skript.
