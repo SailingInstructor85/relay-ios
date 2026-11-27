@@ -150,6 +150,9 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             // inzwischen abgebrochen (Ansicht geschlossen, Gespräch beendet): nicht mehr aufnehmen
             if Task.isCancelled { abortSegment(); return "" }
+            // eine frische Erkennung für den nächsten Versuch: Die erste hat in der Pause keinen Ton bekommen
+            abortSegment()
+            startSegment()
         }
 
         listening = true

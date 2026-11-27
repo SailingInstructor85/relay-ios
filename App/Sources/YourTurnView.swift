@@ -207,6 +207,8 @@ struct QuestionTurnCard: View {
                 .overlay { RoundedRectangle(cornerRadius: RelayRadius.option, style: .continuous).strokeBorder(RelayColor.outlineVariant, lineWidth: 1) }
                 .accessibilityIdentifier("turnAnswer")
                 .padding(.top, 2)
+                // der Entwurf der Antwort übersteht Absturz und Beenden der App, je Rückfrage (`Drafts`)
+                .keepsDraft(Drafts.question(ref), text: $answer)
             HStack(spacing: 8) {
                 if let quick {
                     Button("Ja (Empfehlung)") { send(quick) }.buttonStyle(RelayFilledButtonStyle()).accessibilityIdentifier("turnYes")

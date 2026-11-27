@@ -57,6 +57,8 @@ struct VaultChatView: View {
         }
         .navigationTitle(VaultChat.title)
         .navigationBarTitleDisplayMode(.inline)
+        // Getipptes und während eines Diktats Erkanntes übersteht Absturz und Beenden der App (`Drafts`)
+        .keepsDraft(Drafts.vault, text: $input, heard: voice.listening ? voice.partial : "")
         .onAppear {
             model.visibleChat = VaultChat.key
             UsageRecorder.shared.screen("vault-chat")

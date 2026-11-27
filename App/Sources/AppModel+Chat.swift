@@ -104,8 +104,13 @@ extension AppModel {
         catch { failure = "Antwort nicht angekommen: \(error.localizedDescription)" }
         // Die Schließung kam, während die Antwort unterwegs war: Es gilt, was am PC steht. Die eigene Antwort kommt
         // als rueckfrage_resolved zurück und ist dann kein Widerspruch.
-        if let a = NoticeStore.shared.get(ref)?.answer { return a == t ? nil : Rueckfrage.alreadyAnswered(a) }
+        if let a = NoticeStore.shared.get(ref)?.answer {
+            if a == t { DraftStore.shared.remove(Drafts.question(ref)) }
+            return a == t ? nil : Rueckfrage.alreadyAnswered(a)
+        }
         if let failure { return failure }
+        // beantwortet: Der Entwurf dieser Rückfrage ist erledigt (auch wenn „Ja (Empfehlung)“ statt des Felds galt)
+        DraftStore.shared.remove(Drafts.question(ref))
         NoticeStore.shared.setAnswer(ref: ref, t)
         Notifier.remove([NoticeLogic.slot(tag: n.tag, seq: 0)])
         return nil

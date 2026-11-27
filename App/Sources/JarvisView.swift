@@ -206,6 +206,8 @@ struct JarvisView: View {
         .toolbarBackground(RelayColor.background, for: .navigationBar)
         .navigationTitle("Jarvis")
         .onAppear { UsageRecorder.shared.screen("jarvis") }
+        // Getipptes und während eines Diktats Erkanntes übersteht Absturz und Beenden der App (`Drafts`)
+        .keepsDraft(Drafts.jarvis, text: $input, heard: voice.listening ? voice.partial : "")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

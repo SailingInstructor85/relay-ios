@@ -32,8 +32,10 @@ struct QuestionPromptSheet: View {
             }
         }
         .background(RelayColor.background.ignoresSafeArea())
-        .onChange(of: open.first?.ref) { _, _ in
-            answer = ""; error = nil; focused = false
+        .onChange(of: open.first?.ref) { _, next in
+            // die nächste Rückfrage: ihr eigener Entwurf, falls dort schon etwas getippt war (sonst leer)
+            answer = next.map { DraftStore.shared.text(Drafts.question($0)) } ?? ""
+            error = nil; focused = false
             docs.forEach { $0.discard() }
             docs = []
         }
@@ -75,7 +77,7 @@ struct QuestionPromptSheet: View {
         return VStack(alignment: .leading, spacing: 8) {
             // Büroklammer links, Mikrofon rechts am Feld (Kennungen promptAttach, promptAnswer, promptMic)
             AnswerComposer(placeholder: "Antwort an \(q.agent)", text: $answer, docs: $docs, error: $error, focused: $focused,
-                           prefix: "prompt", screen: "rückfrageblatt")
+                           prefix: "prompt", screen: "rückfrageblatt", draftKey: Drafts.question(n.ref))
                 .disabled(sending)
             HStack(spacing: 8) {
                 if let quick {

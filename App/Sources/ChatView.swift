@@ -199,6 +199,8 @@ struct ChatView: View {
             Text(SessionExit.confirmNote(busy: session?.state == "busy"))
         }
         .task(id: key) { await openChat() }
+        // Getipptes und während eines Diktats Erkanntes übersteht Absturz und Beenden der App, je Sitzung (`Drafts`)
+        .keepsDraft(Drafts.session(sessionKey), text: $input, heard: voice.listening ? voice.partial : "")
         .onAppear {
             model.rememberOpened(key)
             UsageRecorder.shared.screen("chat", session: key)

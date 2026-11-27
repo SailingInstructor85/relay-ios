@@ -172,7 +172,7 @@ struct NoticeView: View {
             } else {
                 // Büroklammer links, Mikrofon rechts am Feld wie im Jarvis-Chat (Kennungen questionAttach, questionAnswer, questionMic)
                 AnswerComposer(placeholder: "Antwort an \(q.agent)", text: $answer, docs: $docs, error: $answerError, focused: $answerFocused,
-                               prefix: "question", screen: "hinweis")
+                               prefix: "question", screen: "hinweis", draftKey: Drafts.question(n.ref))
                     .disabled(answering)
                 HStack(spacing: 10) {
                     if let quick = Rueckfrage.quickAnswer(q) {

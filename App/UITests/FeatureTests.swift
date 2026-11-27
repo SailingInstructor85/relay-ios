@@ -504,6 +504,48 @@ final class InfoTests: RelayTestCase {
         shot("jarvis-wieder-am-ende")
     }
 
+    /// Ein Entwurf übersteht das Beenden der App: Getipptes und das, was ein laufendes Diktat bis dahin erkannt hat,
+    /// stehen nach dem Neustart wieder im Jarvis-Feld. Nach dem Senden ist der Entwurf weg (Martin, 27.11.2026).
+    func test32_DraftSurvivesRestart() {
+        let typed = "Entwurf vor dem Absturz"
+        let phrase = "Welche Sitzung braucht mich gerade?"  // das „hört“ die App im Simulator
+        launchConnected()
+        mainMenu("Jarvis fragen")
+        XCTAssertTrue(id("jarvisInput").waitForExistence(timeout: 8), "Jarvis nicht geöffnet")
+        typeInto("jarvisInput", typed)
+        tapID("jarvisMic")
+        XCTAssertTrue(has(phrase, 5), "Teilergebnis der Aufnahme fehlt")
+        settle(1.5)  // der Entwurf wird kurz verzögert geschrieben
+        shot("entwurf-getippt-und-diktiert")
+        // die App endet mitten im Diktat, ohne dass sie vorher in den Hintergrund geht
+        app.terminate()
+        launch(keep: true)
+        XCTAssertTrue(waitHome(60), "App nach dem Neustart nicht verbunden")
+        mainMenu("Jarvis fragen")
+        let field = id("jarvisInput")
+        XCTAssertTrue(field.waitForExistence(timeout: 8), "Jarvis nach dem Neustart nicht geöffnet")
+        settle(1)
+        let back = field.value as? String ?? ""
+        XCTAssertTrue(back.contains(typed), "getippter Entwurf fehlt nach dem Neustart: \(back)")
+        XCTAssertTrue(back.contains(phrase), "diktierter Entwurf fehlt nach dem Neustart: \(back)")
+        shot("entwurf-nach-neustart")
+        // senden: der Text geht an Jarvis, das Feld ist leer
+        tapID("jarvisSend")
+        XCTAssertTrue(mockReceived("ask", where: { (($0["text"] as? String) ?? "").contains(typed) }), "ask mit dem Entwurf fehlt")
+        settle(1.5)
+        XCTAssertFalse((field.value as? String ?? "").contains(typed), "Feld nach dem Senden nicht leer")
+        // und nach einem weiteren Neustart kommt er nicht zurück
+        app.terminate()
+        launch(keep: true)
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 20), "App nach dem zweiten Neustart nicht da")
+        settle(1)
+        mainMenu("Jarvis fragen")
+        XCTAssertTrue(id("jarvisInput").waitForExistence(timeout: 8), "Jarvis nach dem zweiten Neustart nicht geöffnet")
+        settle(1)
+        XCTAssertFalse((id("jarvisInput").value as? String ?? "").contains(typed), "gesendeter Entwurf ist nach dem Neustart wieder da")
+        shot("entwurf-nach-senden-weg")
+    }
+
     func test12_Settings() {
         launchConnected()
         mainMenu("Einstellungen")

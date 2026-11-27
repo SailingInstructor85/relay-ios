@@ -127,6 +127,9 @@ struct AnswerComposer: View {
     let prefix: String
     /// Name der Ansicht im Nutzungsprotokoll.
     let screen: String
+    /// Unter diesem Schlüssel bleibt der Text als Entwurf erhalten (`Drafts.question`), auch das, was ein laufendes
+    /// Diktat bis jetzt erkannt hat; nil = nicht sichern.
+    var draftKey: String? = nil
 
     @StateObject private var voice = VoiceIO()
     @State private var dictating = false
@@ -165,6 +168,7 @@ struct AnswerComposer: View {
             }
         }
         .onDisappear { voice.stopListening(); voice.releaseAudio() }
+        .keepsDraft(draftKey, text: $text, heard: voice.listening ? voice.partial : "")
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { took(DocIntake.files(urls), kind: "datei") }
         }
