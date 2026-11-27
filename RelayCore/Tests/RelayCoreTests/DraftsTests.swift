@@ -6,6 +6,7 @@ final class DraftsTests: XCTestCase {
         XCTAssertEqual(Drafts.session("claude:c1:abc"), "session:claude:c1:abc")
         XCTAssertEqual(Drafts.question("R12"), "question:R12")
         XCTAssertNotEqual(Drafts.jarvis, Drafts.vault)
+        XCTAssertNotEqual(Drafts.jarvis, Drafts.report)
         XCTAssertNotEqual(Drafts.session("a"), Drafts.session("b"))
         XCTAssertNotEqual(Drafts.session("x"), Drafts.question("x"))
     }
@@ -13,6 +14,7 @@ final class DraftsTests: XCTestCase {
     func testKind() {
         XCTAssertEqual(Drafts.kind(Drafts.jarvis), "jarvis")
         XCTAssertEqual(Drafts.kind(Drafts.vault), "vault")
+        XCTAssertEqual(Drafts.kind(Drafts.report), "fehlermeldung")
         XCTAssertEqual(Drafts.kind(Drafts.session("claude:c1:abc")), "sitzung")
         XCTAssertEqual(Drafts.kind(Drafts.question("R12")), "rückfrage")
     }

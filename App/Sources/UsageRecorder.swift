@@ -240,6 +240,8 @@ struct ReportBugView: View {
             }
             .navigationTitle(UsageReport.sendLabel)
             .navigationBarTitleDisplayMode(.inline)
+            // die Beschreibung übersteht Absturz und Beenden der App; gelöscht wird sie mit dem Senden
+            .keepsDraft(Drafts.report, text: $text)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Abbrechen") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -248,7 +250,9 @@ struct ReportBugView: View {
                             sending = true
                             defer { sending = false }
                             switch await UsageRecorder.shared.report(text, withContents: withContents) {
-                            case .success: done("Fehlermeldung gesendet"); dismiss()
+                            case .success:
+                                DraftStore.shared.remove(Drafts.report)
+                                done("Fehlermeldung gesendet"); dismiss()
                             case .failure(let e): error = "Nicht gesendet: \(e.localizedDescription)"
                             }
                         }

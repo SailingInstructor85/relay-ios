@@ -10,6 +10,8 @@ public enum Drafts {
     public static let jarvis = "jarvis"
     /// Der Chat mit dem Vault-Agenten.
     public static let vault = "vault"
+    /// Das Formular „Fehler melden“.
+    public static let report = "fehlermeldung"
     /// Der Chat einer Sitzung.
     public static func session(_ key: String) -> String { "session:" + key }
     /// Das Antwortfeld einer Rückfrage; dasselbe in „Rückfrage jetzt“, „Dein Zug“ und den Hinweisen.
