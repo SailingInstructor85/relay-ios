@@ -80,6 +80,14 @@ struct JarvisView: View {
     @State private var pickingPhoto = false
     @State private var camera = false
     @State private var uploading = ""
+    /// Ob der Verlauf seinem Ende folgt (`ChatScroll`). In einer Ablage ohne Beobachtung: Jede Scrollbewegung meldet
+    /// sich hier, und nur wenn der Knopf erscheint oder verschwindet, baut sich die Ansicht neu auf.
+    @State private var scrollBox = JarvisScrollBox()
+    /// Der Knopf „Ans Ende springen“ ist zu sehen (es wurde hochgescrollt).
+    @State private var showJump = false
+
+    private static let endID = "jarvisEnd"
+    private static let scrollSpace = "jarvisScroll"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -134,12 +142,31 @@ struct JarvisView: View {
                             HStack { Spacer(); Text(voice.partial.isEmpty ? "Ich höre…" : voice.partial).italic().foregroundStyle(.secondary).padding(10) }
                                 .padding(.horizontal).id("partial")
                         }
+                        // feste Marke am Ende: Dorthin wird gescrollt, nicht zu einer Zeile, die es eben erst gibt
+                        Color.clear.frame(height: 1).id(Self.endID)
                     }.padding(.vertical)
+                    // Lage und Höhe des Inhalts im Scrollbereich: daraus ergibt sich, ob hochgescrollt ist
+                    .background(GeometryReader { g in
+                        Color.clear.onChange(of: g.frame(in: .named(Self.scrollSpace)), initial: true) { _, f in scrolled(f) }
+                    })
                 }
-                .onChange(of: turns.last?.a) { _, _ in if let id = turns.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
-                .onChange(of: turns.count) { _, _ in if let id = turns.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
-                .onChange(of: waiting.count) { _, _ in if let id = waiting.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
-                .onChange(of: voice.partial) { _, _ in proxy.scrollTo("partial", anchor: .bottom) }
+                .coordinateSpace(name: Self.scrollSpace)
+                // Höhe des sichtbaren Ausschnitts; wird er kleiner (Tastatur, Hinweiszeile), bleibt das Ende im Bild
+                .background(GeometryReader { g in
+                    Color.clear.onChange(of: g.size.height, initial: true) { _, h in
+                        scrollBox.viewport = Double(h)
+                        follow(proxy)
+                    }
+                })
+                // nur wenn hochgescrollt ist: runder Knopf rechts unten über dem Verlauf, ein Tipp scrollt ans Ende
+                .overlay(alignment: .bottomTrailing) { if showJump { jumpButton(proxy) } }
+                // Neuer Inhalt (eigene Nachricht, einlaufende Antwort, Rückmeldung, wartende Nachricht, Diktat): ans
+                // Ende, solange man vorher unten war. Wer hochgescrollt hat, bleibt dort stehen.
+                .onChange(of: turns.last?.a) { _, _ in follow(proxy) }
+                .onChange(of: turns.count) { _, _ in follow(proxy) }
+                .onChange(of: waiting.count) { _, _ in follow(proxy) }
+                .onChange(of: voice.partial) { _, _ in follow(proxy) }
+                .onChange(of: voice.listening) { _, _ in follow(proxy) }
             }
             if let e = error { ErrorBanner(text: Binding(get: { e }, set: { error = $0 })).padding(.vertical, 4) }
             if let n = notice {
@@ -277,6 +304,44 @@ struct JarvisView: View {
         }
         .padding(.vertical, 6)
         .animation(.easeInOut(duration: 0.15), value: voice.speaking)
+    }
+
+    // MARK: Ende des Verlaufs
+
+    /// Der Inhalt hat sich im Scrollbereich bewegt oder seine Höhe geändert.
+    private func scrolled(_ f: CGRect) {
+        scrollBox.scroll.moved(offset: Double(-f.minY), content: Double(f.height), viewport: scrollBox.viewport)
+        let show = scrollBox.scroll.showsJump
+        if show != showJump { showJump = show }
+    }
+
+    /// Ans Ende, wenn der Verlauf dem Ende folgt. Erst im nächsten Durchlauf und ohne Animation: Die neue Zeile ist
+    /// dann gesetzt. Vorher wurde sofort zur eben erst eingefügten Zeile gescrollt, deren Lage noch nicht feststand;
+    /// dabei konnte der Verlauf weit nach oben springen (Martin, 27.11.2026).
+    private func follow(_ proxy: ScrollViewProxy) {
+        guard scrollBox.scroll.follows else { return }
+        DispatchQueue.main.async { proxy.scrollTo(Self.endID, anchor: .bottom) }
+    }
+
+    private func jumpButton(_ proxy: ScrollViewProxy) -> some View {
+        Button {
+            scrollBox.scroll.jump()
+            showJump = false
+            UsageRecorder.shared.record("jarvis", "ans ende gesprungen")
+            withAnimation { proxy.scrollTo(Self.endID, anchor: .bottom) }
+        } label: {
+            Image(systemName: "arrow.down").font(.headline)
+                .foregroundStyle(RelayColor.onSurfaceVariant)
+                .frame(width: 40, height: 40)
+                .background(.regularMaterial, in: Circle())
+                .overlay { Circle().strokeBorder(RelayColor.outlineVariant, lineWidth: 1) }
+                .frame(minWidth: KeyboardBar.minTapSize, minHeight: KeyboardBar.minTapSize)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 12).padding(.bottom, 8)
+        .accessibilityLabel(ChatScroll.jumpLabel).accessibilityIdentifier("jarvisJumpEnd")
+        .transition(.opacity)
     }
 
     /// „Vorlesen stoppen“: nur die Sprachausgabe endet. Im Gesprächsmodus hört Jarvis danach wie gewohnt zu, so kann man
@@ -786,6 +851,12 @@ final class JarvisInbox: ObservableObject {
         tick += 1
         return true
     }
+}
+
+/// Scrollstand des Jarvis-Chats (`ChatScroll`) und die Höhe des sichtbaren Ausschnitts. Nur aus der Ansicht benutzt.
+final class JarvisScrollBox {
+    var scroll = ChatScroll()
+    var viewport = 0.0
 }
 
 /// A mutable flag shared with progress callbacks (main actor only).

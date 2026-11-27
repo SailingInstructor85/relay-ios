@@ -456,6 +456,54 @@ final class InfoTests: RelayTestCase {
         XCTAssertFalse(id("jarvisWaiting").exists, "nach der Antwort wartet noch etwas")
     }
 
+    /// Der Verlauf bleibt beim Senden und bei neuer Antwort am Ende. Erst nach dem Hochscrollen erscheint der runde
+    /// Knopf „Ans Ende springen“; ein Tipp scrollt ans Ende, der Knopf verschwindet wieder (Martin, 27.11.2026).
+    func test31_JarvisJumpToEnd() {
+        launchConnected()
+        mainMenu("Jarvis fragen")
+        XCTAssertTrue(id("jarvisInput").waitForExistence(timeout: 8), "Jarvis nicht geöffnet")
+        XCTAssertFalse(id("jarvisJumpEnd").exists, "Knopf „Ans Ende springen“ steht bei leerem Verlauf da")
+        // genug Verlauf, damit er bei offener Tastatur nicht mehr auf den Bildschirm passt
+        let last = 4
+        for i in 1...last {
+            typeInto("jarvisInput", "Frage Nummer \(i)")
+            tapID("jarvisSend")
+            XCTAssertTrue(hasSelectableText("Du hast gefragt: Frage Nummer \(i)", 15) || has("Du hast gefragt: Frage Nummer \(i)", 2),
+                          "Antwort \(i) fehlt")
+            settle(3)  // die Antwort läuft noch ein
+        }
+        settle(1)
+        shot("jarvis-verlauf-am-ende")
+        // kein Hochspringen: Nach dem Senden und der Antwort steht das Ende im Bild, der Knopf fehlt
+        XCTAssertFalse(id("jarvisJumpEnd").exists, "Knopf „Ans Ende springen“ steht da, obwohl nicht hochgescrollt wurde")
+        let pane = app.scrollViews.firstMatch
+        let answer = app.textViews.matching(NSPredicate(format: "value CONTAINS[c] %@", "Frage Nummer \(last)")).firstMatch
+        if pane.exists, answer.exists {
+            XCTAssertTrue(answer.frame.midY > pane.frame.minY && answer.frame.midY < pane.frame.maxY,
+                          "die letzte Antwort steht nicht im Bild: Antwort \(answer.frame), Verlauf \(pane.frame)")
+        } else {
+            notes.append("Jarvis: Lage der letzten Antwort nicht prüfbar")
+        }
+        // hochscrollen: der Knopf erscheint
+        if pane.exists { pane.swipeDown() } else { app.swipeDown() }
+        if !id("jarvisJumpEnd").waitForExistence(timeout: 3) {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.42)))
+        }
+        XCTAssertTrue(id("jarvisJumpEnd").waitForExistence(timeout: 4), "Knopf „Ans Ende springen“ fehlt nach dem Hochscrollen")
+        shot("jarvis-hochgescrollt-knopf")
+        tapID("jarvisJumpEnd")
+        let gone = NSPredicate(format: "exists == false")
+        let waiter = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: gone, object: id("jarvisJumpEnd"))], timeout: 5)
+        XCTAssertEqual(waiter, .completed, "Knopf „Ans Ende springen“ steht nach dem Tippen noch da")
+        settle(0.8)
+        if pane.exists, answer.exists {
+            XCTAssertTrue(answer.frame.midY > pane.frame.minY && answer.frame.midY < pane.frame.maxY,
+                          "nach dem Sprung steht die letzte Antwort nicht im Bild: Antwort \(answer.frame), Verlauf \(pane.frame)")
+        }
+        shot("jarvis-wieder-am-ende")
+    }
+
     func test12_Settings() {
         launchConnected()
         mainMenu("Einstellungen")
