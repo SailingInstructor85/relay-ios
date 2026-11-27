@@ -2,6 +2,19 @@
 
 Versionen der iPhone-App Relay, neueste oben. Aus dem Abschnitt der getaggten Version entstehen der Release-Text auf GitHub und die Versionsbeschreibung in SideStore („Neu in dieser Version“). Je Version: **Neu**, **Geändert**, **Behoben**.
 
+## 0.4.15 (2026-11-27)
+
+**Behoben**
+- Relay stürzte beim Diktat ab, wenn das Mikrofon seit der letzten Aufnahme gewechselt hatte, zum Beispiel vom eingebauten Mikrofon zur Freisprechanlage im Auto oder zurück, oft nachdem die App eine Weile im Hintergrund war. Die App sprang dann einfach weg, und was im Feld stand, war verloren. Relay richtet das Mikrofon jetzt für jede Aufnahme neu ein und prüft es vorher. Passt es gerade nicht, steht dort „Mikrofon wechselt gerade, bitte noch einmal tippen.“ statt eines Absturzes. Das gilt für jedes Diktat: Jarvis, Sitzungs-Chat, Vault-Chat, Rückfragen und Sprachmodus.
+- Wechselt die Tonverbindung mitten in einer Aufnahme (das Auto verbindet sich, ein Kopfhörer geht an oder aus), behält Relay, was bis dahin erkannt war, und nimmt mit dem neuen Mikrofon weiter auf. Bisher blieb die Aufnahme danach stumm.
+- Im Jarvis-Chat sprang der Verlauf beim Senden oder Einsprechen manchmal weit nach oben. Er bleibt jetzt am Ende, wenn du vorher am Ende warst: nach dem Senden, während die Antwort einläuft und beim Diktat.
+
+**Neu**
+- Jarvis-Chat: Wenn du im Verlauf nach oben gescrollt hast, erscheint rechts unten ein runder Knopf mit Pfeil nach unten. Ein Tipp springt ans Ende. Solange du oben liest, zieht dich eine neue Antwort nicht mehr weg.
+- Entwürfe bleiben erhalten: Was du in ein Eingabefeld getippt oder diktiert und noch nicht gesendet hast, steht nach einem Absturz oder nach dem Wegwischen der App wieder im Feld. Das gilt für das Jarvis-Feld, für jede Sitzung einzeln, für den Vault-Chat, für die Antwort auf jede Rückfrage (im Fenster „Rückfrage jetzt“, in „Dein Zug“ und unter „Hinweise“) und für die Beschreibung unter „Fehler melden“. Während eines Diktats wird auch das gesichert, was bis dahin erkannt ist. Nach dem Senden ist der Entwurf weg.
+
+Hinweis: Auf einem iPhone ist diese Version noch nicht ausprobiert, und das Diktat mit echtem Mikrofon lässt sich im automatischen Test nicht prüfen. Bitte einmal im Auto probieren: ein Diktat mit Bluetooth, eines ohne, dazwischen die App in den Hintergrund und zurück. Warum der Verlauf nach oben sprang, ließ sich am Bau-PC nicht nachstellen. Behoben ist die wahrscheinlichste Ursache. Springt er weiter, bitte kurz melden, wann genau. Nicht gesichert werden angehängte Fotos und Dokumente, die noch nicht gesendet sind, und die Felder „Erste Nachricht“ (neue Sitzung) und Routinen.
+
 ## 0.4.14 (2026-11-26)
 
 **Neu**

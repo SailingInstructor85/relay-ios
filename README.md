@@ -156,6 +156,19 @@ iPhone 16 Pro (iOS 17 oder neuer).
   ohne tmux läuft, wartet sie im Postausgang („Wartet: … Geht von selbst hinaus“) und geht innerhalb einer Stunde von
   selbst hinaus, sobald die Sitzung frei ist. In der Sitzungsliste steht dann „1 Nachricht wartet auf die Sitzung“
   oder „1 Nachricht nicht gesendet“.
+- **Jarvis-Chat, ans Ende springen (seit 0.4.15):** Der Verlauf bleibt beim Senden, bei einer einlaufenden Antwort und
+  beim Diktat am Ende, solange du vorher am Ende warst. Hast du nach oben gescrollt, bleibt er dort stehen, und rechts
+  unten erscheint ein runder Knopf mit Pfeil nach unten. Ein Tipp springt ans Ende.
+- **Entwürfe bleiben (seit 0.4.15):** Getippter oder diktierter Text, der noch nicht gesendet ist, steht nach einem
+  Absturz oder nach dem Wegwischen der App wieder im Feld: im Jarvis-Feld, je Sitzung, im Vault-Chat, je Rückfrage
+  („Rückfrage jetzt“, „Dein Zug“, „Hinweise“) und unter „Fehler melden“. Während eines Diktats wird auch das bis dahin Erkannte gesichert. Nach
+  dem Senden ist der Entwurf weg, nach 30 Tagen verfällt er. Nicht gesichert werden ungesendete Anhänge und die
+  Felder „Erste Nachricht“ (neue Sitzung) und Routinen.
+- **Mikrofon wechselt (seit 0.4.15):** Hat die Tonverbindung seit der letzten Aufnahme gewechselt (Freisprechanlage
+  im Auto, Kopfhörer), richtet Relay das Mikrofon neu ein, statt abzustürzen. Passt es gerade nicht, steht dort
+  „Mikrofon wechselt gerade, bitte noch einmal tippen.“ Wechselt die Verbindung mitten in der Aufnahme, bleibt das
+  Erkannte und die Aufnahme läuft mit dem neuen Mikrofon weiter. Im Nutzungsprotokoll steht das unter der Ansicht
+  „audio“ („mikrofon gewechselt“, „mikrofon nicht bereit“).
 - **Musik pausiert beim Sprechen:** Diktat, Jarvis, Sprachmodus und Vorlesen unterbrechen Spotify und andere Apps,
   statt sie nur leiser zu stellen. Beim Diktat im Chat läuft die Musik weiter, sobald die Aufnahme endet (auch wenn
   der Text noch im Feld steht), bei Jarvis und im Sprachmodus nach der vorgelesenen Antwort. Gibt iOS das Audio nicht

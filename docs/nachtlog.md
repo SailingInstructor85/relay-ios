@@ -1115,3 +1115,43 @@ Offen für Martin:
 - Die Frage von 20:30 steht noch: Soll „druck das“ ein mehrseitiges Dokument ganz drucken (so ist es gebaut) oder nur die erste Seite?
 
 Version: `project.yml` bleibt 0.4.14. Nicht gepusht, kein Tag.
+
+## Nachtbau 27. November 2026, 15:30 (Version 0.4.15)
+
+Drei Einträge aus dem Backlog, alle drei in der App umgesetzt. Swift läuft am Bau-PC nicht: Kompilieren und testen kann erst die CI, die das Skript nach diesem Lauf startet. Beim Schreiben dieses Abschnitts ist also noch nichts davon gebaut, und auf einem iPhone ist nichts gesehen. Für Eintrag 2 gilt das besonders, siehe dort.
+
+1. Jarvis-Chat: Knopf „ans Ende springen“ und kein Hochspringen beim Senden. Umgesetzt.
+   - Knopf: Nach dem Hochscrollen erscheint rechts unten über dem Verlauf ein runder Knopf mit Pfeil nach unten (Kennung `jarvisJumpEnd`, Beschriftung für VoiceOver „Ans Ende springen“, Stil wie „Tastatur ausblenden“ im Sitzungs-Chat). Ein Tipp scrollt ans Ende, der Knopf verschwindet.
+   - Folgen: Der Verlauf scrollt bei neuem Inhalt (eigene Nachricht, einlaufende Antwort, Rückmeldung des Chiefs, wartende Nachricht, Diktat, kleinerer Ausschnitt durch die Tastatur) nur noch mit, wenn man vorher am Ende war. Wer oben liest, bleibt dort.
+   - Ursache des Hochspringens: nicht nachgestellt, ich habe hier keinen Simulator. Am Code gefunden: Die Ansicht scrollte sofort in `onChange` zur eben erst eingefügten Zeile (`proxy.scrollTo(turns.last.id)`), bevor deren Lage feststand, in einem Verlauf mit vielen Textfeldern, deren Höhe sich erst beim Layout ergibt. Das ist die wahrscheinlichste Ursache, belegt ist sie nicht. Jetzt wird im nächsten Durchlauf zu einer festen Marke am Ende gescrollt (wie im Sitzungs-Chat). Springt der Verlauf am iPhone weiter, war es etwas anderes.
+   - Logik `ChatScroll` in RelayCore (11 Tests): Ob gefolgt wird, hängt an der Bewegungsrichtung. Wächst der Inhalt, ändert sich die Position nicht (weiter folgen). Geht die Position nach oben und das Ende ist weiter als 48 Punkte weg, wurde hochgescrollt. Die Ansicht meldet Lage und Höhe des Inhalts über einen `GeometryReader`; der Stand liegt in einer Ablage ohne Beobachtung, damit nicht jede Scrollbewegung den ganzen Verlauf neu aufbaut.
+   - UI-Test `InfoTests.test31_JarvisJumpToEnd`: vier Fragen, danach steht kein Knopf da und die letzte Antwort im Bild; hochscrollen, Knopf erscheint; Tipp, Knopf weg, letzte Antwort wieder im Bild.
+
+2. Fehler: App stürzt beim Diktat ab, wenn das Mikrofon gewechselt hat. Umgesetzt, nur kompiliert.
+   - Alle vier Punkte aus dem Eintrag: (1) Für jede Aufnahme ein frisches `AVAudioEngine` (`VoiceIO.startEngine`), das alte merkte sich das Tonformat der letzten Aufnahme. (2) Vor `installTap` werden Abtastrate und Kanäle geprüft (Ausgang des Eingangsknotens und Gerät). (3) `inputNode`, `installTap`, `prepare` und `start` laufen durch den neuen Objective-C-Helfer `ObjCTry` (`App/Sources/ObjC`, Bridging-Header in `project.yml`): Aus einer NSException wird ein Ergebnis, die App läuft weiter. (4) Während der Aufnahme hört `VoiceIO` auf `AVAudioSession.routeChangeNotification` und `AVAudioEngineConfigurationChange`: 0,3 s warten, prüfen, ob neu eingerichtet werden muss (Aufnahme steht oder anderes Format), dann das Erkannte sichern, eine neue Erkennung beginnen (eine Erkennung verträgt nur ein Format) und mit dem neuen Format weiter aufnehmen. Die Stille des Wechsels zählt nicht für die 10 Sekunden „nichts gesagt“.
+   - Über den Eintrag hinaus: Steht das Format beim Start noch nicht, versucht die App es dreimal kurz hintereinander (0,3, 0,6 und 1,0 s), erst dann kommt „Mikrofon wechselt gerade, bitte noch einmal tippen.“ Im Gesprächsmodus endet das Gespräch dann mit dieser Meldung statt mit einem Absturz. Scheitert der Neustart mitten in der Aufnahme, endet sie mit dem bis dahin erkannten Text.
+   - Fürs Nachsehen: Nutzungsprotokoll, Ansicht „audio“, Aktionen „mikrofon gewechselt“ (mit altem und neuem Format und dem Audioweg) und „mikrofon nicht bereit“ (mit Grund, bei einer abgefangenen Ausnahme ihr Text).
+   - Regeln `MicInput` in RelayCore (8 Tests).
+   - Nicht geprüft, und das ist die Hauptsache: Im Simulator gibt es kein Mikrofon, die UI-Tests nutzen eine nachgestellte Aufnahme und erreichen diesen Code nie. Die CI kann nur zeigen, dass er kompiliert. Ob der Absturz weg ist, zeigt erst das iPhone im Auto. Auch der Objective-C-Teil ist der erste im Projekt: Scheitert der Bau daran, liegt es am Bridging-Header in `project.yml`.
+   - Bekannte Grenze: Eine NSException durch Swift-Code hindurch zu fangen ist von Apple nicht zugesagt (es kann dabei Speicher liegen bleiben). Im abgesicherten Block stehen deshalb nur die Aufrufe an AVFAudio. Eine Unterbrechung durch einen Anruf behandelt die App weiter nicht eigens.
+
+3. Entwurf behalten. Umgesetzt.
+   - Gesichert wird je Feld: Jarvis, jede Sitzung (Schlüssel der Sitzung), Vault-Chat, jede Rückfrage (eine gemeinsame Ablage für „Rückfrage jetzt“, „Dein Zug“ und „Hinweise“) und zusätzlich die Beschreibung unter „Fehler melden“. Der Entwurf ist immer das, was im Feld steht, während eines Diktats dahinter das bis dahin Erkannte. Geschrieben wird 0,5 s nach einer Änderung (spätestens, auch bei fortlaufendem Tippen) und sofort beim Wechsel in den Hintergrund. Datei `drafts.json` in Application Support, atomar ersetzt.
+   - Beim Öffnen kommt der Entwurf in das leere Feld zurück; ein Feld, in dem schon etwas steht, wird nicht überschrieben. Ein geleertes Feld löscht ihn, also auch das Senden. Bei Rückfragen löscht zusätzlich die angekommene Antwort den Entwurf (auch „Ja (Empfehlung)“). Entwürfe verfallen nach 30 Tagen, höchstens 100.
+   - Das Blatt „Rückfrage jetzt“ setzte das Feld beim Wechsel zur nächsten Rückfrage auf leer. Es lädt jetzt deren eigenen Entwurf.
+   - Logik `Drafts` und `DraftBook` in RelayCore (12 Tests), App-Seite `DraftStore` mit dem Modifikator `keepsDraft`.
+   - UI-Test `InfoTests.test32_DraftSurvivesRestart`: im Jarvis-Feld tippen, Diktat starten, App hart beenden, neu starten: Getipptes und Diktiertes stehen im Feld. Senden, wieder neu starten: Das Feld ist leer.
+   - Nicht gesichert: angehängte, noch nicht gesendete Fotos und Dokumente (im Vault-Chat liegen sie ohnehin in der Outbox-Ablage, im Jarvis- und Sitzungs-Chat nur im Speicher), „Erste Nachricht“ bei „Neue Sitzung“, das Feld der Routinen, „Etwas anderes“ im Fragenformular und die Eingabeleiste auf „Heute“. Dort fehlt jeweils eine klare Stelle, an der der Entwurf nach Erfolg sicher gelöscht würde; das wäre ein eigener kleiner Eintrag.
+   - Annahme: Im Sitzungs-Chat hängt der Entwurf am Schlüssel, mit dem der Chat geöffnet wurde. Öffnet sich dieselbe Sitzung einmal unter einem anderen Schlüssel, steht der Entwurf dort nicht.
+
+Entscheidungen:
+- Senden im Jarvis-Chat scrollt nur ans Ende, wenn man vorher am Ende war (so steht es im Eintrag). Wer hochgescrollt sendet, sieht den Knopf und bleibt oben.
+- Der Entwurf wird nicht eigens „nach erfolgreichem Senden“ gelöscht, sondern folgt dem Feld. Die Felder leeren sich schon heute beim Senden und füllen sich wieder, wenn das Senden scheitert. So kann kein gesendeter Text als Entwurf zurückkommen und kein gescheiterter verloren gehen.
+- „Fehler melden“ habe ich dazugenommen, obwohl es nicht im Eintrag steht: Gerade nach einem Absturz will man dort schreiben, und die Stelle zum Löschen ist eindeutig.
+
+Offen für Martin (am iPhone mit 0.4.15):
+- Im Auto: ein Diktat mit Bluetooth, eines ohne, dazwischen die App in den Hintergrund und zurück. Danach `notifyd phone log` ansehen: kein neuer „format mismatch“. Im Nutzungsprotokoll sollte unter „audio“ „mikrofon gewechselt“ stehen, wenn die Verbindung mitten in der Aufnahme gewechselt hat.
+- Jarvis-Chat: Springt der Verlauf beim Senden oder Einsprechen noch nach oben? Erscheint der Knopf nach dem Hochscrollen, und verschwindet er am Ende wieder?
+- Entwurf: Text tippen und diktieren, App im App-Umschalter wegwischen, neu öffnen. Der Text steht im Feld und ist nach dem Senden weg.
+
+Version: `project.yml` 0.4.14 auf 0.4.15. Nicht gepusht, kein Tag. Das übernimmt das Skript.
