@@ -17,7 +17,17 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private var hyps: [String] = []
     private var hypConf: [Float] = []
 
-    private let engine = AVAudioEngine()
+    /// Das Aufnahmegerät der laufenden Aufnahme. Für jede Aufnahme ein frisches (`startEngine`): Ein
+    /// wiederverwendetes merkt sich das Tonformat der letzten Aufnahme. Hat seitdem die Tonverbindung gewechselt
+    /// (eingebautes Mikrofon 48 kHz, Freisprechen im Auto 16 kHz), warf `installTap` damit eine Ausnahme, und die
+    /// App stürzte ab (10.11., 16.11. und 27.11.2026).
+    private var engine: AVAudioEngine?
+    /// Format, mit dem die laufende Aufnahme eingerichtet ist.
+    private var tapFormat: MicInput.Format?
+    /// Meldungen von iOS während der Aufnahme: Tonverbindung oder Konfiguration geändert (`observeMic`).
+    nonisolated(unsafe) private var micObservers: [NSObjectProtocol] = []
+    /// Läuft, solange nach einer solchen Meldung geprüft und neu eingerichtet wird.
+    private var micRestart: Task<Void, Never>?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var finishListening: CheckedContinuation<String, Never>?
@@ -71,6 +81,7 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     deinit {
         if let o = activeObserver { NotificationCenter.default.removeObserver(o) }
+        micObservers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
     /// Recording or reading is over: the audio goes back to other apps, Spotify resumes. Does nothing while this voice
@@ -124,13 +135,25 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         restarts = 0
         startSegment()
 
-        let input = engine.inputNode
-        input.removeTap(onBus: 0)
-        Self.installTap(on: input, into: sink)
-        engine.prepare()
-        do { try engine.start() } catch { abortSegment(); throw error }
+        // Steht das Format noch nicht (die Tonverbindung wechselt gerade, etwa beim Zurückkommen aus dem Hintergrund
+        // im Auto), ein paar kurze Versuche; danach eine Meldung statt eines Absturzes.
+        var attempt = 0
+        while true {
+            guard let failure = startEngine() else { break }
+            UsageRecorder.shared.record("audio", "mikrofon nicht bereit", kind: "aufnahme", detail: AudioFocus.route(),
+                                        error: MicInput.logLine(failure))
+            guard let delay = MicInput.retryDelay(afterFailed: attempt) else {
+                abortSegment()
+                throw RelayErrorText(MicInput.message(failure))
+            }
+            attempt += 1
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            // inzwischen abgebrochen (Ansicht geschlossen, Gespräch beendet): nicht mehr aufnehmen
+            if Task.isCancelled { abortSegment(); return "" }
+        }
 
         listening = true
+        observeMic()
         ScreenAwake.shared.recordingStarted(holder)
         started = Date()
         lastHeard = Date()
@@ -226,8 +249,10 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         if fake {
             fake = false
         } else {
-            engine.stop()
-            engine.inputNode.removeTap(onBus: 0)
+            micRestart?.cancel(); micRestart = nil
+            micObservers.forEach { NotificationCenter.default.removeObserver($0) }
+            micObservers = []
+            stopEngine()
         }
         let text = Self.join(committed, bestSegmentText())
         abortSegment()
@@ -237,10 +262,144 @@ final class VoiceIO: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     private static func join(_ a: String, _ b: String) -> String { DictationText.join(a, b) }
 
-    /// Built outside the main actor: the audio tap runs on a realtime thread.
-    nonisolated private static func installTap(on node: AVAudioInputNode, into sink: RequestSink) {
-        let format = node.outputFormat(forBus: 0)
-        node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in sink.append(buffer) }
+    // MARK: Mikrofon
+
+    /// Richtet die Aufnahme mit einem frischen Aufnahmegerät ein und startet sie. nil = läuft, sonst der Grund.
+    private func startEngine() -> MicInput.Failure? {
+        stopEngine()
+        let fresh = AVAudioEngine()
+        switch Self.tapAndStart(fresh, into: sink) {
+        case .success(let format):
+            engine = fresh
+            tapFormat = format
+            return nil
+        case .failure(let failure):
+            return failure
+        }
+    }
+
+    private func stopEngine() {
+        if let engine { Self.shutDown(engine) }
+        engine = nil
+        tapFormat = nil
+    }
+
+    private enum MicStart {
+        case success(MicInput.Format)
+        case failure(MicInput.Failure)
+    }
+
+    /// Setzt den Tap und startet. Built outside the main actor: the audio tap runs on a realtime thread.
+    /// Alles, was eine Objective-C-Ausnahme werfen kann (`inputNode`, `installTap`, `start`), läuft durch
+    /// `ObjCTry`: Aus der Ausnahme wird ein Ergebnis, die App läuft weiter.
+    nonisolated private static func tapAndStart(_ engine: AVAudioEngine, into sink: RequestSink) -> MicStart {
+        var format = MicInput.Format(sampleRate: 0, channels: 0)
+        var usable = false
+        var startError: String?
+        do {
+            try ObjCTry.run {
+                let node = engine.inputNode
+                let hardware = node.inputFormat(forBus: 0)
+                let out = node.outputFormat(forBus: 0)
+                format = MicInput.Format(sampleRate: out.sampleRate, channels: Int(out.channelCount))
+                let hw = MicInput.Format(sampleRate: hardware.sampleRate, channels: Int(hardware.channelCount))
+                guard MicInput.usable(format), MicInput.usable(hw) else {
+                    if MicInput.usable(format) { format = hw }
+                    return
+                }
+                usable = true
+                node.installTap(onBus: 0, bufferSize: 1024, format: out) { buffer, _ in sink.append(buffer) }
+                engine.prepare()
+                do { try engine.start() } catch { startError = error.localizedDescription }
+            }
+        } catch {
+            shutDown(engine)
+            return .failure(.exception(error.localizedDescription))
+        }
+        guard usable else { return .failure(.format(format)) }
+        if let startError {
+            shutDown(engine)
+            return .failure(.start(startError))
+        }
+        return .success(format)
+    }
+
+    nonisolated private static func shutDown(_ engine: AVAudioEngine) {
+        try? ObjCTry.run {
+            engine.stop()
+            engine.inputNode.removeTap(onBus: 0)
+        }
+    }
+
+    /// Was das Gerät jetzt liefert; nil, wenn es sich nicht lesen lässt.
+    nonisolated private static func hardwareFormat(_ engine: AVAudioEngine) -> MicInput.Format? {
+        var format: MicInput.Format?
+        try? ObjCTry.run {
+            let hw = engine.inputNode.inputFormat(forBus: 0)
+            format = MicInput.Format(sampleRate: hw.sampleRate, channels: Int(hw.channelCount))
+        }
+        return format
+    }
+
+    /// Hört während der Aufnahme auf Wechsel der Tonverbindung (Bluetooth im Auto verbindet oder trennt sich,
+    /// Kopfhörer) und der Konfiguration des Aufnahmegeräts.
+    private func observeMic() {
+        guard micObservers.isEmpty else { return }
+        let names: [(Notification.Name, String)] = [(AVAudioSession.routeChangeNotification, "tonverbindung"),
+                                                    (.AVAudioEngineConfigurationChange, "konfiguration")]
+        for (name, why) in names {
+            micObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.micChanged(why) }
+            })
+        }
+    }
+
+    /// iOS meldet einen Wechsel: kurz warten, bis sich die Verbindung gesetzt hat, dann prüfen. Weitere Meldungen in
+    /// dieser Zeit gehen im selben Neustart auf.
+    private func micChanged(_ why: String) {
+        guard listening, !fake, micRestart == nil else { return }
+        micRestart = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(MicInput.settle * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            await self.restartMic(why)
+            if !Task.isCancelled { self.micRestart = nil }
+        }
+    }
+
+    /// Die Tonverbindung hat mitten in der Aufnahme gewechselt: bisher Erkanntes behalten, mit dem neuen Format neu
+    /// einrichten und weiter aufnehmen. Gelingt das nach ein paar Versuchen nicht, endet die Aufnahme mit dem Text,
+    /// der bis dahin erkannt war.
+    private func restartMic(_ why: String) async {
+        guard listening, !fake else { return }
+        let hardware = engine.flatMap { Self.hardwareFormat($0) }
+        guard MicInput.needsRestart(running: engine?.isRunning ?? false, tap: tapFormat, hardware: hardware) else { return }
+        let before = tapFormat?.label ?? "?"
+        stopEngine()
+        // Eine Erkennung verträgt nur ein Tonformat: was sie bis hier hat, sichern und eine neue beginnen.
+        committed = Self.join(committed, bestSegmentText())
+        request?.endAudio()
+        task?.cancel()
+        startSegment()
+        partial = committed
+        var attempt = 0
+        while listening, !Task.isCancelled {
+            guard let failure = startEngine() else {
+                // die Stille des Wechsels zählt nicht als „nichts gesagt“ und nicht als Sprechpause
+                started = Date()
+                lastHeard = Date()
+                UsageRecorder.shared.record("audio", "mikrofon gewechselt", kind: "aufnahme",
+                                            detail: [why, before + " > " + (tapFormat?.label ?? "?"), AudioFocus.route()].joined(separator: " · "))
+                return
+            }
+            UsageRecorder.shared.record("audio", "mikrofon nicht bereit", kind: "aufnahme", detail: AudioFocus.route(),
+                                        error: MicInput.logLine(failure))
+            guard let delay = MicInput.retryDelay(afterFailed: attempt) else {
+                endListening()
+                return
+            }
+            attempt += 1
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        }
     }
 
     nonisolated private static func recognize(_ r: SFSpeechRecognizer, _ req: SFSpeechAudioBufferRecognitionRequest,
@@ -663,7 +822,7 @@ enum AudioFocus {
     }
 
     /// Inputs and outputs of the current route, e.g. "MicrophoneBuiltIn > Speaker" or "BluetoothHFP > BluetoothHFP".
-    private static func route() -> String {
+    static func route() -> String {
         let r = AVAudioSession.sharedInstance().currentRoute
         let ins = r.inputs.map { $0.portType.rawValue }.joined(separator: ",")
         let outs = r.outputs.map { $0.portType.rawValue }.joined(separator: ",")
