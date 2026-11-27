@@ -476,11 +476,18 @@ final class InfoTests: RelayTestCase {
         shot("jarvis-verlauf-am-ende")
         // kein Hochspringen: Nach dem Senden und der Antwort steht das Ende im Bild, der Knopf fehlt
         XCTAssertFalse(id("jarvisJumpEnd").exists, "Knopf „Ans Ende springen“ steht da, obwohl nicht hochgescrollt wurde")
-        let pane = app.scrollViews.firstMatch
+        // Der Verlauf ist der höchste Scrollbereich. Der erste im Baum ist es nicht (in der CI ein 44 Punkte hoher
+        // Streifen bei y 539, vermutlich die Leiste über der Tastatur), deshalb nicht `firstMatch`.
+        let pane = app.scrollViews.allElementsBoundByIndex.max { $0.frame.height < $1.frame.height } ?? app.scrollViews.firstMatch
         let answer = app.textViews.matching(NSPredicate(format: "value CONTAINS[c] %@", "Frage Nummer \(last)")).firstMatch
+        // im Bild heißt: im Verlauf und über dem Eingabefeld (also auch über der Tastatur)
+        func inView() -> Bool {
+            let y = answer.frame.midY
+            return y > pane.frame.minY && y < min(pane.frame.maxY, id("jarvisInput").frame.minY)
+        }
+        func place() -> String { "Antwort \(answer.frame), Verlauf \(pane.frame), Eingabefeld \(id("jarvisInput").frame)" }
         if pane.exists, answer.exists {
-            XCTAssertTrue(answer.frame.midY > pane.frame.minY && answer.frame.midY < pane.frame.maxY,
-                          "die letzte Antwort steht nicht im Bild: Antwort \(answer.frame), Verlauf \(pane.frame)")
+            XCTAssertTrue(inView(), "die letzte Antwort steht nicht im Bild: \(place())")
         } else {
             notes.append("Jarvis: Lage der letzten Antwort nicht prüfbar")
         }
@@ -498,8 +505,7 @@ final class InfoTests: RelayTestCase {
         XCTAssertEqual(waiter, .completed, "Knopf „Ans Ende springen“ steht nach dem Tippen noch da")
         settle(0.8)
         if pane.exists, answer.exists {
-            XCTAssertTrue(answer.frame.midY > pane.frame.minY && answer.frame.midY < pane.frame.maxY,
-                          "nach dem Sprung steht die letzte Antwort nicht im Bild: Antwort \(answer.frame), Verlauf \(pane.frame)")
+            XCTAssertTrue(inView(), "nach dem Sprung steht die letzte Antwort nicht im Bild: \(place())")
         }
         shot("jarvis-wieder-am-ende")
     }
